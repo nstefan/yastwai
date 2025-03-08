@@ -1,0 +1,12 @@
+---
+description: TASTwAI
+globs: *.*
+alwaysApply: true
+---
+- Everything must be writen in english.
+- Compile using: `cargo build --release`, unless instructed otherwise.
+- Check for issues using: cargo clippy.
+- #[allow(dead_code)] directive is generally forbidden to fix warnings except to silence warnings related to tests.
+- Regularly check unit tests when adding, modifying or removing features.
+- When a test breaks, be careful, you must check first if it's the modification the problem before adapting the test to the new change.
+- Always finish by building the app and run unit tests.
