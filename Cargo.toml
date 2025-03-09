@@ -33,12 +33,10 @@ tempfile = "3.10"
 # CLI interface and progress
 indicatif = "0.17.8"
 
-# AI and translation
-ollama-rs = { version = "0.2.6", features = ["stream"] }
-
 # Random for testing
 rand = "0.9"
 
 # Additional dependencies
 isolang = { version = "2.4.0", features = ["local_names", "english_names"] }
 thiserror = "1.0.50" 
+parking_lot = "0.12.3"

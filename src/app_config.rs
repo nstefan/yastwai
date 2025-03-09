@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::default::Default;
-use log::{info, warn};
+use log::warn;
 
 /// Application configuration module
 /// This module handles the application configuration including loading,
@@ -12,16 +12,16 @@ use log::{info, warn};
 /// Represents the application configuration
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
-    /// Source language code (e.g., "en", "fr")
+    /// Source language code (ISO)
     pub source_language: String,
     
-    /// Target language code for translation
+    /// Target language code (ISO)
     pub target_language: String,
     
-    /// Translation services configuration
+    /// Translation config
     pub translation: TranslationConfig,
     
-    /// Log verbosity level
+    /// Log level
     #[serde(default)]
     pub log_level: LogLevel,
 }
@@ -30,23 +30,116 @@ pub struct Config {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TranslationProvider {
-    /// Ollama LLM translation service
+    // @provider: Ollama
     #[default]
     Ollama,
-    /// OpenAI API translation service
+    // @provider: OpenAI
     OpenAI,
-    /// Anthropic API translation service
+    // @provider: Anthropic
     Anthropic,
 }
 
 impl TranslationProvider {
-    /// Returns the properly capitalized name of the provider
+    // @returns: Capitalized provider name
     pub fn display_name(&self) -> &str {
         match self {
             Self::Ollama => "Ollama",
             Self::OpenAI => "OpenAI",
             Self::Anthropic => "Anthropic",
         }
+    }
+    
+    // @returns: Lowercase provider identifier
+    pub fn to_string(&self) -> String {
+        match self {
+            Self::Ollama => "ollama".to_string(),
+            Self::OpenAI => "openai".to_string(),
+            Self::Anthropic => "anthropic".to_string(),
+        }
+    }
+    
+    // @param s: Provider identifier string
+    // @returns: Provider enum or error
+    pub fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "ollama" => Ok(Self::Ollama),
+            "openai" => Ok(Self::OpenAI),
+            "anthropic" => Ok(Self::Anthropic),
+            _ => Err(anyhow::anyhow!("Invalid provider type: {}", s)),
+        }
+    }
+}
+
+/// Provider configuration wrapper
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProviderConfig {
+    // @field: Provider type identifier
+    #[serde(rename = "type")]
+    pub provider_type: String,
+    
+    // @field: Model name
+    #[serde(default = "String::new")]
+    pub model: String,
+    
+    // @field: API key
+    #[serde(default = "String::new")]
+    pub api_key: String,
+    
+    // @field: Service URL
+    #[serde(default = "String::new")]
+    pub endpoint: String,
+    
+    // @field: Max concurrent requests
+    #[serde(default = "default_concurrent_requests")]
+    pub concurrent_requests: usize,
+    
+    // @field: Max chars per request
+    #[serde(default = "default_max_chars_per_request")]
+    pub max_chars_per_request: usize,
+    
+    // @field: Timeout seconds
+    #[serde(default = "default_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+impl ProviderConfig {
+    // @param provider_type: Provider enum
+    // @returns: Provider config with defaults
+    pub fn new(provider_type: TranslationProvider) -> Self {
+        match provider_type {
+            TranslationProvider::Ollama => Self {
+                provider_type: "ollama".to_string(),
+                model: default_ollama_model(),
+                api_key: String::new(),
+                endpoint: default_ollama_endpoint(),
+                concurrent_requests: default_concurrent_requests(),
+                max_chars_per_request: default_max_chars_per_request(),
+                timeout_secs: default_timeout_secs(),
+            },
+            TranslationProvider::OpenAI => Self {
+                provider_type: "openai".to_string(),
+                model: default_openai_model(),
+                api_key: String::new(),
+                endpoint: default_openai_endpoint(),
+                concurrent_requests: default_concurrent_requests(),
+                max_chars_per_request: default_max_chars_per_request(),
+                timeout_secs: default_timeout_secs(),
+            },
+            TranslationProvider::Anthropic => Self {
+                provider_type: "anthropic".to_string(),
+                model: default_anthropic_model(),
+                api_key: String::new(),
+                endpoint: default_anthropic_endpoint(),
+                concurrent_requests: default_concurrent_requests(),
+                max_chars_per_request: default_anthropic_max_chars_per_request(),
+                timeout_secs: default_anthropic_timeout_secs(),
+            },
+        }
+    }
+    
+    // @returns: Provider enum from string field
+    pub fn get_provider_type(&self) -> Result<TranslationProvider> {
+        TranslationProvider::from_str(&self.provider_type)
     }
 }
 
@@ -147,11 +240,11 @@ pub struct AnthropicConfig {
     pub concurrent_requests: usize,
     
     /// Maximum subtitle characters per request
-    #[serde(default = "default_max_chars_per_request")]
+    #[serde(default = "default_anthropic_max_chars_per_request")]
     pub max_chars_per_request: usize,
     
     /// Request timeout in seconds
-    #[serde(default = "default_timeout_secs")]
+    #[serde(default = "default_anthropic_timeout_secs")]
     pub timeout_secs: u64,
 }
 
@@ -162,30 +255,22 @@ impl Default for AnthropicConfig {
             api_key: String::new(),
             endpoint: default_anthropic_endpoint(),
             concurrent_requests: default_concurrent_requests(),
-            max_chars_per_request: default_max_chars_per_request(),
-            timeout_secs: default_timeout_secs(),
+            max_chars_per_request: default_anthropic_max_chars_per_request(),
+            timeout_secs: default_anthropic_timeout_secs(),
         }
     }
 }
 
 /// Translation service configuration
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TranslationConfig {
     /// Translation provider to use
     #[serde(default)]
     pub provider: TranslationProvider,
     
-    /// Ollama configuration
+    /// Available translation providers
     #[serde(default)]
-    pub ollama: OllamaConfig,
-    
-    /// OpenAI configuration
-    #[serde(default)]
-    pub openai: OpenAIConfig,
-    
-    /// Anthropic configuration
-    #[serde(default)]
-    pub anthropic: AnthropicConfig,
+    pub available_providers: Vec<ProviderConfig>,
     
     /// Common translation settings
     #[serde(default)]
@@ -278,8 +363,16 @@ fn default_max_chars_per_request() -> usize {
     1000
 }
 
+fn default_anthropic_max_chars_per_request() -> usize {
+    8000
+}
+
 fn default_timeout_secs() -> u64 {
     30
+}
+
+fn default_anthropic_timeout_secs() -> u64 {
+    60
 }
 
 fn default_rate_limit_delay_ms() -> u64 {
@@ -335,54 +428,52 @@ impl Config {
         let reader = BufReader::new(file);
         let config: Config = serde_json::from_reader(reader)?;
         
-        // Don't log the entire config - it may contain API keys
-        info!("Config loaded from {:?}", path.as_ref());
-        
         Ok(config)
     }
     
     /// Validate the configuration for consistency and required values
     pub fn validate(&self) -> Result<()> {
         // Validate languages
-        let source_name = crate::language_utils::get_language_name(&self.source_language)?;
-        let target_name = crate::language_utils::get_language_name(&self.target_language)?;
-        
-        info!("Translation: {} ({}) → {} ({})", 
-            self.source_language, source_name, 
-            self.target_language, target_name);
+        let _source_name = crate::language_utils::get_language_name(&self.source_language)?;
+        let _target_name = crate::language_utils::get_language_name(&self.target_language)?;
         
         // Validate API key for all providers except Ollama
         match self.translation.provider {
-            TranslationProvider::OpenAI if self.translation.openai.api_key.is_empty() => {
-                return Err(anyhow::anyhow!("Translation API key is required for OpenAI provider"));
+            TranslationProvider::OpenAI => {
+                let api_key = self.translation.get_api_key();
+                if api_key.is_empty() {
+                    return Err(anyhow::anyhow!("Translation API key is required for OpenAI provider"));
+                }
             },
-            TranslationProvider::Anthropic if self.translation.anthropic.api_key.is_empty() => {
-                return Err(anyhow::anyhow!("Translation API key is required for Anthropic provider"));
+            TranslationProvider::Anthropic => {
+                let api_key = self.translation.get_api_key();
+                if api_key.is_empty() {
+                    return Err(anyhow::anyhow!("Translation API key is required for Anthropic provider"));
+                }
             },
             _ => {}
         }
-        
-        // No need to log successful validation
         
         Ok(())
     }
     
     /// Create a new configuration with default values
     pub fn default_config() -> Self {
-        Config {
+        // Create default configuration
+        let config = Config {
             source_language: "en".to_string(),
             target_language: "fr".to_string(),
             translation: TranslationConfig::default(),
             log_level: LogLevel::default(),
-        }
+        };
+        
+        config
     }
     
     /// Save the configuration to a file
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(&path, json)?;
-        
-        info!("Config saved");
         
         Ok(())
     }
@@ -395,55 +486,122 @@ pub fn create_default_config_file<P: AsRef<Path>>(path: P) -> Result<Config> {
 }
 
 impl TranslationConfig {
-    /// Get the provider-specific optimal concurrent requests
     pub fn optimal_concurrent_requests(&self) -> usize {
-        // Get the provider-specific configured value
-        let base_concurrent = match self.provider {
-            TranslationProvider::OpenAI => self.openai.concurrent_requests,
-            TranslationProvider::Anthropic => self.anthropic.concurrent_requests,
-            TranslationProvider::Ollama => self.ollama.concurrent_requests,
-        };
+        // Check if the provider exists in the available_providers
+        if let Some(provider_config) = self.get_active_provider_config() {
+            return provider_config.concurrent_requests;
+        }
         
-        // Adjust based on the provider
+        // Default fallback
+        default_concurrent_requests()
+    }
+    
+    /// Get the active provider configuration from the available_providers array
+    pub fn get_active_provider_config(&self) -> Option<&ProviderConfig> {
+        let provider_str = self.provider.to_string();
+        self.available_providers.iter()
+            .find(|p| p.provider_type == provider_str)
+    }
+    
+    /// Get a specific provider configuration by type
+    pub fn get_provider_config(&self, provider_type: &TranslationProvider) -> Option<&ProviderConfig> {
+        let provider_str = provider_type.to_string();
+        self.available_providers.iter()
+            .find(|p| p.provider_type == provider_str)
+    }
+    
+    /// Get the model for the active provider
+    pub fn get_model(&self) -> String {
+        if let Some(provider_config) = self.get_active_provider_config() {
+            if !provider_config.model.is_empty() {
+                return provider_config.model.clone();
+            }
+        }
+        
+        // Default fallback based on provider type
         match self.provider {
-            TranslationProvider::OpenAI => {
-                // OpenAI allows up to 500 RPM for newer models like GPT-4o
-                // But we'll be conservative with 60 RPM (1 per second)
-                base_concurrent.min(10)
-            },
-            TranslationProvider::Anthropic => {
-                // Anthropic Claude has stricter rate limits (~100 RPM)
-                // We'll be more conservative with ~30 RPM
-                base_concurrent.min(5)
-            },
-            TranslationProvider::Ollama => {
-                // For local Ollama, limit based on local hardware capabilities
-                // This is more about preventing resource exhaustion than API limits
-                base_concurrent.min(8)
-            },
+            TranslationProvider::Ollama => default_ollama_model(),
+            TranslationProvider::OpenAI => default_openai_model(),
+            TranslationProvider::Anthropic => default_anthropic_model(),
         }
     }
     
-    /// Get the provider-specific rate limit delay in milliseconds
-    pub fn rate_limit_delay_ms(&self) -> u64 {
-        // Start with the configured delay
-        let base_delay = self.common.rate_limit_delay_ms;
-        
-        // Adjust based on the provider
-        match self.provider {
-            TranslationProvider::OpenAI => {
-                // For OpenAI, maintain a minimum of 100ms between requests
-                base_delay.max(100)
-            },
-            TranslationProvider::Anthropic => {
-                // For Anthropic, ensure at least 200ms between requests
-                base_delay.max(200)
-            },
-            TranslationProvider::Ollama => {
-                // For local Ollama, minimal delay needed
-                base_delay.max(50)
-            },
+    /// Get the API key for the active provider
+    pub fn get_api_key(&self) -> String {
+        if let Some(provider_config) = self.get_active_provider_config() {
+            if !provider_config.api_key.is_empty() {
+                return provider_config.api_key.clone();
+            }
         }
+        
+        // Default fallback - Ollama doesn't use API keys
+        String::new()
+    }
+    
+    /// Get the endpoint for the active provider
+    pub fn get_endpoint(&self) -> String {
+        if let Some(provider_config) = self.get_active_provider_config() {
+            if !provider_config.endpoint.is_empty() {
+                return provider_config.endpoint.clone();
+            }
+        }
+        
+        // Default fallback based on provider type
+        match self.provider {
+            TranslationProvider::Ollama => default_ollama_endpoint(),
+            TranslationProvider::OpenAI => default_openai_endpoint(),
+            TranslationProvider::Anthropic => default_anthropic_endpoint(),
+        }
+    }
+    
+    /// Get the max chars per request for the active provider
+    pub fn get_max_chars_per_request(&self) -> usize {
+        if let Some(provider_config) = self.get_active_provider_config() {
+            if provider_config.max_chars_per_request > 0 {
+                return provider_config.max_chars_per_request;
+            }
+        }
+        
+        // Default fallback
+        default_max_chars_per_request()
+    }
+    
+    /// Get the timeout in seconds for the active provider
+    pub fn get_timeout_secs(&self) -> u64 {
+        if let Some(provider_config) = self.get_active_provider_config() {
+            if provider_config.timeout_secs > 0 {
+                return provider_config.timeout_secs;
+            }
+        }
+        
+        // Default fallback
+        default_timeout_secs()
+    }
+    
+    /// Get the rate limit delay in milliseconds
+    pub fn rate_limit_delay_ms(&self) -> u64 {
+        if self.common.rate_limit_delay_ms > 0 {
+            self.common.rate_limit_delay_ms
+        } else {
+            default_rate_limit_delay_ms()
+        }
+    }
+}
+
+impl Default for TranslationConfig {
+    fn default() -> Self {
+        let mut config = Self {
+            provider: TranslationProvider::default(),
+            available_providers: Vec::new(),
+            common: TranslationCommonConfig::default(),
+        };
+        
+        // Add default providers
+        config.available_providers.push(ProviderConfig::new(TranslationProvider::Ollama));
+        config.available_providers.push(ProviderConfig::new(TranslationProvider::OpenAI));
+        config.available_providers.push(ProviderConfig::new(TranslationProvider::Anthropic));
+        
+        config
     }
 }
 
@@ -459,21 +617,26 @@ mod tests {
         assert_eq!(config.source_language, "en");
         assert_eq!(config.target_language, "fr");
         assert_eq!(config.translation.provider, TranslationProvider::Ollama);
-        assert_eq!(config.translation.ollama.concurrent_requests, 4);
-        assert_eq!(config.translation.ollama.max_chars_per_request, 1000);
-        assert_eq!(config.translation.ollama.timeout_secs, 30);
-        assert_eq!(config.translation.ollama.model, "llama2");
+        
+        // Test provider config values
+        let ollama_config = config.translation.get_provider_config(&TranslationProvider::Ollama)
+            .expect("Ollama provider config should exist");
+        assert_eq!(ollama_config.concurrent_requests, default_concurrent_requests());
+        assert_eq!(ollama_config.max_chars_per_request, default_max_chars_per_request());
+        assert_eq!(ollama_config.timeout_secs, default_timeout_secs());
+        assert_eq!(ollama_config.model, default_ollama_model());
+        
         assert_eq!(config.log_level, LogLevel::Info);
     }
 
     #[test]
     fn test_config_validation() {
-        // Valid config
+        // Start with a valid config
         let mut config = Config::default_config();
         assert!(config.validate().is_ok());
         
         // Invalid source language
-        config.source_language = "".to_string();
+        config.source_language = "xyz".to_string();
         assert!(config.validate().is_err());
         config.source_language = "en".to_string();
         
@@ -482,13 +645,37 @@ mod tests {
         assert!(config.validate().is_err());
         config.target_language = "fr".to_string();
         
-        // Missing API key for providers that require it
+        // For OpenAI provider that requires an API key
         config.translation.provider = TranslationProvider::OpenAI;
-        config.translation.openai.api_key = "".to_string();
+        
+        // Make sure available_providers has entries
+        if config.translation.available_providers.is_empty() {
+            // Initialize default providers if empty
+            config.translation.available_providers.push(ProviderConfig::new(TranslationProvider::Ollama));
+            config.translation.available_providers.push(ProviderConfig::new(TranslationProvider::OpenAI));
+            config.translation.available_providers.push(ProviderConfig::new(TranslationProvider::Anthropic));
+        }
+        
+        // First update the API key in available_providers 
+        if let Some(provider) = config.translation
+            .available_providers
+            .iter_mut()
+            .find(|p| p.provider_type == "openai") {
+            provider.api_key = "".to_string();
+        }
+        
+        // OpenAI with empty API key should fail validation
         assert!(config.validate().is_err());
         
+        // Set a valid API key in available_providers
+        if let Some(provider) = config.translation
+            .available_providers
+            .iter_mut()
+            .find(|p| p.provider_type == "openai") {
+            provider.api_key = "sk-1234567890".to_string();
+        }
+        
         // Valid with API key
-        config.translation.openai.api_key = "sk-1234567890".to_string();
         assert!(config.validate().is_ok());
         
         // Ollama doesn't require API key

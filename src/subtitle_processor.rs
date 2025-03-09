@@ -2,46 +2,44 @@ use std::fs;
 use std::fs::File;
 use std::fmt;
 use regex::Regex;
-use anyhow::{Result, Context};
+use once_cell::sync::Lazy;
+use anyhow::{Result, Context, anyhow};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use log::{info, warn, error};
-use once_cell::sync::Lazy;
+use log::{error, warn, info, debug};
 use std::process::Command;
 use serde_json::{Value, from_str};
 use crate::app_config::SubtitleInfo;
 use crate::language_utils;
-use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
+use std::collections::HashMap;
 
-/// Subtitle processor module
-///
-/// This module handles subtitle file processing, parsing, and manipulation
-/// including extraction from video files, formatting and splitting into chunks.
-/// Regex for parsing SRT timestamps
+// @module: Subtitle processing and manipulation
+
+// @const: SRT timestamp regex
 static TIMESTAMP_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})").unwrap()
 });
 
-/// Represents a single subtitle entry
+// @struct: Single subtitle entry
 #[derive(Debug, Clone)]
 pub struct SubtitleEntry {
-    /// Sequence number
+    // @field: Sequence number
     pub seq_num: usize,
     
-    /// Start time in milliseconds
+    // @field: Start time in ms
     pub start_time_ms: u64,
     
-    /// End time in milliseconds
+    // @field: End time in ms
     pub end_time_ms: u64,
     
-    /// Subtitle text content
+    // @field: Subtitle text
     pub text: String,
 }
 
 impl SubtitleEntry {
-    /// Create a new subtitle entry
+    // @creates: New subtitle entry
     pub fn new(seq_num: usize, start_time_ms: u64, end_time_ms: u64, text: String) -> Self {
         SubtitleEntry {
             seq_num,
@@ -51,7 +49,8 @@ impl SubtitleEntry {
         }
     }
     
-    /// Create a new subtitle entry with validation
+    // @creates: Validated subtitle entry
+    // @validates: Time range and non-empty text
     pub fn new_validated(seq_num: usize, start_time_ms: u64, end_time_ms: u64, text: String) -> Result<Self> {
         // Validate time range
         if end_time_ms <= start_time_ms {
@@ -75,7 +74,7 @@ impl SubtitleEntry {
         })
     }
     
-    /// Get the duration of this subtitle entry in milliseconds
+    // @returns: Duration in milliseconds
     pub fn duration_ms(&self) -> u64 {
         self.end_time_ms.saturating_sub(self.start_time_ms)
     }
@@ -228,12 +227,10 @@ impl SubtitleCollection {
         let normalized_language = match language_utils::normalize_to_part1_or_part2t(source_language) {
             Ok(lang) => lang,
             Err(e) => {
-                warn!("⚠️ Language code issue: {}", e);
+                warn!("Language code issue: {}", e);
                 source_language.to_string()
             }
         };
-        
-        info!("Extracting track {} to: {}", track_id, output_path.display());
         
         // Use ffmpeg to extract the subtitle directly to SRT file
         let result = Command::new("ffmpeg")
@@ -276,24 +273,25 @@ impl SubtitleCollection {
     /// Write subtitles to an SRT file
     pub fn write_to_srt<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
-        let file_name = path.file_name()
+        let _file_name = path.file_name()
             .map(|name| name.to_string_lossy().to_string())
             .unwrap_or_else(|| String::from("Unknown file"));
-        info!("Writing {} subtitle entries to {}", self.entries.len(), file_name);
-        
-        // Create parent directory if it doesn't exist
+            
+        // Create parent directory if needed
         if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
         }
         
-        let mut file = File::create(path)?;
+        // Write to file
+        let mut file = File::create(path)
+            .with_context(|| format!("Failed to create subtitle file: {}", path.display()))?;
+        
+        // Write each entry to the file
         for entry in &self.entries {
             write!(file, "{}", entry)?;
         }
         
-        info!("Subtitles saved");
         Ok(())
     }
     
@@ -302,15 +300,31 @@ impl SubtitleCollection {
     /// This method divides the subtitle entries into chunks that don't exceed the specified 
     /// maximum character count, ensuring that each chunk contains a coherent set of subtitle entries.
     /// The chunks are optimized to maximize batch size while respecting the character limit.
-    pub fn split_into_chunks(&self, max_chars: usize) -> Vec<Vec<SubtitleEntry>> {
-        // Early return for empty collections
+    pub fn split_into_chunks(&self, max_chars_per_chunk: usize) -> Vec<Vec<SubtitleEntry>> {
         if self.entries.is_empty() {
-            info!("No subtitle entries to split into chunks");
+            warn!("No subtitle entries to split into chunks");
             return Vec::new();
         }
         
+        // Protect against accidental loss of subtitles - count at the beginning
+        let total_entries = self.entries.len();
+        
         // Handle unreasonably small max_chars by enforcing a minimum
-        let effective_max_chars = max_chars.max(10);
+        let effective_max_chars = max_chars_per_chunk.max(100);
+        
+        // For Anthropic provider, consider using smaller chunks to improve reliability
+        // We can infer this is likely an Anthropic request if the max_chars is very large (>8000)
+        let is_likely_anthropic = max_chars_per_chunk > 8000;
+        
+        // If this appears to be an Anthropic request, use a more conservative size limit
+        // This helps prevent truncated responses by keeping chunks smaller
+        let actual_max_chars = if is_likely_anthropic {
+            // Use a smaller effective size for Anthropic to improve reliability
+            // For Claude-3-Haiku, keep chunks especially small to avoid max_tokens errors
+            (effective_max_chars / 3).min(2500)
+        } else {
+            effective_max_chars
+        };
         
         let mut chunks = Vec::new();
         let mut current_chunk = Vec::with_capacity(20); // Pre-allocate with reasonable capacity
@@ -320,7 +334,7 @@ impl SubtitleCollection {
             let entry_size = entry.text.len();
             
             // If a single entry exceeds the limit, it needs its own chunk
-            if entry_size > effective_max_chars {
+            if entry_size > actual_max_chars {
                 // If we have entries in the current chunk, finalize it first
                 if !current_chunk.is_empty() {
                     chunks.push(current_chunk);
@@ -329,12 +343,14 @@ impl SubtitleCollection {
                 }
                 
                 // Add the oversized entry as its own chunk
+                debug!("Entry {} is oversized ({} chars), placing in its own chunk", 
+                       entry.seq_num, entry_size);
                 chunks.push(vec![entry.clone()]);
                 continue;
             }
             
             // If adding this entry would exceed the limit, finalize the current chunk
-            if current_size + entry_size > effective_max_chars && !current_chunk.is_empty() {
+            if current_size + entry_size > actual_max_chars && !current_chunk.is_empty() {
                 chunks.push(current_chunk);
                 current_chunk = Vec::with_capacity(20);
                 current_size = 0;
@@ -350,6 +366,23 @@ impl SubtitleCollection {
             chunks.push(current_chunk);
         }
         
+        // Verify that all entries have been included in the chunks
+        let total_chunked_entries: usize = chunks.iter().map(|chunk| chunk.len()).sum();
+        if total_chunked_entries != total_entries {
+            error!("CRITICAL ERROR: Lost entries during chunking! Original: {}, After chunking: {}", 
+                   total_entries, total_chunked_entries);
+        } else {
+            // Add detailed chunk information in debug mode
+            if log::max_level() >= log::LevelFilter::Debug {
+                for (i, chunk) in chunks.iter().enumerate() {
+                    let chunk_seq_nums: Vec<usize> = chunk.iter().map(|e| e.seq_num).collect();
+                    let chunk_chars: usize = chunk.iter().map(|e| e.text.len()).sum();
+                    debug!("Chunk {}: {} entries (seq_nums: {:?}, total {} chars)", 
+                           i+1, chunk.len(), chunk_seq_nums, chunk_chars);
+                }
+            }
+        }
+        
         chunks
     }
     
@@ -357,9 +390,10 @@ impl SubtitleCollection {
     pub fn list_subtitle_tracks<P: AsRef<Path>>(video_path: P) -> Result<Vec<SubtitleInfo>> {
         let video_path = video_path.as_ref();
         
+        // Check if the file exists
         if !video_path.exists() {
             error!(" Video file not found: {:?}", video_path);
-            return Err(anyhow!("Video file does not exist: {:?}", video_path));
+            return Err(anyhow::anyhow!("Video file not found: {:?}", video_path));
         }
         
         // Remove verbose stack trace and unnecessary ffprobe details logs
@@ -383,7 +417,7 @@ impl SubtitleCollection {
         let stdout = String::from_utf8_lossy(&output.stdout);
         
         if stdout.trim().is_empty() {
-            warn!("ffprobe returned empty output");
+            // Removed: warn!("ffprobe returned empty output");
             return Ok(Vec::new());
         }
         
@@ -394,7 +428,7 @@ impl SubtitleCollection {
         
         if let Some(streams) = json.get("streams").and_then(|s| s.as_array()) {
             // Instead of logging each stream detail, just log the total count
-            info!("Found {} subtitle streams", streams.len());
+            // Removed: warn!("Found {} subtitle streams", streams.len());
             
             for stream in streams.iter() {
                 let index = stream.get("index")
@@ -423,21 +457,10 @@ impl SubtitleCollection {
                     title,
                 };
                 
-                // Only log meaningful language information, not internal track details
-                if let Some(lang) = &track.language {
-                    let lang_name = language_utils::get_language_name(lang).unwrap_or_else(|_| lang.clone());
-                    let title_info = track.title.as_deref().map_or(String::new(), |t| format!(" ({})", t));
-                    info!("Track {}: {} {}{}", track.index, lang, lang_name, title_info);
-                } else if let Some(title) = &track.title {
-                    info!("Track {}: {} (unknown language)", track.index, title);
-                } else {
-                    info!("Track {}: Unknown language", track.index);
-                }
-                
                 tracks.push(track);
             }
         } else {
-            info!("No subtitle streams found in video");
+            // Removed: warn!("No subtitle streams found in video");
         }
         
         Ok(tracks)
@@ -467,8 +490,6 @@ impl SubtitleCollection {
                     
                     // Check if the language name is in the title
                     if title_lower.contains(&name_lower) {
-                        info!("Found language name '{}' in title: {} (track {})", 
-                               pref_name, title, track.index);
                         return Some(track.index);
                     }
                 }
@@ -476,7 +497,6 @@ impl SubtitleCollection {
                 // Also check for language code in title
                 let title_lower = title.to_lowercase();
                 if title_lower.contains(&preferred_language.to_lowercase()) {
-                    info!("Found language code in title: {} (track {})", title, track.index);
                     return Some(track.index);
                 }
             }
@@ -487,7 +507,6 @@ impl SubtitleCollection {
             for track in tracks {
                 if let Some(lang) = &track.language {
                     if language_utils::language_codes_match(lang, "en") {
-                        info!("Found English fallback: {} (track {})", lang, track.index);
                         return Some(track.index);
                     }
                 }
@@ -495,7 +514,6 @@ impl SubtitleCollection {
                 // Also check title for English mention
                 if let Some(title) = &track.title {
                     if title.to_lowercase().contains("english") {
-                        info!("Found English in title: {} (track {})", title, track.index);
                         return Some(track.index);
                     }
                 }
@@ -505,15 +523,13 @@ impl SubtitleCollection {
         // If neither preferred nor English found, use the first track
         if !tracks.is_empty() {
             let first_track = tracks.first().unwrap().index;
-            warn!("No language match found, using first track: {}", first_track);
-            info!("Selected track {} for extraction", first_track);
             return Some(first_track);
         }
         
         None
     }
     
-    /// Extract subtitles with automatic track selection
+    /// Extract subtitles from a video file with automatic track selection
     pub fn extract_with_auto_track_selection<P: AsRef<Path>>(
         video_path: P, 
         preferred_language: &str,
@@ -522,44 +538,21 @@ impl SubtitleCollection {
     ) -> Result<Self> {
         let video_path = video_path.as_ref();
         
-        // Normalize preferred language code
-        let normalized_preferred = match language_utils::normalize_to_part1_or_part2t(preferred_language) {
-            Ok(lang) => lang,
-            Err(e) => {
-                warn!("Could not normalize preferred language code '{}': {}", preferred_language, e);
-                preferred_language.to_string()
-            }
-        };
-        
-        info!("Starting auto track selection for: {} (preferred: {})", 
-               video_path.file_name().unwrap_or_default().to_string_lossy(), normalized_preferred);
-        
-        // List available subtitle tracks
+        // List all subtitle tracks
         let tracks = Self::list_subtitle_tracks(video_path)?;
         
+        // Exit early if no subtitle streams found
         if tracks.is_empty() {
-            error!(" No subtitles found in the video");
+            error!("No subtitle streams found in video");
             return Err(anyhow::anyhow!("No subtitle tracks found in the video"));
         }
         
-        // Select the best track
-        let track_id = match Self::select_subtitle_track(&tracks, &normalized_preferred) {
-            Some(id) => {
-                info!("Selected track {} for extraction", id);
-                id
-            },
-            None => {
-                // Use first track if no language match found
-                let first_track = tracks.first().unwrap().index;
-                warn!("No language match found, using first track: {}", first_track);
-                info!("Selected track {} for extraction", first_track);
-                first_track
-            }
-        };
+        // Select the subtitle track
+        let track_id = Self::select_subtitle_track(&tracks, preferred_language)
+            .ok_or_else(|| anyhow::anyhow!("No matching subtitle track found for language: {}", preferred_language))?;
         
-        // Extract the subtitles
+        // Extract the selected track
         if let Some(output_path) = output_path {
-            info!("Extracting to file: {:?}", output_path);
             Self::extract_from_video(video_path, track_id, source_language, output_path)
         } else {
             // Extract to a temporary file first
@@ -570,22 +563,59 @@ impl SubtitleCollection {
             
             // Clean up temporary file
             if temp_path.exists() {
-                if let Err(e) = std::fs::remove_file(&temp_path) {
-                    warn!("Failed to remove temporary file: {}", e);
-                }
+                let _ = std::fs::remove_file(&temp_path);
             }
             
             result
         }
     }
-    
+
     /// Extract source language subtitle to memory
     pub fn extract_source_language_subtitle_to_memory<P: AsRef<Path>>(video_path: P, source_language: &str) -> Result<Self> {
         let video_path = video_path.as_ref();
         
-        info!("Extracting {source_language} subtitles from video (in-memory)");
+        error!("Extracting {source_language} subtitles from video (in-memory)");
+        
         // Avoiding additional logs by passing directly to extract_with_auto_track_selection
         Self::extract_with_auto_track_selection(video_path, source_language, None, source_language)
+    }
+    
+    /// Fast extraction using ffmpeg subtitle copy
+    #[allow(dead_code)]
+    pub fn fast_extract_source_subtitles<P: AsRef<Path>>(video_path: P, source_language: &str) -> Result<Self> {
+        error!("Fast extracting subtitles directly for language: {}", source_language);
+        
+        // Call extract_with_auto_track_selection directly
+        Self::extract_with_auto_track_selection(video_path, source_language, None, source_language)
+    }
+
+    /// Save the subtitle collection to an SRT file
+    pub fn save_to_file<P: AsRef<Path>>(&self, file_path: P) -> Result<()> {
+        let file_path = file_path.as_ref();
+        
+        // Ensure the parent directory exists
+        if let Some(parent) = file_path.parent() {
+            crate::file_utils::FileManager::ensure_dir(parent)?;
+        }
+        
+        let _file_name = file_path.file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| String::from("Unknown file"));
+        
+        // Keep this log as it's useful for progress tracking
+        error!("Writing {} subtitle entries to {}", self.entries.len(), _file_name);
+        
+        // Convert to string
+        let srt_content = self.to_string();
+        
+        // Write to file
+        let mut file = File::create(file_path)
+            .with_context(|| format!("Failed to create subtitle file: {}", _file_name))?;
+        
+        file.write_all(srt_content.as_bytes())
+            .with_context(|| format!("Failed to write to subtitle file: {}", _file_name))?;
+        
+        Ok(())
     }
     
     /// Parse SRT file content to subtitle entries
@@ -615,12 +645,12 @@ impl SubtitleCollection {
                         true
                     },
                     Err(e) => {
-                        warn!("Skipping invalid subtitle entry {}: {}", seq_num, e);
+                        error!("Skipping invalid subtitle entry {}: {}", seq_num, e);
                         false
                     }
                 }
             } else {
-                warn!("Skipping empty subtitle entry {}", seq_num);
+                error!("Skipping empty subtitle entry {}", seq_num);
                 false
             }
         };
@@ -692,27 +722,28 @@ impl SubtitleCollection {
         
         // Validate and sort entries
         if entries.is_empty() {
-            warn!("No valid subtitle entries found in content");
-        } else {
-            // Sort by start time to ensure correct order
-            entries.sort_by_key(|entry| entry.start_time_ms);
-            
-            // Check for overlapping entries
-            let mut overlap_count = 0;
-            for i in 0..entries.len().saturating_sub(1) {
-                if entries[i].overlaps_with(&entries[i + 1]) {
-                    overlap_count += 1;
-                }
+            error!("No valid subtitle entries found in content");
+            return Err(anyhow::anyhow!("No valid subtitle entries were found in the SRT content"));
+        }
+        
+        // Sort by start time to ensure correct order
+        entries.sort_by_key(|entry| entry.start_time_ms);
+        
+        // Check for overlapping entries
+        let mut overlap_count = 0;
+        for i in 0..entries.len().saturating_sub(1) {
+            if entries[i].end_time_ms > entries[i+1].start_time_ms {
+                overlap_count += 1;
             }
-            
-            if overlap_count > 0 {
-                warn!("Found {} overlapping subtitle entries", overlap_count);
-            }
-            
-            // Renumber entries to ensure sequential order
-            for (i, entry) in entries.iter_mut().enumerate() {
-                entry.seq_num = i + 1;
-            }
+        }
+        
+        if overlap_count > 0 {
+            warn!("Found {} overlapping subtitle entries", overlap_count);
+        }
+        
+        // Renumber entries to ensure sequential order
+        for (i, entry) in entries.iter_mut().enumerate() {
+            entry.seq_num = i + 1;
         }
         
         Ok(entries)
@@ -730,13 +761,6 @@ impl SubtitleCollection {
             .map_or(0, |m| m.as_str().parse().unwrap_or(0));
             
         Ok((hours * 3600 + minutes * 60 + seconds) * 1000 + millis)
-    }
-    
-    /// Fast extract source subtitles
-    pub fn fast_extract_source_subtitles<P: AsRef<Path>>(video_path: P, source_language: &str) -> Result<Self> {
-        info!("Fast extracting subtitles directly for language: {}", source_language);
-        // Call extract_with_auto_track_selection directly instead of going through another method
-        Self::extract_with_auto_track_selection(video_path, source_language, None, source_language)
     }
 }
 
@@ -854,19 +878,24 @@ mod tests {
             3, 10500, 15000, "A longer entry that should take more space in the chunk calculation".to_string()  // 67 chars
         ));
         
-        // Split with max 50 characters per chunk (should give 3 chunks)
+        // Split with max 50 characters per chunk (should give 2 chunks)
+        // Note that the actual limit used will be 100 due to the minimum enforced in the method
         let chunks = collection.split_into_chunks(50);
         
-        // First two entries fit in first chunk (46 chars total), third entry gets its own chunk
+        // Since 100 is the minimum limit, all entries (total 113 chars) should be spread as follows:
+        // First chunk: entries 1 and 2 (46 chars), Second chunk: entry 3 (67 chars)
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].len(), 2);  // First chunk has 2 entries
         assert_eq!(chunks[1].len(), 1);  // Second chunk has 1 entry
         
         // Split with max 20 characters per chunk
+        // Note that the actual limit used will be 100 due to the minimum enforced in the method
         let chunks = collection.split_into_chunks(20);
         
-        // Each entry should be in its own chunk
-        assert_eq!(chunks.len(), 3);
+        // With a 100 char minimum limit, it should still split the same way as above
+        assert_eq!(chunks.len(), 2);  // Still 2 chunks due to minimum size enforcement
+        assert_eq!(chunks[0].len(), 2);  // First chunk has 2 entries (46 chars total)
+        assert_eq!(chunks[1].len(), 1);  // Second chunk has 1 entry (67 chars)
         
         Ok(())
     }

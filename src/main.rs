@@ -1,10 +1,15 @@
-use anyhow::{Result, Context};
-use log::{info, error, warn, LevelFilter, Log, Metadata, Record, Level, SetLoggerError};
+use anyhow::{Result, anyhow, Context};
+use log::{debug, error, warn, info, LevelFilter, Log, Metadata, Record, Level, SetLoggerError};
 use std::process;
 use std::path::{Path, PathBuf};
+use std::io::{self, Write};
 use std::env;
-use std::io::Write;
-use std::fs;
+use std::fs::File;
+use std::io::BufReader;
+use serde_json;
+
+use crate::app_config::{Config, TranslationProvider};
+use app_controller::Controller;
 
 mod app_config;
 mod translation_service;
@@ -12,21 +17,32 @@ mod subtitle_processor;
 mod file_utils;
 mod app_controller;
 mod language_utils;
+mod providers;
 
-use app_config::{Config, LogLevel};
-use app_controller::Controller;
-use crate::file_utils::FileManager;
+// @struct: CLI options
+struct CommandLineOptions {
+    input_path: PathBuf,
+    force_overwrite: bool,
+    provider: Option<TranslationProvider>,
+    model: Option<String>,
+    source_language: Option<String>,
+    target_language: Option<String>,
+    config_path: String,
+    log_level: Option<app_config::LogLevel>,
+}
 
-/// A simple custom logger implementation
+// @struct: Custom logger implementation
 struct CustomLogger {
     level: LevelFilter,
 }
 
 impl CustomLogger {
+    // @creates: New logger with specified level
     fn new(level: LevelFilter) -> Self {
         CustomLogger { level }
     }
 
+    // @initializes: Global logger
     fn init(level: LevelFilter) -> Result<(), SetLoggerError> {
         let logger = Box::new(CustomLogger::new(level));
         log::set_boxed_logger(logger)?;
@@ -34,11 +50,12 @@ impl CustomLogger {
         Ok(())
     }
     
+    // @returns: Emoji for log level
     fn get_emoji_for_level(level: Level) -> &'static str {
         match level {
             Level::Error => "❌ ",
             Level::Warn => "🚧 ",
-            Level::Info => "ℹ️ ",
+            Level::Info => " ",
             Level::Debug => "🔍 ",
             Level::Trace => "📋 ",
         }
@@ -107,181 +124,284 @@ impl Log for CustomLogger {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Load configuration first, to properly set up the logger with the right level
-    let config_path = "conf.json";
-    let example_config_path = "conf.example.json";
+    // Initialize the logger once with info level by default
+    // We'll update the level after loading the config if needed
+    CustomLogger::init(LevelFilter::Info)?;
+    
+    // Parse command line arguments
+    let options = parse_command_line_args()?;
+    
+    // If log level is set via command line, apply it immediately
+    if let Some(cmd_log_level) = &options.log_level {
+        let log_level = match cmd_log_level {
+            app_config::LogLevel::Error => LevelFilter::Error,
+            app_config::LogLevel::Warn => LevelFilter::Warn,
+            app_config::LogLevel::Info => LevelFilter::Info,
+            app_config::LogLevel::Debug => LevelFilter::Debug,
+            app_config::LogLevel::Trace => LevelFilter::Trace,
+        };
+        log::set_max_level(log_level);
+    }
     
     // Load or create configuration
-    let config = if FileManager::file_exists(config_path) {
-        println!("Loading configuration from {}", config_path);
-        Config::from_file(config_path).with_context(|| "Failed to load configuration")?
-    } else {
-        if FileManager::file_exists(example_config_path) {
-            println!("Configuration file not found, but example configuration exists.");
-            println!("You can copy it using: cp {} {}", example_config_path, config_path);
-            println!("Creating default configuration at {}", config_path);
-        } else {
-            println!("Configuration file not found, creating default at {}", config_path);
-        }
-        app_config::create_default_config_file(config_path)?
-    };
-    
-    // Convert LogLevel enum to LevelFilter
-    let log_level = match config.log_level {
-        LogLevel::Error => LevelFilter::Error,
-        LogLevel::Warn => LevelFilter::Warn,
-        LogLevel::Info => LevelFilter::Info,
-        LogLevel::Debug => LevelFilter::Debug,
-        LogLevel::Trace => LevelFilter::Trace,
-    };
-    
-    // Parse CLI arguments
-    let args: Vec<String> = env::args().collect();
-    
-    if args.len() < 2 {
-        error!(" Missing required input path argument");
-        print_usage(&args[0]);
-        process::exit(1);
-    }
-    
-    if args.len() > 3 {
-        warn!("⚠️ Too many arguments provided. Only the first 1-2 arguments will be used.");
-    }
-    
-    // Initialize logging with the appropriate level
-    if let Err(e) = CustomLogger::init(log_level) {
-        error!(" Init failed: {}", e);
-        process::exit(1);
-    }
-    
-    // Start the application with a welcome message
-    info!("YASTwAI started");
-    info!("Log level: {}", log_level);
-    
-    // Get input path from arguments
-    let input_path_str = &args[1];
-    
-    // Sanitize the input path - basic security check
-    if input_path_str.contains("..") || input_path_str.contains("|") || input_path_str.contains(";") {
-        error!(" Input path contains potentially unsafe characters");
-        process::exit(1);
-    }
-    
-    // Canonicalize the input path to resolve symlinks and relative paths
-    let input_path = Path::new(input_path_str);
-    let canonicalized_input_path = match fs::canonicalize(input_path) {
-        Ok(path) => path,
-        Err(e) => {
-            error!(" Invalid input path: {} - {}", input_path_str, e);
-            process::exit(1);
-        }
-    };
-    
-    // Check if the input path exists
-    if !canonicalized_input_path.exists() {
-        error!(" Input path not found: {:?}", canonicalized_input_path);
-        process::exit(1);
-    }
-    
-    // Determine output directory
-    let output_dir = if args.len() >= 3 {
-        let output_path_str = &args[2];
+    let config_path = &options.config_path;
+    let config = if Path::new(config_path).exists() {
+        // Load existing configuration
+        let file = File::open(config_path)
+            .context(format!("Failed to open config file: {}", config_path))?;
         
-        // Sanitize the output path - basic security check
-        if output_path_str.contains("..") || output_path_str.contains("|") || output_path_str.contains(";") {
-            error!(" Output path contains potentially unsafe characters");
-            process::exit(1);
+        let reader = BufReader::new(file);
+        let mut config: Config = serde_json::from_reader(reader)
+            .context(format!("Failed to parse config file: {}", config_path))?;
+        
+        // Override config with CLI options if provided
+        if let Some(provider) = &options.provider {
+            config.translation.provider = provider.clone();
         }
         
-        let dir = PathBuf::from(output_path_str);
-        
-        // Create the output directory if it doesn't exist
-        if !dir.exists() {
-            match fs::create_dir_all(&dir) {
-                Ok(_) => info!("Created output directory: {:?}", dir),
-                Err(e) => {
-                    error!(" Failed to create output directory: {}", e);
-                    process::exit(1);
-                }
-            }
-        } else if !dir.is_dir() {
-            error!(" Specified output path exists but is not a directory: {:?}", dir);
-            process::exit(1);
-        }
-        
-        // Return the output directory
-        match fs::canonicalize(&dir) {
-            Ok(path) => path,
-            Err(e) => {
-                error!(" Invalid output path: {} - {}", output_path_str, e);
-                process::exit(1);
+        if let Some(model) = &options.model {
+            // Find the provider config and update the model
+            let provider_str = config.translation.provider.to_string();
+            if let Some(provider_config) = config.translation.available_providers.iter_mut()
+                .find(|p| p.provider_type == provider_str) {
+                provider_config.model = model.clone();
             }
         }
-    } else {
-        // If no output directory is provided, use the parent directory of the input file
-        // or the current directory for folder inputs
-        if canonicalized_input_path.is_file() {
-            match canonicalized_input_path.parent() {
-                Some(parent) => parent.to_path_buf(),
-                None => {
-                    error!(" Cannot determine parent directory for input file");
-                    process::exit(1);
-                }
-            }
-        } else {
-            canonicalized_input_path.clone()
+        
+        if let Some(source_lang) = &options.source_language {
+            config.source_language = source_lang.clone();
         }
+        
+        if let Some(target_lang) = &options.target_language {
+            config.target_language = target_lang.clone();
+        }
+        
+        // Update log level in config if specified via command line
+        if let Some(log_level) = &options.log_level {
+            config.log_level = log_level.clone();
+        }
+        
+        config
+    } else {
+        // Create default configuration if not exists
+        warn!("Config file not found at '{}', creating default config.", config_path);
+        
+        let mut config = Config::default_config();
+        
+        // Apply command line log level to default config if specified
+        if let Some(log_level) = &options.log_level {
+            config.log_level = log_level.clone();
+        }
+        
+        // Save default config
+        let config_json = serde_json::to_string_pretty(&config)
+            .context("Failed to serialize default config to JSON")?;
+        
+        std::fs::write(config_path, config_json)
+            .context(format!("Failed to write default config to file: {}", config_path))?;
+        
+        config
     };
     
-    // Create and initialize the controller
-    let controller = match app_controller::Controller::with_config(config) {
-        Ok(c) => c,
-        Err(e) => {
-            error!(" Failed to initialize controller: {}", e);
-            process::exit(1);
-        }
-    };
+    // If log level was not set via command line, update it from config now
+    if options.log_level.is_none() {
+        let log_level = match config.log_level {
+            app_config::LogLevel::Error => LevelFilter::Error,
+            app_config::LogLevel::Warn => LevelFilter::Warn,
+            app_config::LogLevel::Info => LevelFilter::Info,
+            app_config::LogLevel::Debug => LevelFilter::Debug,
+            app_config::LogLevel::Trace => LevelFilter::Trace,
+        };
+        
+        // Just update the max level without reinitializing the logger
+        log::set_max_level(log_level);
+    }
     
-    // Automatically determine mode based on whether the input is a file or directory
-    if canonicalized_input_path.is_dir() {
-        info!("Processing directory: {:?}", canonicalized_input_path);
-        
-        // Run the controller in folder mode
-        if let Err(e) = controller.run_folder(canonicalized_input_path, output_dir).await {
-            error!(" Error: {}", e);
-            process::exit(1);
-        }
-    } else if canonicalized_input_path.is_file() {
-        let file_name = canonicalized_input_path.file_name()
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_else(|| String::from("Unknown file"));
-        info!("Processing file: {}", file_name);
-        
-        // Run the controller in file mode
-        if let Err(e) = controller.run(canonicalized_input_path, output_dir).await {
-            error!(" Error: {}", e);
-            process::exit(1);
-        }
+    // Create controller
+    let controller = Controller::with_config(config.clone())?;
+    
+    // Run the controller with the input file(s) and output directory
+    if options.input_path.is_file() {
+        // Process a single file
+        controller.run(
+            options.input_path.clone(), 
+            options.input_path.parent().unwrap_or(Path::new(".")).to_path_buf(),
+            options.force_overwrite
+        ).await?;
+    } else if options.input_path.is_dir() {
+        // Process a directory
+        warn!("Processing directory: {:?}", options.input_path.canonicalize()?);
+        controller.run_folder(
+            options.input_path.clone(),
+            options.force_overwrite
+        ).await?;
     } else {
-        error!(" Input path exists but is neither a file nor a directory: {:?}", canonicalized_input_path);
-        process::exit(1);
+        return Err(anyhow!("Input path does not exist: {:?}", options.input_path));
     }
     
     Ok(())
 }
 
-/// Print usage instructions for the application
+// Parse command line arguments and return options
+fn parse_command_line_args() -> Result<CommandLineOptions> {
+    let args: Vec<String> = env::args().collect();
+    
+    // Check for help flag first
+    if args.len() > 1 && (args[1] == "-h" || args[1] == "--help") {
+        print_usage(&args[0]);
+        process::exit(0);
+    }
+    
+    if args.len() < 2 {
+        error!("Missing required input path argument");
+        print_usage(&args[0]);
+        process::exit(1);
+    }
+    
+    let mut options = CommandLineOptions {
+        input_path: PathBuf::new(),
+        force_overwrite: false,
+        provider: None,
+        model: None,
+        source_language: None,
+        target_language: None,
+        config_path: "conf.json".to_string(),
+        log_level: None,
+    };
+    
+    // Process in two passes:
+    // First, check for flags with arguments
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-f" | "--force" => {
+                options.force_overwrite = true;
+                i += 1;
+            },
+            "-p" | "--provider" => {
+                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                    let provider_str = &args[i + 1];
+                    options.provider = match provider_str.to_lowercase().as_str() {
+                        "ollama" => Some(TranslationProvider::Ollama),
+                        "openai" => Some(TranslationProvider::OpenAI),
+                        "anthropic" => Some(TranslationProvider::Anthropic),
+                        _ => {
+                            error!("Invalid provider: {}. Valid options are: ollama, openai, anthropic", provider_str);
+                            print_usage(&args[0]);
+                            process::exit(1);
+                        }
+                    };
+                    i += 2;
+                } else {
+                    error!("Missing value for provider option");
+                    print_usage(&args[0]);
+                    process::exit(1);
+                }
+            },
+            "-m" | "--model" => {
+                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                    options.model = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    error!("Missing value for model option");
+                    print_usage(&args[0]);
+                    process::exit(1);
+                }
+            },
+            "-s" | "--source" => {
+                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                    options.source_language = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    error!("Missing value for source language option");
+                    print_usage(&args[0]);
+                    process::exit(1);
+                }
+            },
+            "-t" | "--target" => {
+                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                    options.target_language = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    error!("Missing value for target language option");
+                    print_usage(&args[0]);
+                    process::exit(1);
+                }
+            },
+            "-c" | "--config" => {
+                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                    options.config_path = args[i + 1].clone();
+                    i += 2;
+                } else {
+                    error!("Missing value for config option");
+                    print_usage(&args[0]);
+                    process::exit(1);
+                }
+            },
+            "-l" | "--log-level" => {
+                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                    let log_level_str = &args[i + 1].to_lowercase();
+                    options.log_level = match log_level_str.as_str() {
+                        "error" => Some(app_config::LogLevel::Error),
+                        "warn" => Some(app_config::LogLevel::Warn),
+                        "info" => Some(app_config::LogLevel::Info),
+                        "debug" => Some(app_config::LogLevel::Debug),
+                        "trace" => Some(app_config::LogLevel::Trace),
+                        _ => {
+                            error!("Invalid log level: {}. Valid options are: error, warn, info, debug, trace", log_level_str);
+                            print_usage(&args[0]);
+                            process::exit(1);
+                        }
+                    };
+                    i += 2;
+                } else {
+                    error!("Missing value for log level option");
+                    print_usage(&args[0]);
+                    process::exit(1);
+                }
+            },
+            // If it's not an option and we haven't set the input path yet, treat it as the input path
+            arg if !arg.starts_with('-') => {
+                if options.input_path.as_os_str().is_empty() {
+                    options.input_path = PathBuf::from(arg);
+                }
+                i += 1;
+            },
+            // Unknown option
+            _ => {
+                error!("Unknown option: {}", args[i]);
+                print_usage(&args[0]);
+                process::exit(1);
+            }
+        }
+    }
+    
+    // Validate that we have an input path
+    if options.input_path.as_os_str().is_empty() {
+        error!("No input path provided");
+        print_usage(&args[0]);
+        process::exit(1);
+    }
+    
+    Ok(options)
+}
+
 fn print_usage(program_name: &str) {
-    error!(" Usage:");
-    error!("   {} <input_path> [output_directory]", program_name);
-    error!("");
-    error!("Examples:");
-    error!("   {} video.mkv", program_name);
-    error!("   {} video.mkv /path/to/output", program_name);
-    error!("   {} /path/to/videos", program_name);
-    error!("   {} /path/to/videos /path/to/output", program_name);
-    error!("");
-    error!("Description:");
-    error!("   - If input is a file, translates subtitles from that video");
-    error!("   - If input is a folder, processes all videos in the folder");
+    println!("Usage: {} [options] <input-path>", program_name);
+    println!("Options:");
+    println!("  -h, --help              Show this help message");
+    println!("  -f, --force             Force overwrite of existing output files");
+    println!("  -p, --provider VALUE    Override the translation provider (ollama, openai, anthropic)");
+    println!("  -m, --model VALUE       Override the model name");
+    println!("  -s, --source VALUE      Override the source language code");
+    println!("  -t, --target VALUE      Override the target language code");
+    println!("  -c, --config VALUE      Specify config file path (default: conf.json)");
+    println!("  -l, --log-level VALUE   Set log level (error, warn, info, debug, trace)");
+    println!("");
+    println!("Examples:");
+    println!("  {} movie.mkv", program_name);
+    println!("  {} -f movie.mkv", program_name);
+    println!("  {} -p openai -m gpt-4-turbo movie.mkv", program_name);
+    println!("  {} -s en -t es movie.mkv", program_name);
+    println!("  {} -l debug movie.mkv", program_name);
 } 

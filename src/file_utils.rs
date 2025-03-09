@@ -1,43 +1,39 @@
 use anyhow::{Result, Context};
-use log::{info, warn};
+use log::error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+use std::fs::OpenOptions;
+use std::io::Write;
+use chrono::Local;
 
-/// File utilities module
-///
-/// This module provides utilities for file and directory operations
-/// including file existence checking, directory creation, and file I/O.
-///
-/// File manager for handling file operations
+// @module: File and directory utilities
+
+// @struct: File operations utility
 pub struct FileManager;
 
 impl FileManager {
-    /// Check if a file exists
+    // @checks: File existence
     pub fn file_exists<P: AsRef<Path>>(path: P) -> bool {
         path.as_ref().exists() && path.as_ref().is_file()
     }
     
-    /// Check if a directory exists
+    // @checks: Directory existence
     pub fn dir_exists<P: AsRef<Path>>(path: P) -> bool {
         path.as_ref().exists() && path.as_ref().is_dir()
     }
     
-    /// Create a directory and any necessary parent directories
+    // @creates: Directory and parents if needed
     pub fn ensure_dir<P: AsRef<Path>>(path: P) -> Result<()> {
         let path = path.as_ref();
         if !path.exists() {
-            fs::create_dir_all(path)
-                .with_context(|| format!("Failed to create directory: {:?}", path))?;
-            // Only log directory creation for output directories, not temp dirs
-            if !path.to_string_lossy().contains("temp") {
-                info!("Created directory: {:?}", path);
-            }
+            fs::create_dir_all(path)?;
         }
         Ok(())
     }
     
-    /// Generate an output path for a translated subtitle
+    // @generates: Output path for translated subtitle
+    // @params: input_file, output_dir, target_language, extension
     pub fn generate_output_path<P1: AsRef<Path>, P2: AsRef<Path>>(
         input_file: P1,
         output_dir: P2,
@@ -52,9 +48,9 @@ impl FileManager {
         
         // Create the output filename with language code and extension
         let mut output_filename = stem.to_string_lossy().to_string();
-        output_filename.push_str(".");
+        output_filename.push('.');
         output_filename.push_str(target_language);
-        output_filename.push_str(".");
+        output_filename.push('.');
         output_filename.push_str(extension);
         
         // Join with the output directory
@@ -111,22 +107,42 @@ impl FileManager {
         let from = from.as_ref();
         let to = to.as_ref();
         
-        // Check if source exists
         if !from.exists() {
             return Err(anyhow::anyhow!("Source file does not exist: {:?}", from));
         }
         
-        // Ensure target directory exists
+        // Ensure the target directory exists
         if let Some(parent) = to.parent() {
             Self::ensure_dir(parent)?;
         }
         
         // Perform the copy
-        fs::copy(from, to)
-            .with_context(|| format!("Failed to copy file from {:?} to {:?}", from, to))?;
+        fs::copy(from, to)?;
         
-        // Only log user-requested file operations
-        info!("Successfully copied file from {:?} to {:?}", from, to);
+        Ok(())
+    }
+    
+    /// Append content to a log file with timestamp
+    pub fn append_to_log_file<P: AsRef<Path>>(path: P, content: &str) -> Result<()> {
+        // Get current timestamp
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        
+        // Ensure the parent directory exists
+        if let Some(parent) = path.as_ref().parent() {
+            Self::ensure_dir(parent)?;
+        }
+        
+        // Open file in append mode, create if it doesn't exist
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .with_context(|| format!("Failed to open log file: {:?}", path.as_ref()))?;
+        
+        // Write content with timestamp
+        writeln!(file, "[{}] {}", timestamp, content)
+            .with_context(|| format!("Failed to write to log file: {:?}", path.as_ref()))?;
+        
         Ok(())
     }
 }
@@ -306,6 +322,40 @@ mod tests {
         // Clean up
         fs::remove_file(source_file)?;
         fs::remove_file(dest_file)?;
+        Ok(())
+    }
+
+    /// Test appending to log file
+    #[test]
+    fn test_append_to_log_file_should_append_content_with_timestamp() -> Result<()> {
+        // Define test file
+        let test_log_file = "test_log_issues.log";
+        
+        // Ensure the file doesn't exist initially
+        if Path::new(test_log_file).exists() {
+            fs::remove_file(test_log_file)?;
+        }
+        
+        // Append two log entries
+        FileManager::append_to_log_file(test_log_file, "Test log entry 1")?;
+        FileManager::append_to_log_file(test_log_file, "Test log entry 2")?;
+        
+        // Read the file content
+        let content = fs::read_to_string(test_log_file)?;
+        
+        // Verify that it contains both entries and timestamps
+        assert!(content.contains("Test log entry 1"));
+        assert!(content.contains("Test log entry 2"));
+        
+        // Should have timestamps in format [YYYY-MM-DD HH:MM:SS]
+        assert!(content.contains("] Test log entry 1"));
+        assert!(content.contains("] Test log entry 2"));
+        
+        // Should have two lines
+        assert_eq!(content.lines().count(), 2);
+        
+        // Clean up
+        fs::remove_file(test_log_file)?;
         Ok(())
     }
 } 

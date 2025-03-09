@@ -1,174 +1,177 @@
-use anyhow::{Result, Context, anyhow};
-use log::{debug, info, warn, error};
+use anyhow::{Result, Context};
+use log::{error, warn, info, debug};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
-use tempfile::tempdir;
-use crate::app_config::{Config, TranslationProvider, SubtitleInfo};
+use std::time::Instant;
+use crate::app_config::{Config, SubtitleInfo};
 use crate::subtitle_processor::SubtitleCollection;
 use crate::translation_service::TranslationService;
+use crate::language_utils;
+use crate::file_utils;
+use std::sync::Once;
+use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
+use tempfile::tempdir;
+use std::sync::Arc;
+use std::sync::Mutex;
+use crate::translation_service::LogEntry;
+use crate::file_utils::FileManager;
+use chrono;
 
-/// Application controller module
-/// coordinating subtitle extraction, translation, and output.
-/// Main controller for the application
+// @module: Application controller for subtitle processing
+
+/// Main application controller for subtitle translation
 pub struct Controller {
-    /// Application configuration
+    // @field: App configuration
     config: Config,
-    
-    /// Translation service
-    translation_service: TranslationService,
 }
 
 impl Controller {
-    /// Create a new Controller with the specified configuration
+    // @method: Create a new controller with default configuration
+    pub fn new() -> Result<Self> {
+        Self::with_config(Config::default_config())
+    }
+    
+    // @method: Create a new controller with the given configuration
     pub fn with_config(config: Config) -> Result<Self> {
-        // Instantiate components
-        let translation_service = TranslationService::new(config.translation.clone())?;
-        
-        Ok(Controller {
+        // Create translation service from config
+        let controller = Self {
             config,
-            translation_service,
-        })
+        };
+        
+        Ok(controller)
     }
     
     /// Run the main workflow with input video file and output directory
-    pub async fn run(&self, input_file: PathBuf, output_dir: PathBuf) -> Result<()> {
-        // Create a multi progress bar display
+    pub async fn run(&self, input_file: PathBuf, output_dir: PathBuf, force_overwrite: bool) -> Result<()> {
         let multi_progress = MultiProgress::new();
-        
-        // Run the real implementation with progress tracking
-        self.run_with_progress(input_file, output_dir, &multi_progress).await
+        self.run_with_progress(input_file, output_dir, &multi_progress, force_overwrite).await
     }
     
-    /// Internal run method that accepts a MultiProgress instance
-    async fn run_with_progress(&self, input_file: PathBuf, output_dir: PathBuf, multi_progress: &MultiProgress) -> Result<()> {
+    /// Run the controller with progress reporting
+    async fn run_with_progress(&self, input_file: PathBuf, output_dir: PathBuf, multi_progress: &MultiProgress, force_overwrite: bool) -> Result<()> {
         // Start timing the process
         let start_time = std::time::Instant::now();
-                
-        // Validate configuration
-        self.config.validate()?;
         
-        // Only test connection for the first file - don't repeat this for each file in folder mode
-        // Use a static variable to track if we've already tested the connection
-        use std::sync::atomic::{AtomicBool, Ordering};
-        use std::sync::Once;
-        static CONNECTION_TESTED: AtomicBool = AtomicBool::new(false);
-        static INIT_TEST: Once = Once::new();
-        
-        if !CONNECTION_TESTED.load(Ordering::SeqCst) {
-            // Test connection to translation service
-            info!("Testing translation service: {}", self.config.translation.provider.display_name());
-            self.translation_service.test_connection(
-                &self.config.source_language,
-                &self.config.target_language
-            ).await.context("Failed to connect to translation service")?;
-            
-            // Perform a sample translation to verify everything is working correctly
-            let _test_translation = self.translation_service.test_translation(
-                &self.config.source_language,
-                &self.config.target_language
-            ).await.context("Translation test failed")?;
-            
-            info!("Translation service ready");
-            
-            // Mark connection as tested so we don't do it again
-            CONNECTION_TESTED.store(true, Ordering::SeqCst);
+        // Check if the input file exists
+        if !input_file.exists() {
+            return Err(anyhow::anyhow!("Input file does not exist: {:?}", input_file));
         }
+        
+        // Ensure the output directory exists
+        file_utils::FileManager::ensure_dir(&output_dir)?;
+        
+        // Check if translation already exists
+        let output_path = output_dir.join(self.get_subtitle_output_filename(&input_file, &self.config.target_language));
+        if output_path.exists() && !force_overwrite {
+            // Skip if translation already exists and no force flag
+            warn!("Skipping file, translation already exists (use -f to force overwrite)");
+            return Ok(());
+        } else if output_path.exists() && force_overwrite {
+            // Indicate that we'll overwrite
+        }
+        
+        // First check if the target language is already available as a subtitle track
+        if !force_overwrite {
+            if let Ok(Some(track_id)) = self.find_target_language_track(&input_file) {
+                
+                // Extract the existing subtitle track
+                if let Ok(subtitles) = self.extract_target_subtitles_to_memory(&input_file, track_id) {
+                    // If extraction was successful, save the existing subtitles
+                    self.save_translated_subtitles(subtitles, &input_file, &output_dir)?;
+                    return Ok(());
+                }
+            }
+        } else if let Ok(Some(_)) = self.find_target_language_track(&input_file) {
+        }
+        
+        // Initialize translation testing once per run
+        static INIT_TEST: Once = Once::new();
+        INIT_TEST.call_once(|| {
+            // Skip translation test for better performance, will fail later if there's an issue
+            
+            // Run test in a background thread to avoid blocking
+            let config_clone = self.config.clone();
+            std::thread::spawn(move || {
+                if let Ok(rt) = tokio::runtime::Runtime::new() {
+                    let _ = rt.block_on(async {
+                        let translation_service = TranslationService::new(config_clone.translation)?;
+                        translation_service.test_connection(&config_clone.source_language, &config_clone.target_language, None).await
+                    });
+                }
+            });
+        });
+        
+        // Log the extraction step
         
         // Extract subtitles from the input file
-        info!("Extracting subtitles");
         let subtitles = self.extract_subtitles_to_memory(&input_file)?;
         
-        if subtitles.entries.is_empty() {
-            return Err(anyhow!("No valid subtitles found in the video file"));
-        } else {
-            info!("Extracted {} subtitle entries", subtitles.entries.len());
-        }
-                
-        // Translate all subtitles
-        info!("Translating, please wait…");
-        let translated = self.translate_subtitles_with_progress(subtitles, multi_progress).await?;
+        // Log the subtitle count
         
-        // Save translated subtitles
-        let _output_path = self.save_translated_subtitles(translated, &input_file, &output_dir)?;
+        // Start the translation process
+        
+        // Translate the subtitles
+        let (translated, translation_elapsed) = self.translate_subtitles_with_progress(subtitles, multi_progress).await?;
+        
+        // Save the translated subtitles
+        self.save_translated_subtitles(translated, &input_file, &output_dir)?;
         
         // Calculate and display the elapsed time
         let elapsed = start_time.elapsed();
-        info!("File processed in {}", Self::format_duration(elapsed));
+        
+        // Calculate extraction time (subtract translation time from total time)
+        let extraction_time = elapsed.checked_sub(translation_elapsed).unwrap_or_default();
+        
+        // Log completion time metrics
+        info!(
+            "⏱️ Translation complete. Extraction: {} - Translation: {}", 
+            Self::format_duration(extraction_time),
+            Self::format_duration(translation_elapsed)
+        );
         
         Ok(())
     }
     
-    /// Extract subtitles from the video file directly to memory
+    /// Extract subtitles from a video file to memory
     fn extract_subtitles_to_memory(&self, input_file: &Path) -> Result<SubtitleCollection> {
-        // Start timing the extraction process
-        let extraction_start_time = std::time::Instant::now();
-        
-        // Auto-select the subtitle track matching the source language
-        info!("Auto-selecting subtitle track");
-        
-        let tracks = SubtitleCollection::list_subtitle_tracks(input_file)?;
-        
-        if tracks.is_empty() {
-            return Err(anyhow!("No subtitle tracks found in the video file"));
-        }
-                
-        // Find the best track based on language match
-        let track_id = match SubtitleCollection::select_subtitle_track(&tracks, &self.config.source_language) {
-            Some(id) => {
-                info!("Selected track {} for extraction", id);
-                id
-            },
-            None => {
-                // Use first track if no language match found
-                let first_track = tracks.first().unwrap().index;
-                warn!("No language match found, using first track: {}", first_track);
-                first_track
-            }
-        };
-        
-        // Create a temporary file for extraction
-        let temp_dir = tempdir()?;
-        let temp_filename = format!("extracted_subtitles_{}.srt", track_id);
-        let temp_path = temp_dir.path().join(temp_filename);
-        
-        // Extract the selected track to the temporary file
+        // First check if we can find the source language track
         let source_language = &self.config.source_language;
-        let subtitles = SubtitleCollection::extract_from_video(
+        
+        // Try to automatically select the right subtitle track
+        match SubtitleCollection::extract_with_auto_track_selection(
             input_file,
-            track_id,
             source_language,
-            &temp_path
-        );
-        
-        // Calculate and log the extraction time
-        let extraction_elapsed = extraction_start_time.elapsed();
-        info!("Subtitle extraction completed in {}", Self::format_duration(extraction_elapsed));
-        
-        subtitles
+            None,
+            source_language
+        ) {
+            Ok(subtitles) => Ok(subtitles),
+            Err(e) => {
+                warn!("Auto-selection failed: {}", e);
+                // If auto-selection failed, fall back to the extract_source_language_subtitle_to_memory method
+                SubtitleCollection::extract_source_language_subtitle_to_memory(
+                    input_file,
+                    source_language
+                )
+            }
+        }
     }
     
-    /// Translate the extracted subtitles
-    #[allow(dead_code)]
-    async fn translate_subtitles(&self, subtitles: SubtitleCollection) -> Result<SubtitleCollection> {
-        // Create a multi progress bar display
+    /// Translate subtitles from source to target language
+    async fn translate_subtitles(&self, subtitles: SubtitleCollection) -> Result<(SubtitleCollection, std::time::Duration)> {
+        // Create a new empty progress indicator for use with translate_subtitles_with_progress
         let multi_progress = MultiProgress::new();
-        
         self.translate_subtitles_with_progress(subtitles, &multi_progress).await
     }
     
     /// Internal method to translate subtitles with a progress bar from the provided MultiProgress
-    async fn translate_subtitles_with_progress(&self, subtitles: SubtitleCollection, multi_progress: &MultiProgress) -> Result<SubtitleCollection> {
+    async fn translate_subtitles_with_progress(&self, subtitles: SubtitleCollection, multi_progress: &MultiProgress) -> Result<(SubtitleCollection, std::time::Duration)> {
         // Start timing the translation process
         let translation_start_time = std::time::Instant::now();
         
-        // Split subtitle collection into manageable chunks for translation
-        let max_chars_per_chunk = match self.config.translation.provider {
-            TranslationProvider::Ollama => self.config.translation.ollama.max_chars_per_request,
-            TranslationProvider::OpenAI => self.config.translation.openai.max_chars_per_request,
-            TranslationProvider::Anthropic => self.config.translation.anthropic.max_chars_per_request,
-        };
+        // Log the number of entries we're about to translate
+        let total_entries_count = subtitles.entries.len();
+        
+        // Get max characters per chunk from the config
+        let max_chars_per_chunk = self.config.translation.get_max_chars_per_request();
         
         // Split the subtitles into chunks that respect the max characters limit
         let chunks = subtitles.split_into_chunks(max_chars_per_chunk);
@@ -178,52 +181,124 @@ impl Controller {
         let progress_bar = multi_progress.add(ProgressBar::new(total_chunks));
         progress_bar.set_style(
             ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} chunks ({eta})")
-                .unwrap()
-                .progress_chars("##-")
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg} {eta}")
+                .expect("Invalid progress bar template")
+                .progress_chars("█▓▒░")
         );
-        progress_bar.set_message("Translating...");
         
-        // Track processed entries for progress display
-        let processed = Arc::new(AtomicUsize::new(0));
-        let processed_clone = processed.clone();
+        // Log that we're starting translation with provider and model info
+        info!("🚀 YASTwAI: {} - {}", 
+            self.config.translation.provider.display_name(), 
+            self.config.translation.get_model());
         
-        // Create a separate progress bar updater that watches the atomic counter
-        let pb_clone = progress_bar.clone();
-        let progress_callback = move |completed_count: usize, _total: usize| {
-            processed_clone.store(completed_count, Ordering::SeqCst);
-            // Update the progress bar as callbacks come in
-            pb_clone.set_position(completed_count as u64);
+        // Log that we're translating
+        info!("Translating, please wait…");
+        progress_bar.set_message("Translating");
+
+        // Create log capture for storing warnings during translation
+        let log_capture = Arc::new(Mutex::new(Vec::new()));
+        let log_capture_clone = Arc::clone(&log_capture);
+        
+        // Use the translation service to translate all chunks
+        let translation_service = TranslationService::new(self.config.translation.clone())?;
+        
+        // Clone the progress_bar for use in the callback
+        let pb = progress_bar.clone();
+        
+        // Pass a callback to update the progress bar for each completed chunk
+        let (mut translated_entries, token_usage) = translation_service.translate_batches(
+            &chunks, 
+            &self.config.source_language, 
+            &self.config.target_language,
+            log_capture_clone,
+            move |completed, _total| {
+                pb.set_position(completed as u64);
+            }
+        ).await?;
+        
+        // Finish the progress bar
+        progress_bar.finish_with_message("Translation complete");
+        
+        // Now that the progress bar is finished, print any captured logs
+        let logs = {
+            let logs_guard = log_capture.lock().unwrap();
+            // Clone the Vec to avoid issues with MutexGuard
+            logs_guard.clone()
         };
         
-        // Translate all batches at once
-        let translated_entries = self.translation_service.translate_batches(
-            &chunks,
-            &self.config.source_language,
-            &self.config.target_language,
-            progress_callback
-        ).await.context("Failed to translate subtitles")?;
+        // Display captured logs if we're in debug mode or there were errors
+        let error_logs = logs.iter().filter(|log| log.level == "ERROR").count();
+        let warning_logs = logs.iter().filter(|log| log.level == "WARN").count();
         
-        progress_bar.finish_with_message("Translation complete!");
+        if error_logs > 0 || warning_logs > 0 {
+            info!("Translation completed with {} errors and {} warnings.", error_logs, warning_logs);
+            
+            // In debug mode, or if explicitly requested, show all logs
+            if log::max_level() >= log::LevelFilter::Debug {
+                for log in &logs {
+                    match log.level.as_str() {
+                        "ERROR" => error!("{}", log.message),
+                        "WARN" => warn!("{}", log.message),
+                        "INFO" => info!("{}", log.message),
+                        "DEBUG" => debug!("{}", log.message),
+                        _ => info!("{}", log.message),
+                    }
+                }
+            }
+            
+            // Write logs to yastwai.issues.log file
+            let log_file_path = "yastwai.issues.log";
+            let context = format!("{} - {} ({})",
+                self.config.translation.provider.display_name(), 
+                self.config.translation.get_model(),
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                
+            if let Err(e) = self.write_logs_to_file(&logs, log_file_path, &context) {
+                warn!("Failed to write logs to file: {}", e);
+            } else {
+                info!("Logs written to {}", log_file_path);
+            }
+        }
         
-        // Calculate and log the translation time
-        let translation_elapsed = translation_start_time.elapsed();
-        info!("Translation service completed in {}", Self::format_duration(translation_elapsed));
+        // Sort entries by start time to ensure correct order
+        translated_entries.sort_by_key(|entry| entry.start_time_ms);
         
-        // Create a new SubtitleCollection with the translated entries
-        let mut result = SubtitleCollection::new(
-            PathBuf::from("translated_subtitles.srt"),
+        // Log the number of entries after translation
+        let translated_entries_count = translated_entries.len();
+        if translated_entries_count != total_entries_count {
+            error!("WARNING: Number of entries changed during translation! Before: {}, After: {}", 
+                  total_entries_count, translated_entries_count);
+        } else {
+            info!("Successfully translated all {} subtitle entries", translated_entries_count);
+        }
+        
+        // Renumber entries to ensure sequential order
+        for (i, entry) in translated_entries.iter_mut().enumerate() {
+            entry.seq_num = i + 1;
+        }
+        
+        // Create a new subtitle collection with the translated entries
+        let mut translated_collection = SubtitleCollection::new(
+            PathBuf::from("translated.srt"),
             self.config.target_language.clone()
         );
-        result.entries = translated_entries;
+        translated_collection.entries = translated_entries;
         
-        Ok(result)
+        // Log translation metrics
+        let translation_elapsed = translation_start_time.elapsed();
+        
+        // Only log the token usage information at the end of the translation process
+        if token_usage.total_tokens > 0 {
+            info!("🔢 {}", token_usage.summary());
+        }
+        
+        Ok((translated_collection, translation_elapsed))
     }
     
     /// Save the translated subtitles to files
     fn save_translated_subtitles(&self, subtitles: SubtitleCollection, input_file: &Path, output_dir: &Path) -> Result<PathBuf> {
         // Generate an appropriate output filename
-        let input_stem = input_file.file_stem()
+        let _input_stem = input_file.file_stem()
             .context("Failed to extract file stem from input file")?
             .to_string_lossy();
         
@@ -236,6 +311,9 @@ impl Controller {
         
         // Save the subtitle collection to the output path
         subtitles.write_to_srt(&output_path)?;
+        
+        // Log that we saved the subtitle file
+        info!("✅ Success: {}", output_path.display());
                 
         Ok(output_path)
     }
@@ -257,114 +335,232 @@ impl Controller {
     }
     
     /// Run the workflow in folder mode, processing all video files in a directory
-    /// This will scan the input directory for supported video files and process each one
     /// Files that already have translated subtitles will be skipped
-    pub async fn run_folder(&self, input_dir: PathBuf, output_dir: PathBuf) -> Result<()> {
+    pub async fn run_folder(&self, input_dir: PathBuf, force_overwrite: bool) -> Result<()> {
         // Start timing the process
         let start_time = std::time::Instant::now();
-                
-        // Validate configuration
-        self.config.validate()?;
         
-        // Don't need to test connection here - it will be tested on first file in run_with_progress
+        // Check if the input directory exists
+        if !input_dir.exists() {
+            return Err(anyhow::anyhow!("Input directory does not exist: {:?}", input_dir));
+        }
         
-        // Define supported video extensions (commonly supported by ffmpeg)
-        // This could be expanded based on ffmpeg's capabilities
-        let supported_extensions = ["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm"];
-        
+        // Find all video files in the directory (recursive)
         let mut video_files = Vec::new();
-        for ext in &supported_extensions {
-            let mut files = crate::file_utils::FileManager::find_files(&input_dir, ext)?;
+        for ext in &["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm"] {
+            let mut files = file_utils::FileManager::find_files(&input_dir, ext)?;
             video_files.append(&mut files);
         }
         
+        // If no video files found, return error
         if video_files.is_empty() {
-            warn!("No supported video files found in the directory");
-            return Ok(());
+            return Err(anyhow::anyhow!("No video files found in directory: {:?}", input_dir));
         }
         
-        // Sort files by name for consistent processing order
-        video_files.sort();
-        
-        info!("Found {} video files to process", video_files.len());
-        
-        // Create multi-progress bar to track overall progress
+        // Create multi-progress instance for multiple file processing
         let multi_progress = MultiProgress::new();
         
-        // Create overall progress bar for the entire folder
+        // Create a progress bar for folder processing
         let folder_pb = multi_progress.add(ProgressBar::new(video_files.len() as u64));
         folder_pb.set_style(
             ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] {bar:40.green/blue} [{pos}/{len}] {prefix}: {msg}")
-                .expect("Failed to create folder progress style")
-                .progress_chars("##-")
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({percent}%) {msg} {eta}")
+                .expect("Invalid progress bar template")
+                .progress_chars("█▓▒░")
         );
-        folder_pb.set_prefix("Folder Progress");
-        folder_pb.set_message("Processing folder...");
+        folder_pb.set_message("Processing files");
+        
+        // Track success and failure counts
+        let mut success_count = 0;
+        let mut error_count = 0;
+        let mut skip_count = 0;
         
         // Process each video file
-        let mut success_count = 0;
-        let mut skip_count = 0;
-        let mut error_count = 0;
-        
-        for (index, video_file) in video_files.iter().enumerate() {
-            let file_name = video_file.file_name().unwrap_or_default().to_string_lossy().to_string();
-            folder_pb.set_message(format!("File {}/{}: {}", index + 1, video_files.len(), file_name));
+        for (_index, video_file) in video_files.iter().enumerate() {
+            // Get the file name for display
+            let file_name = video_file.file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_else(|| "unknown".to_string());
             
-            info!("Processing file {}/{}: {}", index + 1, video_files.len(), file_name);
+            // Get output directory (use input dir)
+            let output_dir = match video_file.parent() {
+                Some(parent) => parent.to_path_buf(),
+                None => input_dir.clone(),
+            };
             
-            // Check if the translated subtitle already exists
-            let output_filename = self.get_subtitle_output_filename(video_file, &self.config.target_language);
-            let output_path = output_dir.join(&output_filename);
-            
-            if output_path.exists() {
-                info!("Skipping file, translation already exists");
+            // Check if translation already exists
+            let output_path = output_dir.join(self.get_subtitle_output_filename(video_file, &self.config.target_language));
+            if output_path.exists() && !force_overwrite {
+                // Skip if translation already exists and no force flag
+                warn!("Skipping file, translation already exists (use -f to force overwrite)");
                 skip_count += 1;
                 folder_pb.inc(1);
                 continue;
+            } else if output_path.exists() && force_overwrite {
+                // Indicate that we'll overwrite
             }
             
-            // Process the video file with the shared multi-progress instance
-            match self.run_with_progress(video_file.clone(), output_dir.clone(), &multi_progress).await {
+            // Run the translation for this file
+            match self.run_with_progress(video_file.clone(), output_dir, &multi_progress, force_overwrite).await {
                 Ok(_) => {
                     success_count += 1;
-                    // No need to log success here - already logged in run_with_progress
                 },
                 Err(e) => {
+                    error!("Error processing file {}: {}", file_name, e);
                     error_count += 1;
-                    error!(" Failed to process file {}/{}: {}", index + 1, video_files.len(), e);
                 }
             }
             
-            // Update folder progress bar
+            // Update the folder progress bar
             folder_pb.inc(1);
-            
-            // Calculate and display percentage
-            let percentage = ((index + 1) as f32 / video_files.len() as f32) * 100.0;
-            folder_pb.set_message(format!("{:.1}% complete", percentage));
         }
         
-        // Complete the progress bar
-        folder_pb.finish_with_message("Folder processing completed!");
+        // Finish the folder progress bar
+        folder_pb.finish_with_message("Folder processing complete");
         
-        // Calculate total duration
+        // Calculate and display the total elapsed time
         let duration = start_time.elapsed();
         
-        // Summary of processed files
-        info!("Folder processing completed:");
-        info!("   Successfully processed: {}", success_count);
-        info!("   Skipped (already exist): {}", skip_count);
-        info!("   Errors: {}", error_count);
-        info!("Total time: {}", Self::format_duration(duration));
+        // Give summary results - important for batch operations
+        let summary_message = format!("Folder processing completed: {} processed, {} skipped, {} errors", 
+             success_count, skip_count, error_count);
+        warn!("{}", summary_message);
+        
+        // Write summary to log file
+        let log_file_path = "yastwai.issues.log";
+        let context = format!("Folder Processing: {} ({})",
+            input_dir.display(),
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+            
+        let folder_log_entry = LogEntry {
+            level: "INFO".to_string(),
+            message: format!("{} - Duration: {}", summary_message, Self::format_duration(duration))
+        };
+        
+        // Create a vector with just the summary log entry for folder processing
+        let folder_logs = vec![folder_log_entry];
+        
+        if let Err(e) = self.write_logs_to_file(&folder_logs, log_file_path, &context) {
+            warn!("Failed to write folder logs to file: {}", e);
+        } else {
+            info!("Folder processing logs written to {}", log_file_path);
+        }
         
         Ok(())
     }
     
     /// Get the expected subtitle output filename for a video file
     fn get_subtitle_output_filename(&self, input_file: &Path, target_language: &str) -> String {
-        let input_stem = input_file.file_stem().unwrap_or_default();
-        let input_name = input_stem.to_string_lossy();
+        let _input_stem = input_file.file_stem().unwrap_or_default();
+        let input_name = _input_stem.to_string_lossy();
         format!("{}.{}.srt", input_name, target_language)
+    }
+
+    // Helper method for testing with simulated run (no actual translation)
+    #[cfg(test)]
+    pub async fn test_run(&self, _input_file: PathBuf, _output_dir: PathBuf, _force_overwrite: bool) -> Result<()> {
+        // Simplified implementation for testing
+        Ok(())
+    }
+    
+    // Helper method for testing with simulated run_folder
+    #[cfg(test)]
+    pub async fn test_run_folder(&self, _input_dir: PathBuf, _force_overwrite: bool) -> Result<()> {
+        // Simplified implementation for testing
+        Ok(())
+    }
+
+    pub fn new_for_test() -> Result<Self> {
+        // Create a minimal configuration for tests
+        let config = Config::default_config();
+        Self::with_config(config)
+    }
+
+    /// Find a subtitle track in the target language if one exists
+    fn find_target_language_track(&self, input_file: &Path) -> Result<Option<usize>> {
+        let tracks = SubtitleCollection::list_subtitle_tracks(input_file)?;
+        
+        if tracks.is_empty() {
+            return Ok(None);
+        }
+        
+        // Try to find a track in the target language
+        for track in &tracks {
+            if let Some(track_lang) = &track.language {
+                if language_utils::language_codes_match(track_lang, &self.config.target_language) {
+                    return Ok(Some(track.index));
+                }
+            }
+            
+            // Also check title for language mention
+            if let Some(title) = &track.title {
+                if let Ok(target_name) = language_utils::get_language_name(&self.config.target_language) {
+                    let title_lower = title.to_lowercase();
+                    let name_lower = target_name.to_lowercase();
+                    
+                    if title_lower.contains(&name_lower) {
+                        return Ok(Some(track.index));
+                    }
+                }
+            }
+        }
+        
+        Ok(None)
+    }
+    
+    /// Extract subtitles in target language from the video file directly to memory
+    fn extract_target_subtitles_to_memory(&self, input_file: &Path, track_id: usize) -> Result<SubtitleCollection> {
+        // Extract the subtitle track
+        let output_path = input_file.with_extension("extracted.srt");
+        let subtitles = SubtitleCollection::extract_from_video(
+            input_file, 
+            track_id, 
+            &self.config.target_language, 
+            &output_path
+        )?;
+        
+        // Delete the temporary file
+        if output_path.exists() {
+            if let Err(_e) = std::fs::remove_file(&output_path) {
+                // Removed warn log about failing to remove temp file, it's not critical
+            }
+        }
+        
+        Ok(subtitles)
+    }
+
+    /// Write translation logs to a log file
+    fn write_logs_to_file(&self, logs: &[LogEntry], file_path: &str, translation_context: &str) -> Result<()> {
+        // First write a header for this translation session
+        let header = format!("=== Translation Session: {} ===", translation_context);
+        FileManager::append_to_log_file(file_path, &header)?;
+        
+        // Count errors and warnings
+        let error_logs = logs.iter().filter(|log| log.level == "ERROR").count();
+        let warning_logs = logs.iter().filter(|log| log.level == "WARN").count();
+        let info_logs = logs.iter().filter(|log| log.level == "INFO").count();
+        
+        // Write summary
+        FileManager::append_to_log_file(file_path, &format!("Summary: {} errors, {} warnings, {} info messages", 
+                                                          error_logs, warning_logs, info_logs))?;
+        
+        // Write each log entry
+        for log in logs {
+            let level_prefix = match log.level.as_str() {
+                "ERROR" => "ERROR: ",
+                "WARN" => "WARNING: ",
+                "INFO" => "INFO: ",
+                "DEBUG" => "DEBUG: ",
+                _ => "",
+            };
+            
+            FileManager::append_to_log_file(file_path, &format!("{}{}", level_prefix, log.message))?;
+        }
+        
+        // Add a separator at the end
+        FileManager::append_to_log_file(file_path, &format!("=== End of Translation Session: {} ===\n", translation_context))?;
+        
+        Ok(())
     }
 }
 
@@ -376,130 +572,149 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
     
-    /// Helper functions for testing, available only in test module
-    impl Controller {
-        /// Create a new controller for testing without file operations
-        pub fn new_for_test() -> Result<Self> {
-            // Use default config without writing to disk
-            let config = Config::default_config();
-            Self::with_config(config)
-        }
-    }
-
-    /// Test controller initialization
+    /// Test creating a controller with the default configuration
     #[test]
     fn test_new_with_default_config_should_succeed() -> Result<()> {
-        // Skip the Controller::new() test since it creates files
-        // Instead, we'll use with_config with default configuration
-        let config = Config::default_config();
-        let _controller = Controller::with_config(config)?;
-        
-        // No assertion needed as we're just checking it doesn't error
-        Ok(())
-    }
-
-    /// Test controller with custom configuration
-    #[test]
-    fn test_with_config_valid_config_should_create_controller() -> Result<()> {
-        // Create a test configuration
-        let config = Config::default_config();
-        
-        // Create controller with custom config
-        let _controller = Controller::with_config(config)?;
-        
-        // No assertion needed as we're just checking it doesn't error
+        let controller = Controller::new_for_test()?;
+        assert!(controller.config.source_language.len() > 0);
+        assert!(controller.config.target_language.len() > 0);
         Ok(())
     }
     
-    /// Test the test-specific constructor
+    /// Test creating a controller with a specific configuration
     #[test]
-    fn test_new_for_test_should_create_controller() -> Result<()> {
-        // Use the specialized test constructor
-        let _controller = Controller::new_for_test()?;
-        
-        // No assertion needed as we're just checking it doesn't error
+    fn test_with_config_valid_config_should_create_controller() -> Result<()> {
+        let config = Config::default_config();
+        let controller = Controller::with_config(config)?;
+        assert_eq!(controller.config.source_language, "en");
+        assert_eq!(controller.config.target_language, "fr");
         Ok(())
     }
-
-    /// Test get_subtitle_output_filename
+    
+    /// Test creating a controller for testing
+    #[test]
+    fn test_new_for_test_should_create_controller() -> Result<()> {
+        let _controller = Controller::new_for_test()?;
+        Ok(())
+    }
+    
+    /// Test output filename formatting
     #[test]
     fn test_get_subtitle_output_filename_should_format_correctly() -> Result<()> {
         let controller = Controller::new_for_test()?;
         
+        // Test with different file paths and extensions
         let test_cases = [
-            ("video.mkv", "en", "video.en.srt"),
-            ("movie with spaces.mp4", "fr", "movie with spaces.fr.srt"),
-            ("anime.s01e01.avi", "ja", "anime.s01e01.ja.srt"),
-            ("path/to/video.webm", "ru", "video.ru.srt"),
+            ("video.mp4", "fr", "video.fr.srt"),
+            ("path/to/video.mkv", "es", "video.es.srt"),
+            ("with spaces.mov", "de", "with spaces.de.srt"),
+            ("/absolute/path/video.avi", "it", "video.it.srt"),
         ];
         
         for (input, lang, expected) in test_cases {
-            let path = PathBuf::from(input);
-            let result = controller.get_subtitle_output_filename(&path, lang);
-            assert_eq!(result, expected, "for input {} and lang {}", input, lang);
+            let output = controller.get_subtitle_output_filename(&PathBuf::from(input), lang);
+            assert_eq!(output, expected);
         }
         
         Ok(())
     }
     
-    /// Test run_folder method skips files with existing subtitle files
     #[test]
-    fn test_run_folder_should_skip_files_with_existing_subtitles() -> Result<()> {
-        // Skip this test in CI environments
-        if std::env::var("CI").is_ok() {
-            return Ok(());
-        }
+    fn test_find_target_language_track_should_match_language_codes() -> Result<()> {
+        // Create a controller for testing
+        let controller = Controller::new_for_test()?;
         
-        // This test requires mocking and is just a design demonstration
-        // A real implementation would use a mock filesystem
+        // Mock the SubtitleCollection::list_subtitle_tracks function
+        // This is a bit tricky without mocking libraries, so we'll test the language matching logic directly
         
-        // 1. Create a temporary directory for test files
-        let temp_dir = tempdir()?;
-        let input_dir = temp_dir.path().join("input");
-        let output_dir = temp_dir.path().join("output");
-        fs::create_dir_all(&input_dir)?;
-        fs::create_dir_all(&output_dir)?;
+        let mut tracks = Vec::new();
         
-        // 2. Create dummy video files
-        let video1 = input_dir.join("video1.mp4");
-        let video2 = input_dir.join("video2.mp4");
-        fs::write(&video1, "dummy video content")?;
-        fs::write(&video2, "dummy video content")?;
+        // Add tracks with various language codes
+        tracks.push(SubtitleInfo {
+            index: 0,
+            codec_name: "subrip".to_string(),
+            language: Some("eng".to_string()),
+            title: Some("English".to_string()),
+        });
         
-        // 3. Create an existing subtitle file for video2
-        let subtitle2 = output_dir.join("video2.en.srt");
-        fs::write(&subtitle2, "1\n00:00:01,000 --> 00:00:02,000\nExisting subtitle\n\n")?;
+        tracks.push(SubtitleInfo {
+            index: 1,
+            codec_name: "subrip".to_string(),
+            language: Some("spa".to_string()),
+            title: Some("Spanish".to_string()),
+        });
         
-        // 4. In a real test, we would mock the run method and verify:
-        // - run is called once for video1
-        // - run is not called for video2
+        tracks.push(SubtitleInfo {
+            index: 2,
+            codec_name: "subrip".to_string(),
+            language: Some("fre".to_string()),
+            title: Some("French".to_string()),
+        });
         
-        // Example assertion for demonstration (not functional):
-        // assert_eq!(mock_run_calls, 1);
-        // assert_eq!(mock_run_args[0], video1);
+        // Test with 2-letter code matching 3-letter code
+        let result = language_utils::language_codes_match("es", "spa");
+        assert!(result, "2-letter 'es' should match 3-letter 'spa'");
+        
+        let result = language_utils::language_codes_match("fr", "fre");
+        assert!(result, "2-letter 'fr' should match 3-letter 'fre'");
+        
+        // Test with 3-letter code matching 2-letter code
+        let result = language_utils::language_codes_match("spa", "es");
+        assert!(result, "3-letter 'spa' should match 2-letter 'es'");
+        
+        // Test with equivalent 3-letter codes (ISO 639-2/B and ISO 639-2/T)
+        let result = language_utils::language_codes_match("fre", "fra");
+        assert!(result, "3-letter 'fre' should match 3-letter 'fra'");
         
         Ok(())
     }
     
-    /// Test folder processing with no video files
+    /// Test writing logs to file
     #[test]
-    fn test_run_folder_with_no_video_files_should_return_ok() -> Result<()> {
-        // Skip this test in CI environments
-        if std::env::var("CI").is_ok() {
-            return Ok(());
+    fn test_write_logs_to_file_should_write_formatted_logs() -> Result<()> {
+        use crate::translation_service::LogEntry;
+        use std::fs;
+        use std::path::Path;
+        
+        // Create test controller
+        let controller = Controller::new_for_test()?;
+        
+        // Define test log file
+        let test_log_file = "test_controller_issues.log";
+        
+        // Ensure the file doesn't exist initially
+        if Path::new(test_log_file).exists() {
+            fs::remove_file(test_log_file)?;
         }
         
-        // Create a temporary directory for test files
-        let temp_dir = tempdir()?;
-        let input_dir = temp_dir.path().join("empty");
-        fs::create_dir_all(&input_dir)?;
+        // Create test logs
+        let logs = vec![
+            LogEntry { level: "ERROR".to_string(), message: "Test error message".to_string() },
+            LogEntry { level: "WARN".to_string(), message: "Test warning message".to_string() },
+            LogEntry { level: "INFO".to_string(), message: "Test info message".to_string() },
+        ];
         
-        // Create text files but no video files
-        fs::write(input_dir.join("text.txt"), "not a video file")?;
+        // Write logs to file
+        controller.write_logs_to_file(&logs, test_log_file, "Test Context")?;
         
-        // In a real test, we would assert that run is never called
-        // and that the function returns Ok(())
+        // Read the file content
+        let content = fs::read_to_string(test_log_file)?;
         
+        // Verify that it contains the log entries
+        assert!(content.contains("Test error message"));
+        assert!(content.contains("Test warning message"));
+        assert!(content.contains("Test info message"));
+        
+        // Verify format
+        assert!(content.contains("=== Translation Session: Test Context ==="));
+        assert!(content.contains("Summary: 1 errors, 1 warnings, 1 info messages"));
+        assert!(content.contains("ERROR: Test error message"));
+        assert!(content.contains("WARNING: Test warning message"));
+        assert!(content.contains("INFO: Test info message"));
+        assert!(content.contains("=== End of Translation Session: Test Context ==="));
+        
+        // Clean up
+        fs::remove_file(test_log_file)?;
         Ok(())
     }
 } 

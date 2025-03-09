@@ -24,6 +24,10 @@
  * - `file_utils`: File system operations
  * - `app_controller`: Main application controller
  * - `language_utils`: ISO language code utilities
+ * - `providers`: Client implementations for various LLM providers:
+ *   - `providers::ollama`: Ollama API client
+ *   - `providers::openai`: OpenAI API client
+ *   - `providers::anthropic`: Anthropic API client
  * 
  * ## License
  * 
@@ -37,6 +41,7 @@ pub mod subtitle_processor;
 pub mod translation_service;
 pub mod app_controller;
 pub mod language_utils;
+pub mod providers;
 
 // Re-export main types for easier usage
 pub use app_config::Config;
