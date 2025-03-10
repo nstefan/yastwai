@@ -8,13 +8,14 @@ alwaysApply: true
     - comments
     - documentation (README and other file headers)
 
-2. Everytime I send a prompt, prepare an associated future git commit.
+2. Everytime the user sends a prompt, prepare an associated future git commit.
     - Check if we already are on a different branch than the "main" one. If not create a new branch.
     - Check if the prompt is still related to the current branch, if not create a new branch from the main one.
     - Use " | cat" to not stay stuck when checking status and branch names.
     - Use a consise summary as commit title
-    - Use the full prompt made by the user as the commit description header as the "Objective:" part.
+    - Use the full prompt made by the user as the commit description header as the "Prompt:" part.
     - Use the final summary as the rest of the commit description body as the "Description:" part.
+    - Analyse all the faced difficulties and add a summary as the "Development discussion:" part.
 
 3. Check for issues using: cargo clippy.
     - Don't adress warnings in test files as long as they run properly.
