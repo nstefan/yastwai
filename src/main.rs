@@ -457,7 +457,7 @@ fn print_usage(program_name: &str) {
 fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: Option<&str>, force_overwrite: bool) -> Result<()> {
     use crate::subtitle_processor::SubtitleCollection;
     
-    info!("Starting subtitle extraction mode for file: {:?}", input_file);
+    info!("🔍 Extracting subtitles for: {:?}", input_file);
     
     // List available subtitle tracks
     let tracks = SubtitleCollection::list_subtitle_tracks(input_file)
@@ -469,9 +469,9 @@ fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: O
     }
     
     // Display available tracks
-    info!("Found {} subtitle track(s):", tracks.len());
+    debug!("Found {} subtitle track(s):", tracks.len());
     for track in tracks.iter() {
-        info!("  Track {}: {} ({})", 
+        debug!("  Track {}: {} ({})", 
              track.index, 
              track.language.as_deref().unwrap_or("unknown"), 
              track.title.as_deref().unwrap_or("No title"));
@@ -483,7 +483,7 @@ fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: O
         let lang = lang.to_lowercase();
         if let Some(matching_track) = tracks.iter().find(|t| 
             t.language.as_ref().map_or(false, |track_lang| language_utils::language_codes_match(track_lang, &lang))) {
-            info!("Selected track {} matching requested language: {}", 
+            debug!("Selected track {} matching requested language: {}", 
                  matching_track.index, 
                  matching_track.language.as_deref().unwrap_or("unknown"));
             matching_track.index as usize
@@ -530,7 +530,6 @@ fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: O
     }
     
     // Extract the subtitle
-    info!("Extracting subtitle to: {:?}", output_file);
     let subtitles = SubtitleCollection::extract_from_video(
         input_file, 
         track_id, 
@@ -538,7 +537,7 @@ fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: O
         &output_file,
     ).context("Failed to extract subtitle")?;
     
-    info!("Successfully extracted {} subtitle entries to: {:?}", subtitles.entries.len(), output_file);
+    info!("✅ Success: {:?}", output_file);
     
     Ok(())
 }
