@@ -11,7 +11,7 @@ alwaysApply: true
 2. Every command must not be interactive since we are dealing with a bot.
     - use proper arguments to prevent user interaction with commands.
 
-3. Everytime the user sends a prompt, prepare an associated future git commit.
+3. Everytime the user sends a prompt, automatically commit changes at the end when you're confident everything is ok.
     - Check if we already are on a different branch than the "main" one. If not create a new branch.
     - Check if the prompt is still related to the current branch, if not create a new branch from the main one.
     - Use " | cat" to not stay stuck when checking status and branch names.
@@ -21,6 +21,7 @@ alwaysApply: true
     - Analyse all the faced difficulties and add a summary as the "Discussion:" part.
     - Use the ./scripts/create-commit.sh script to generate commits in the correct format.
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
+    - Use the ./scripts/create-commit.sh script.
 
 4. Always finish by building the app and run unit tests in release mode.
     - Don't adress warnings in test files as long as they run properly.
@@ -34,8 +35,8 @@ alwaysApply: true
     - Use the scripts/create-pr.sh script ONLY when the user has asked to "create a PR" or similar explicit instructions.
     - When a PR is explicitly requested, leverage AI capabilities for intelligent summarization:
         - Analyzing all commits on the branch to understand the complete change set
-        - Creating a concise PR title that accurately reflects all changes
         - Generating a well-structured PR body with emoji-enhanced sections
+        - At the end, create a concise PR title that accurately reflects a summary of the changes
     - For branches with multiple commits, structure the summary as follows:
         - 📌 **Overview**: Brief summary of what the PR accomplishes (2-3 sentences)
         - 🔍 **Key Changes**: Bullet points of the most significant changes
@@ -47,10 +48,7 @@ alwaysApply: true
         - 📅 Date: For timestamps
         - ✅ Commit titles: For each commit
         - 📁 Files Changed: For listing modified files
-    - When executing the create-pr.sh script (only when requested):
-        - The script will display the PR description in the terminal for reference
-        - Manually copy the description from the terminal if needed
-        - Verify the PR has been created with the proper formatting and content
+    - Executing the create-pr.sh script only when requested.
     - For large PRs, use appropriate markdown (headers, lists, code blocks) to enhance readability.
 
 7. Commit Message Structure Reference:

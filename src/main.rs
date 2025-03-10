@@ -190,7 +190,7 @@ async fn main() -> Result<()> {
         // Create default configuration if not exists
         warn!("Config file not found at '{}', creating default config.", config_path);
         
-        let mut config = Config::default_config();
+        let mut config = Config::default();
         
         // Apply command line log level to default config if specified
         if let Some(log_level) = &options.log_level {
