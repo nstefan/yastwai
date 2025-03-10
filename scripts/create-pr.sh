@@ -203,8 +203,25 @@ if [ -z "$PR_BODY_FILE" ]; then
     } > "$PR_BODY_FILE"
 fi
 
+# URL encode a string for use in a URL
+url_encode() {
+    # Use Python for more reliable URL encoding that preserves newlines
+    python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))" <<< "$1"
+}
+
+# Format PR body with proper newlines
+format_pr_body() {
+    local body="$1"
+    # Replace pipe characters with actual newlines
+    echo "$body" | sed 's/ | /\n\n/g'
+}
+
 # Read the PR body
-PR_BODY=$(cat "$PR_BODY_FILE")
+if [ -n "$PR_BODY_FILE" ]; then
+    PR_BODY=$(cat "$PR_BODY_FILE")
+else
+    PR_BODY=$(format_pr_body "$PR_BODY")
+fi
 
 # Clean up temporary file if we created one
 if [[ "$PR_BODY_FILE" == /tmp/* ]]; then
@@ -226,11 +243,6 @@ get_github_url() {
     fi
 }
 
-# URL encode a string for use in a URL
-url_encode() {
-    echo -n "$1" | perl -pe 's/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/ge'
-}
-
 # Get the GitHub repository URL
 REPO_URL=$(get_github_url)
 if [ -z "$REPO_URL" ]; then
@@ -239,7 +251,12 @@ if [ -z "$REPO_URL" ]; then
 fi
 
 # Create the PR URL
-PR_URL="$REPO_URL/compare/$BASE_BRANCH...$CURRENT_BRANCH?quick_pull=1&title=$(url_encode "$PR_TITLE")&body=$(url_encode "$PR_BODY")"
+ENCODED_TITLE=$(url_encode "$PR_TITLE")
+ENCODED_BODY=$(url_encode "$PR_BODY")
+PR_URL="$REPO_URL/compare/$BASE_BRANCH...$CURRENT_BRANCH?quick_pull=1"
+PR_URL="${PR_URL}&title=${ENCODED_TITLE}"
+PR_URL="${PR_URL}&body=${ENCODED_BODY}"
+
 if [ "$DRAFT" = true ]; then
     PR_URL="${PR_URL}&draft=1"
 fi
@@ -248,8 +265,6 @@ echo "Creating PR:"
 echo "Title: $PR_TITLE"
 echo "Base branch: $BASE_BRANCH"
 echo "Current branch: $CURRENT_BRANCH"
-
-# Display the PR body for reference instead of copying to clipboard
 echo ""
 echo "PR Description (you can copy this manually if needed):"
 echo "------------------------------------------------------"
@@ -257,16 +272,13 @@ echo "$PR_BODY"
 echo "------------------------------------------------------"
 echo ""
 
-# Open the PR URL in the browser
-if command -v open &> /dev/null; then
-    open "$PR_URL"
-elif command -v xdg-open &> /dev/null; then
-    xdg-open "$PR_URL"
-elif command -v start &> /dev/null; then
-    start "$PR_URL"
+# Open the PR URL in the default browser
+if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$PR_URL" >/dev/null 2>&1
+elif command -v open >/dev/null 2>&1; then
+    open "$PR_URL" >/dev/null 2>&1
 else
-    echo "Could not detect browser opening command. Please open this URL manually:"
-    echo "$PR_URL"
+    echo "Pull request URL: $PR_URL"
 fi
 
 echo "Pull request URL opened in browser."
