@@ -1163,10 +1163,44 @@ impl TranslationService {
             });
         };
         
+        // Track entries with special formatting that might need special handling
+        let entries_with_special_formatting: Vec<usize> = batch.iter()
+            .filter(|entry| {
+                // Check for format codes or tags that might confuse the LLM
+                // SRT format supports these HTML-like tags: <b>, <i>, <u>, <font color="...">, and positioning codes like {\an8}
+                entry.text.contains("{\\an") ||   // Position tags like {\an8}
+                entry.text.contains("<i>") || entry.text.contains("</i>") ||  // Italic
+                entry.text.contains("<b>") || entry.text.contains("</b>") ||  // Bold
+                entry.text.contains("<u>") || entry.text.contains("</u>") ||  // Underline
+                entry.text.contains("<font") || entry.text.contains("</font>") ||  // Font color
+                entry.text.contains("{i}") || entry.text.contains("{/i}") ||  // Alternative italic syntax
+                entry.text.contains("{b}") || entry.text.contains("{/b}") ||  // Alternative bold syntax
+                entry.text.contains("{u}") || entry.text.contains("{/u}") ||  // Alternative underline syntax
+                entry.text.contains("♪") ||  // Music notes, common in subtitles
+                // Check for unbalanced formatting tags or bracket usage
+                entry.text.matches('<').count() != entry.text.matches('>').count() ||
+                entry.text.matches('{').count() != entry.text.matches('}').count()
+            })
+            .map(|entry| entry.seq_num)
+            .collect();
+        
+        // Log entries with special formatting for diagnostic purposes
+        if !entries_with_special_formatting.is_empty() {
+            capture_log("INFO", &format!("Batch contains {} entries with special formatting that may require individual handling", 
+                entries_with_special_formatting.len()));
+        }
+        
         // Prepare text for translation with entry markers
         let prepare_text = |entries: &[SubtitleEntry]| -> String {
             entries.iter()
-                .map(|entry| format!("ENTRY_{}:\n{}", entry.seq_num, entry.text))
+                .map(|entry| {
+                    if entries_with_special_formatting.contains(&entry.seq_num) {
+                        // For entries with special formatting, add extra marker to make it more clear
+                        format!("ENTRY_{}:\n# SPECIAL_FORMATTING #\n{}", entry.seq_num, entry.text)
+                    } else {
+                        format!("ENTRY_{}:\n{}", entry.seq_num, entry.text)
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join("\n\n")
         };
@@ -1215,7 +1249,20 @@ impl TranslationService {
             
             // Process each line to find entry markers and extract content
             for line in translated_text.lines() {
-                if let Some(entry_marker) = line.strip_prefix("ENTRY_") {
+                // Try different entry marker formats that the LLM might return
+                let entry_marker = if let Some(marker) = line.strip_prefix("ENTRY_") {
+                    Some(marker)
+                } else if let Some(marker) = line.strip_prefix("Entry_") {
+                    Some(marker)
+                } else if let Some(marker) = line.strip_prefix("ENTRY ") {
+                    Some(marker)
+                } else if let Some(marker) = line.strip_prefix("Entry ") {
+                    Some(marker)
+                } else {
+                    None
+                };
+                
+                if let Some(entry_marker) = entry_marker {
                     // If we were already processing an entry, save it
                     if let Some(entry_num) = current_entry_num {
                         if !current_entry_text.is_empty() {
@@ -1224,11 +1271,24 @@ impl TranslationService {
                         }
                     }
                     
-                    // Parse the new entry number
+                    // Parse the new entry number with more robust handling
+                    // Try to find any number in the marker and use that as entry number
                     if let Some(colon_idx) = entry_marker.find(':') {
-                        if let Ok(entry_num) = entry_marker[..colon_idx].parse::<usize>() {
+                        if let Ok(entry_num) = entry_marker[..colon_idx].trim().parse::<usize>() {
                             current_entry_num = Some(entry_num);
                             continue;
+                        }
+                    } else {
+                        // Try to extract just the number from the marker string
+                        let number_str: String = entry_marker.chars()
+                            .take_while(|c| c.is_ascii_digit())
+                            .collect();
+                        
+                        if !number_str.is_empty() {
+                            if let Ok(entry_num) = number_str.parse::<usize>() {
+                                current_entry_num = Some(entry_num);
+                                continue;
+                            }
                         }
                     }
                 } else if let Some(_entry_num) = current_entry_num {
@@ -1244,6 +1304,60 @@ impl TranslationService {
             if let Some(entry_num) = current_entry_num {
                 if !current_entry_text.is_empty() {
                     entries_map.insert(entry_num, current_entry_text.trim().to_string());
+                }
+            }
+            
+            // Fallback method for entries: try to find entries that weren't properly formatted
+            // This helps catch entries where the LLM might have reformatted the markers
+            if entries_map.len() < batch.len() {
+                // Collect seq_nums that we're looking for but haven't found yet
+                let missing_seq_nums: Vec<usize> = batch.iter()
+                    .map(|entry| entry.seq_num)
+                    .filter(|seq_num| !entries_map.contains_key(seq_num))
+                    .collect();
+                
+                if !missing_seq_nums.is_empty() {
+                    // Try a regex-based approach to find entry markers
+                    for missing_num in &missing_seq_nums {
+                        // Try different patterns that might indicate entry markers
+                        let patterns = [
+                            format!(r"(?i)ENTRY[_\s]*{}[:\s]", missing_num),  // ENTRY_123:, Entry 123:, etc.
+                            format!(r"(?i)ENTRY[_\s]*\[{}]", missing_num),    // ENTRY[123]
+                            format!(r"(?i)ENTRY[_\s]*#{}[:\s]", missing_num), // ENTRY #123:
+                            format!(r"(?i)ENTRY[_\s]*NUMBER[_\s]*{}[:\s]", missing_num), // ENTRY NUMBER 123:
+                        ];
+                        
+                        for pattern in &patterns {
+                            // Look for the pattern in the translated text
+                            if let Ok(regex) = regex::Regex::new(pattern) {
+                                if let Some(mat) = regex.find(&translated_text) {
+                                    // Find where the entry starts and the next entry starts
+                                    let entry_start = mat.end();
+                                    
+                                    // Find the next entry marker or end of text
+                                    let next_entry_start = patterns.iter()
+                                        .filter_map(|p| {
+                                            if let Ok(next_regex) = regex::Regex::new(p) {
+                                                next_regex.find_iter(&translated_text[entry_start..])
+                                                    .next()
+                                                    .map(|m| entry_start + m.start())
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .min()
+                                        .unwrap_or(translated_text.len());
+                                    
+                                    // Extract the entry text
+                                    let entry_text = translated_text[entry_start..next_entry_start].trim();
+                                    if !entry_text.is_empty() {
+                                        entries_map.insert(*missing_num, entry_text.to_string());
+                                        break; // Found this entry, move to the next
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             
@@ -1265,8 +1379,73 @@ impl TranslationService {
                 
                 capture_log("INFO", &format!("Successfully translated all {} entries in batch", batch.len()));
                 return Ok(result_entries);
-            } else if retry_individual_entries {
+            }
+            
+            if retry_individual_entries {
                 // Some entries are missing - translate them individually
+                // First, try entries with special formatting that might have been missed
+                for entry in batch {
+                    if entries_with_special_formatting.contains(&entry.seq_num) && !entries_map.contains_key(&entry.seq_num) {
+                        // Proactively translate specially formatted entries
+                        capture_log("INFO", &format!("Proactively translating entry {} with special formatting", entry.seq_num));
+                        
+                        // Individual translation with retries
+                        let individual_text = format!("ENTRY_{}:\n{}", entry.seq_num, entry.text);
+                        let mut individual_success = false;
+                        let mut individual_result = String::new();
+                        let mut retry_count = 0;
+                        
+                        // Use smaller token limit for individual translations to avoid issues
+                        let mut reduce_tokens_factor = 0.8;
+                        
+                        while !individual_success && retry_count < max_retries {
+                            match self.translate_text_with_usage(
+                                &individual_text,
+                                source_language,
+                                target_language,
+                                Some(Arc::clone(&log_capture))
+                            ).await {
+                                Ok((result, _)) => {
+                                    individual_result = result;
+                                    individual_success = true;
+                                    break;
+                                },
+                                Err(e) => {
+                                    retry_count += 1;
+                                    // If the error might be related to token limits, reduce the token count
+                                    if e.to_string().contains("token") {
+                                        reduce_tokens_factor *= 0.8;
+                                    }
+                                    
+                                    capture_log("WARN", &format!("Individual translation for entry {} failed (attempt {}/{}): {}", 
+                                                entry.seq_num, retry_count, max_retries, e));
+                                    
+                                    if retry_count < max_retries {
+                                        let delay_ms = 500 * retry_count;
+                                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if individual_success {
+                            // Extract the content from the individual translation
+                            let content = individual_result.lines()
+                                .skip_while(|line| !line.starts_with("ENTRY_"))
+                                .skip(1) // Skip the marker line
+                                .collect::<Vec<&str>>()
+                                .join("\n");
+                                
+                            if !content.trim().is_empty() {
+                                // Store the result in our entries map for later use
+                                entries_map.insert(entry.seq_num, content.trim().to_string());
+                                capture_log("INFO", &format!("Successfully pre-translated entry {} with special formatting", entry.seq_num));
+                            }
+                        }
+                    }
+                }
+                
+                // Now process all entries, including the pre-translated special ones
                 for entry in batch {
                     let mut translated_entry = entry.clone();
                     
@@ -1558,19 +1737,260 @@ impl Clone for TranslationService {
 
 /// Helper function to preserve formatting markers while replacing content
 fn preserve_formatting(original: &str, translated: &str) -> String {
-    // Check if the original has formatting tags like {\an8}
-    if let Some(tag_end) = original.find('}') {
-        if original.starts_with('{') {
-            // Extract the formatting tag
-            let format_tag = &original[0..=tag_end];
-            
-            // Return the tag + translated content
-            return format!("{}{}", format_tag, translated);
+    // Identify and preserve special formatting codes in the translation
+    
+    // First, extract all special formatting codes from the original
+    // Position codes - {\anN}
+    let an_codes = regex::Regex::new(r"\{\\an\d\}").unwrap();
+    
+    // HTML-style formatting tags
+    let italic_tags = regex::Regex::new(r"<i>|</i>").unwrap();
+    let bold_tags = regex::Regex::new(r"<b>|</b>").unwrap();
+    let underline_tags = regex::Regex::new(r"<u>|</u>").unwrap();
+    let font_tags = regex::Regex::new(r"<font.*?>|</font>").unwrap();
+    
+    // Alternative formatting tags in curly braces
+    let alt_italic_tags = regex::Regex::new(r"\{i\}|\{/i\}").unwrap();
+    let alt_bold_tags = regex::Regex::new(r"\{b\}|\{/b\}").unwrap();
+    let alt_underline_tags = regex::Regex::new(r"\{u\}|\{/u\}").unwrap();
+    
+    // Other format codes in curly braces
+    let format_codes = regex::Regex::new(r"\{[^}]+\}").unwrap();
+    
+    // Music note symbols
+    let music_symbols = regex::Regex::new(r"♪").unwrap();
+    
+    // Extract format codes from original
+    let mut original_codes = Vec::new();
+    
+    // Collect all {\anX} position codes
+    for cap in an_codes.find_iter(original) {
+        original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
+    }
+    
+    // Collect all HTML-style formatting tags
+    for tag_regex in [&italic_tags, &bold_tags, &underline_tags, &font_tags] {
+        for cap in tag_regex.find_iter(original) {
+            original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
         }
     }
     
-    // If no special formatting, return the translation as-is
-    translated.to_string()
+    // Collect all alternative formatting tags in curly braces
+    for tag_regex in [&alt_italic_tags, &alt_bold_tags, &alt_underline_tags] {
+        for cap in tag_regex.find_iter(original) {
+            original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
+        }
+    }
+    
+    // Collect all other format codes in curly braces
+    for cap in format_codes.find_iter(original) {
+        // Skip if already captured as an an_code or alt tag
+        if !an_codes.is_match(cap.as_str()) && 
+           !alt_italic_tags.is_match(cap.as_str()) && 
+           !alt_bold_tags.is_match(cap.as_str()) && 
+           !alt_underline_tags.is_match(cap.as_str()) {
+            original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
+        }
+    }
+    
+    // Collect music symbols (♪)
+    for cap in music_symbols.find_iter(original) {
+        original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
+    }
+    
+    // Sort codes by position in the original text
+    original_codes.sort_by_key(|(start, _, _)| *start);
+    
+    // If there are no format codes, just return the translated text
+    if original_codes.is_empty() {
+        return translated.to_string();
+    }
+    
+    // Check if the LLM already kept the formatting codes intact
+    let mut translated_contains_all_codes = true;
+    for (_, _, code) in &original_codes {
+        if !translated.contains(code) {
+            translated_contains_all_codes = false;
+            break;
+        }
+    }
+    
+    // If all codes are already in the translation, just return it
+    if translated_contains_all_codes {
+        return translated.to_string();
+    }
+    
+    // Map of opening tags to their closing tags
+    let mut tag_pairs = std::collections::HashMap::new();
+    tag_pairs.insert("<i>".to_string(), "</i>".to_string());
+    tag_pairs.insert("<b>".to_string(), "</b>".to_string());
+    tag_pairs.insert("<u>".to_string(), "</u>".to_string());
+    tag_pairs.insert("{i}".to_string(), "{/i}".to_string());
+    tag_pairs.insert("{b}".to_string(), "{/b}".to_string());
+    tag_pairs.insert("{u}".to_string(), "{/u}".to_string());
+    
+    // Identify tag pairs in the original text to preserve tag nesting
+    let mut tag_stack = Vec::new();
+    let mut paired_codes = Vec::new();
+    
+    for (start, end, code) in &original_codes {
+        // Check if this is an opening tag
+        if tag_pairs.contains_key(code) {
+            tag_stack.push((*start, *end, code.clone()));
+        } else {
+            // Check if this is a closing tag and we have a matching opening tag
+            if let Some(opening_code) = tag_stack.last().and_then(|(_, _, _open_code)| {
+                // Find the corresponding opening tag for this closing tag
+                tag_pairs.iter()
+                    .find(|(_, close)| close.as_str() == code.as_str())
+                    .map(|(open, _)| open.clone())
+            }) {
+                if let Some(pos) = tag_stack.iter().position(|(_, _, open_code)| open_code == &opening_code) {
+                    let opening = tag_stack.remove(pos);
+                    paired_codes.push((opening, (*start, *end, code.clone())));
+                }
+            }
+        }
+    }
+    
+    // Analyze the original line structure
+    let original_lines: Vec<&str> = original.lines().collect();
+    let translated_lines: Vec<&str> = translated.lines().collect();
+    
+    // If the line structure completely differs, make best effort to insert codes
+    if original_lines.len() != translated_lines.len() {
+        // For single-line translations, try to preserve tag pairs
+        if translated_lines.len() == 1 {
+            let mut result = String::new();
+            
+            // Add all position codes and standalone symbols at the beginning
+            for (_start, _end, code) in &original_codes {
+                if an_codes.is_match(code) || music_symbols.is_match(code) {
+                    result.push_str(code);
+                }
+            }
+            
+            // Add opening tags
+            for ((_, _, open_code), _) in &paired_codes {
+                result.push_str(open_code);
+            }
+            
+            // Add the translated text
+            result.push_str(translated);
+            
+            // Add closing tags in reverse order
+            for (_, (_, _, close_code)) in paired_codes.iter().rev() {
+                result.push_str(close_code);
+            }
+            
+            return result;
+        }
+        
+        // For multi-line translations that don't match the original structure
+        // Simple approach: add all format codes to the beginning of the translation
+        let mut result = String::new();
+        let all_codes: String = original_codes.iter()
+            .map(|(_, _, code)| code.clone())
+            .collect();
+            
+        result.push_str(&all_codes);
+        result.push_str(translated);
+        return result;
+    }
+    
+    // We'll try to match the original line structure with the translated one
+    let mut result = String::new();
+    
+    // Process each line, adding format codes at similar positions
+    for (line_idx, (orig_line, trans_line)) in original_lines.iter().zip(translated_lines.iter()).enumerate() {
+        // Add a newline between lines (except for the first line)
+        if line_idx > 0 {
+            result.push('\n');
+        }
+        
+        // Extract codes from this specific line
+        let line_codes: Vec<_> = original_codes.iter()
+            .filter(|(start, _, _)| {
+                let line_start = original[..original.find(orig_line).unwrap_or(0)].len();
+                let line_end = line_start + orig_line.len();
+                *start >= line_start && *start < line_end
+            })
+            .collect();
+        
+        if line_codes.is_empty() {
+            // No codes on this line
+            result.push_str(trans_line);
+        } else {
+            // Add codes at relatively similar positions
+            let mut line_result = String::from(*trans_line);
+            
+            // Position calculation will be relative to line length
+            let orig_length = orig_line.len() as f64;
+            let trans_length = trans_line.len() as f64;
+            
+            // Add all codes at the beginning for simplicity if the line is very short
+            if trans_length < 3.0 || orig_length < 3.0 {
+                for (_, _, code) in line_codes.iter().rev() {
+                    line_result.insert_str(0, code);
+                }
+            } else {
+                // Sort tags by type: position tags first, then opening/closing pairs, then others
+                
+                // Step 1: Handle position tags ({\anX}) - always at the beginning of the line
+                let position_tags: Vec<_> = line_codes.iter()
+                    .filter(|(_, _, code)| an_codes.is_match(code))
+                    .collect();
+                
+                for (_, _, code) in position_tags {
+                    line_result.insert_str(0, code);
+                }
+                
+                // Step 2: Handle paired tags (formatting tags that have opening/closing pairs)
+                // Find pairs of tags on this line
+                let line_start = original[..original.find(orig_line).unwrap_or(0)].len();
+                let line_end = line_start + orig_line.len();
+                
+                let line_pairs: Vec<_> = paired_codes.iter()
+                    .filter(|((start, _, _), (end, _, _))| {
+                        *start >= line_start && *start < line_end && *end >= line_start && *end < line_end
+                    })
+                    .collect();
+                
+                if !line_pairs.is_empty() {
+                    // Simple approach for lines with paired tags:
+                    // Add opening tags at start, closing tags at end
+                    for ((_, _, open_code), _) in &line_pairs {
+                        line_result.insert_str(0, open_code);
+                    }
+                    
+                    for (_, (_, _, close_code)) in line_pairs.iter().rev() {
+                        line_result.push_str(close_code);
+                    }
+                } else {
+                    // Step 3: Handle remaining tags (music symbols, etc.) at proportional positions
+                    let remaining_tags: Vec<_> = line_codes.iter()
+                        .filter(|(_, _, code)| !an_codes.is_match(code))
+                        .collect();
+                    
+                    for (start, _, code) in remaining_tags {
+                        // Calculate original relative position (as percentage of line)
+                        let relative_pos = (*start - line_start) as f64 / orig_length;
+                        
+                        // Calculate new position in translated line
+                        let new_pos = (relative_pos * trans_length).round() as usize;
+                        let new_pos = new_pos.min(line_result.len());
+                        
+                        // Insert the code at the calculated position
+                        line_result.insert_str(new_pos, code);
+                    }
+                }
+            }
+            
+            result.push_str(&line_result);
+        }
+    }
+    
+    result
 }
 
 #[cfg(test)]
