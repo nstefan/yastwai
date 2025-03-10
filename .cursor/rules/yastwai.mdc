@@ -48,8 +48,8 @@ alwaysApply: true
         - ✅ Commit titles: For each commit
         - 📁 Files Changed: For listing modified files
     - When executing the create-pr.sh script (only when requested):
-        - Always copy the full description to clipboard before opening the browser
-        - Paste the complete clipboard content into GitHub's PR description field
+        - The script will display the PR description in the terminal for reference
+        - Manually copy the description from the terminal if needed
         - Verify the PR has been created with the proper formatting and content
     - For large PRs, use appropriate markdown (headers, lists, code blocks) to enhance readability.
 

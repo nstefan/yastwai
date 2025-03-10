@@ -249,6 +249,14 @@ echo "Title: $PR_TITLE"
 echo "Base branch: $BASE_BRANCH"
 echo "Current branch: $CURRENT_BRANCH"
 
+# Display the PR body for reference instead of copying to clipboard
+echo ""
+echo "PR Description (you can copy this manually if needed):"
+echo "------------------------------------------------------"
+echo "$PR_BODY"
+echo "------------------------------------------------------"
+echo ""
+
 # Open the PR URL in the browser
 if command -v open &> /dev/null; then
     open "$PR_URL"
