@@ -16,6 +16,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
   build:
@@ -29,6 +31,9 @@ jobs:
       
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+      
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.8
       
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

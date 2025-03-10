@@ -16,6 +16,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
   test:
@@ -29,6 +31,9 @@ jobs:
         with:
           components: rustfmt, clippy
       
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.8
+      
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       
@@ -37,6 +42,17 @@ jobs:
         
       - name: Check code formatting
         run: cargo fmt --check
+        
+      - name: Generate coverage report
+        run: |
+          cargo install cargo-tarpaulin --locked
+          cargo tarpaulin --out Xml
+        
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
         
       - name: Build in release mode
         run: cargo build --release 
