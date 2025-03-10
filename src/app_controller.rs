@@ -26,7 +26,7 @@ pub struct Controller {
 impl Controller {
     // @method: Create a new controller with default configuration
     pub fn new() -> Result<Self> {
-        Self::with_config(Config::default_config())
+        Self::with_config(Config::default())
     }
     
     // @method: Create a new controller with the given configuration
@@ -546,7 +546,7 @@ impl Controller {
 
     pub fn new_for_test() -> Result<Self> {
         // Create a minimal configuration for tests
-        let config = Config::default_config();
+        let config = Config::default();
         Self::with_config(config)
     }
 
@@ -658,7 +658,7 @@ mod tests {
     /// Test creating a controller with a specific configuration
     #[test]
     fn test_with_config_valid_config_should_create_controller() -> Result<()> {
-        let config = Config::default_config();
+        let config = Config::default();
         let controller = Controller::with_config(config)?;
         assert_eq!(controller.config.source_language, "en");
         assert_eq!(controller.config.target_language, "fr");
