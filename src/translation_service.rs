@@ -1167,10 +1167,18 @@ impl TranslationService {
         let entries_with_special_formatting: Vec<usize> = batch.iter()
             .filter(|entry| {
                 // Check for format codes or tags that might confuse the LLM
-                entry.text.contains("{\\an") || 
-                entry.text.contains("<i>") || 
-                entry.text.contains("</i>") ||
-                entry.text.contains("♪") ||
+                // SRT format supports these HTML-like tags: <b>, <i>, <u>, <font color="...">, and positioning codes like {\an8}
+                entry.text.contains("{\\an") ||   // Position tags like {\an8}
+                entry.text.contains("<i>") || entry.text.contains("</i>") ||  // Italic
+                entry.text.contains("<b>") || entry.text.contains("</b>") ||  // Bold
+                entry.text.contains("<u>") || entry.text.contains("</u>") ||  // Underline
+                entry.text.contains("<font") || entry.text.contains("</font>") ||  // Font color
+                entry.text.contains("{i}") || entry.text.contains("{/i}") ||  // Alternative italic syntax
+                entry.text.contains("{b}") || entry.text.contains("{/b}") ||  // Alternative bold syntax
+                entry.text.contains("{u}") || entry.text.contains("{/u}") ||  // Alternative underline syntax
+                entry.text.contains("♪") ||  // Music notes, common in subtitles
+                // Check for unbalanced formatting tags or bracket usage
+                entry.text.matches('<').count() != entry.text.matches('>').count() ||
                 entry.text.matches('{').count() != entry.text.matches('}').count()
             })
             .map(|entry| entry.seq_num)
@@ -1732,29 +1740,62 @@ fn preserve_formatting(original: &str, translated: &str) -> String {
     // Identify and preserve special formatting codes in the translation
     
     // First, extract all special formatting codes from the original
+    // Position codes - {\anN}
     let an_codes = regex::Regex::new(r"\{\\an\d\}").unwrap();
+    
+    // HTML-style formatting tags
     let italic_tags = regex::Regex::new(r"<i>|</i>").unwrap();
+    let bold_tags = regex::Regex::new(r"<b>|</b>").unwrap();
+    let underline_tags = regex::Regex::new(r"<u>|</u>").unwrap();
+    let font_tags = regex::Regex::new(r"<font.*?>|</font>").unwrap();
+    
+    // Alternative formatting tags in curly braces
+    let alt_italic_tags = regex::Regex::new(r"\{i\}|\{/i\}").unwrap();
+    let alt_bold_tags = regex::Regex::new(r"\{b\}|\{/b\}").unwrap();
+    let alt_underline_tags = regex::Regex::new(r"\{u\}|\{/u\}").unwrap();
+    
+    // Other format codes in curly braces
     let format_codes = regex::Regex::new(r"\{[^}]+\}").unwrap();
+    
+    // Music note symbols
+    let music_symbols = regex::Regex::new(r"♪").unwrap();
     
     // Extract format codes from original
     let mut original_codes = Vec::new();
     
-    // Collect all {\anX} codes
+    // Collect all {\anX} position codes
     for cap in an_codes.find_iter(original) {
         original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
     }
     
-    // Collect all <i> and </i> tags
-    for cap in italic_tags.find_iter(original) {
-        original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
-    }
-    
-    // Collect all other format codes
-    for cap in format_codes.find_iter(original) {
-        // Skip if already captured as an an_code
-        if !an_codes.is_match(cap.as_str()) {
+    // Collect all HTML-style formatting tags
+    for tag_regex in [&italic_tags, &bold_tags, &underline_tags, &font_tags] {
+        for cap in tag_regex.find_iter(original) {
             original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
         }
+    }
+    
+    // Collect all alternative formatting tags in curly braces
+    for tag_regex in [&alt_italic_tags, &alt_bold_tags, &alt_underline_tags] {
+        for cap in tag_regex.find_iter(original) {
+            original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
+        }
+    }
+    
+    // Collect all other format codes in curly braces
+    for cap in format_codes.find_iter(original) {
+        // Skip if already captured as an an_code or alt tag
+        if !an_codes.is_match(cap.as_str()) && 
+           !alt_italic_tags.is_match(cap.as_str()) && 
+           !alt_bold_tags.is_match(cap.as_str()) && 
+           !alt_underline_tags.is_match(cap.as_str()) {
+            original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
+        }
+    }
+    
+    // Collect music symbols (♪)
+    for cap in music_symbols.find_iter(original) {
+        original_codes.push((cap.start(), cap.end(), cap.as_str().to_string()));
     }
     
     // Sort codes by position in the original text
@@ -1779,12 +1820,73 @@ fn preserve_formatting(original: &str, translated: &str) -> String {
         return translated.to_string();
     }
     
+    // Map of opening tags to their closing tags
+    let mut tag_pairs = std::collections::HashMap::new();
+    tag_pairs.insert("<i>".to_string(), "</i>".to_string());
+    tag_pairs.insert("<b>".to_string(), "</b>".to_string());
+    tag_pairs.insert("<u>".to_string(), "</u>".to_string());
+    tag_pairs.insert("{i}".to_string(), "{/i}".to_string());
+    tag_pairs.insert("{b}".to_string(), "{/b}".to_string());
+    tag_pairs.insert("{u}".to_string(), "{/u}".to_string());
+    
+    // Identify tag pairs in the original text to preserve tag nesting
+    let mut tag_stack = Vec::new();
+    let mut paired_codes = Vec::new();
+    
+    for (start, end, code) in &original_codes {
+        // Check if this is an opening tag
+        if tag_pairs.contains_key(code) {
+            tag_stack.push((*start, *end, code.clone()));
+        } else {
+            // Check if this is a closing tag and we have a matching opening tag
+            if let Some(opening_code) = tag_stack.last().and_then(|(_, _, _open_code)| {
+                // Find the corresponding opening tag for this closing tag
+                tag_pairs.iter()
+                    .find(|(_, close)| close.as_str() == code.as_str())
+                    .map(|(open, _)| open.clone())
+            }) {
+                if let Some(pos) = tag_stack.iter().position(|(_, _, open_code)| open_code == &opening_code) {
+                    let opening = tag_stack.remove(pos);
+                    paired_codes.push((opening, (*start, *end, code.clone())));
+                }
+            }
+        }
+    }
+    
     // Analyze the original line structure
     let original_lines: Vec<&str> = original.lines().collect();
     let translated_lines: Vec<&str> = translated.lines().collect();
     
     // If the line structure completely differs, make best effort to insert codes
     if original_lines.len() != translated_lines.len() {
+        // For single-line translations, try to preserve tag pairs
+        if translated_lines.len() == 1 {
+            let mut result = String::new();
+            
+            // Add all position codes and standalone symbols at the beginning
+            for (_start, _end, code) in &original_codes {
+                if an_codes.is_match(code) || music_symbols.is_match(code) {
+                    result.push_str(code);
+                }
+            }
+            
+            // Add opening tags
+            for ((_, _, open_code), _) in &paired_codes {
+                result.push_str(open_code);
+            }
+            
+            // Add the translated text
+            result.push_str(translated);
+            
+            // Add closing tags in reverse order
+            for (_, (_, _, close_code)) in paired_codes.iter().rev() {
+                result.push_str(close_code);
+            }
+            
+            return result;
+        }
+        
+        // For multi-line translations that don't match the original structure
         // Simple approach: add all format codes to the beginning of the translation
         let mut result = String::new();
         let all_codes: String = original_codes.iter()
@@ -1832,18 +1934,55 @@ fn preserve_formatting(original: &str, translated: &str) -> String {
                     line_result.insert_str(0, code);
                 }
             } else {
-                // Place codes at proportionally similar positions
-                for (start, _, code) in line_codes.iter().rev() {
-                    // Calculate original relative position (as percentage of line)
-                    let line_start = original[..original.find(orig_line).unwrap_or(0)].len();
-                    let relative_pos = (*start - line_start) as f64 / orig_length;
+                // Sort tags by type: position tags first, then opening/closing pairs, then others
+                
+                // Step 1: Handle position tags ({\anX}) - always at the beginning of the line
+                let position_tags: Vec<_> = line_codes.iter()
+                    .filter(|(_, _, code)| an_codes.is_match(code))
+                    .collect();
+                
+                for (_, _, code) in position_tags {
+                    line_result.insert_str(0, code);
+                }
+                
+                // Step 2: Handle paired tags (formatting tags that have opening/closing pairs)
+                // Find pairs of tags on this line
+                let line_start = original[..original.find(orig_line).unwrap_or(0)].len();
+                let line_end = line_start + orig_line.len();
+                
+                let line_pairs: Vec<_> = paired_codes.iter()
+                    .filter(|((start, _, _), (end, _, _))| {
+                        *start >= line_start && *start < line_end && *end >= line_start && *end < line_end
+                    })
+                    .collect();
+                
+                if !line_pairs.is_empty() {
+                    // Simple approach for lines with paired tags:
+                    // Add opening tags at start, closing tags at end
+                    for ((_, _, open_code), _) in &line_pairs {
+                        line_result.insert_str(0, open_code);
+                    }
                     
-                    // Calculate new position in translated line
-                    let new_pos = (relative_pos * trans_length).round() as usize;
-                    let new_pos = new_pos.min(line_result.len());
+                    for (_, (_, _, close_code)) in line_pairs.iter().rev() {
+                        line_result.push_str(close_code);
+                    }
+                } else {
+                    // Step 3: Handle remaining tags (music symbols, etc.) at proportional positions
+                    let remaining_tags: Vec<_> = line_codes.iter()
+                        .filter(|(_, _, code)| !an_codes.is_match(code))
+                        .collect();
                     
-                    // Insert the code at the calculated position
-                    line_result.insert_str(new_pos, code);
+                    for (start, _, code) in remaining_tags {
+                        // Calculate original relative position (as percentage of line)
+                        let relative_pos = (*start - line_start) as f64 / orig_length;
+                        
+                        // Calculate new position in translated line
+                        let new_pos = (relative_pos * trans_length).round() as usize;
+                        let new_pos = new_pos.min(line_result.len());
+                        
+                        // Insert the code at the calculated position
+                        line_result.insert_str(new_pos, code);
+                    }
                 }
             }
             
