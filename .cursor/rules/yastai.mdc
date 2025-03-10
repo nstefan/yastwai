@@ -8,19 +8,21 @@ alwaysApply: true
     - comments
     - documentation (README and other file headers)
 
-2. Everytime the user sends a prompt, prepare an associated future git commit.
+2. Every command must not be interactive since we are dealing with a bot.
+    - use proper arguments to prevent user interaction with commands.
+
+3. Everytime the user sends a prompt, prepare an associated future git commit.
     - Check if we already are on a different branch than the "main" one. If not create a new branch.
     - Check if the prompt is still related to the current branch, if not create a new branch from the main one.
     - Use " | cat" to not stay stuck when checking status and branch names.
     - Use a consise summary as commit title
     - Use the full prompt made by the user as the commit description header as the "Prompt:" part.
     - Use the final summary as the rest of the commit description body as the "Description:" part.
-    - Analyse all the faced difficulties and add a summary as the "Development discussion:" part.
+    - Analyse all the faced difficulties and add a summary as the "Discussion:" part.
 
-3. Check for issues using: cargo clippy.
+4. Always finish by building the app and run unit tests in release mode.
     - Don't adress warnings in test files as long as they run properly.
     - #[allow(dead_code)] directive is forbidden to fix warnings except to silence warnings related to tests in production code.
 
-6. Always finish by building the app and run unit tests in release mode.
-
-7. When a test breaks, be careful, you must check first if it's the modification the problem before adapting the test to the new change.
+5. When a test breaks, be careful.
+    - You must check first if it's the modification the problem before adapting the test to the new change.
