@@ -9,8 +9,9 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --title TITLE       - PR title (optional, will be auto-generated if not provided)"
-    echo "  --body-text TEXT    - PR body text (optional, will be auto-generated if not provided)"
-    echo "  --body-file FILE    - File containing PR body (optional, overrides --body-text)"
+    echo "  --body-file FILE    - File containing PR body in markdown (preferred method)"
+    echo "  --body-text TEXT    - PR body text (use only for short descriptions)"
+    echo "  --create-markdown   - Create a temporary markdown file for editing before submission"
     echo "  --base BRANCH       - Base branch to merge into (default: main)"
     echo "  --draft             - Create PR as draft (default: false)"
     echo "  --template          - Use PR template from scripts/pr-template.md (default: false)"
@@ -25,6 +26,7 @@ PR_TITLE=""
 PR_BODY_TEXT=""
 PR_BODY_FILE=""
 USE_TEMPLATE=false
+CREATE_MARKDOWN=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -40,6 +42,10 @@ while [[ $# -gt 0 ]]; do
         --body-file)
             PR_BODY_FILE="$2"
             shift 2
+            ;;
+        --create-markdown)
+            CREATE_MARKDOWN=true
+            shift
             ;;
         --base)
             BASE_BRANCH="$2"
@@ -181,81 +187,123 @@ if [ -z "$PR_TITLE" ]; then
     fi
 fi
 
-# Function to handle multiline input
-handle_multiline_input() {
-    local input_file="$1"
-    local output_file=$(mktemp)
+# Function to create a markdown file for PR description
+create_markdown_template() {
+    local temp_file=$(mktemp)
+    local temp_markdown="${temp_file}.md"
+    mv "$temp_file" "$temp_markdown"
     
-    if [ -f "$input_file" ]; then
-        # If input is a file, just copy it
-        cp "$input_file" "$output_file"
-    else
-        # If input is text with \n, convert to actual newlines
-        echo -e "$input_file" > "$output_file"
-    fi
-    echo "$output_file"
+    {
+        echo "# PR: ${PR_TITLE:-"Enter PR Title Here"}"
+        echo ""
+        echo "## Overview"
+        echo ""
+        echo "<!-- Provide a brief overview of what this PR does -->"
+        echo ""
+        echo "## Key Changes"
+        echo ""
+        echo "<!-- List the key changes in this PR -->"
+        echo "- "
+        echo "- "
+        echo "- "
+        echo ""
+        echo "## Implementation Details"
+        echo ""
+        echo "<!-- Explain implementation details if relevant -->"
+        echo ""
+        echo "## Areas of Attention"
+        echo ""
+        echo "<!-- Note any areas that need special attention during review -->"
+        echo ""
+        echo "---"
+        echo "### Auto-generated Information"
+        echo ""
+        echo "#### Files Changed"
+        git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
+            if [[ -f "$file" ]]; then
+                echo "- \`$file\`"
+            fi
+        done
+        echo ""
+        echo "#### Commits"
+        git log --reverse --pretty=format:"- %s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -10
+        if [ "$COMMIT_COUNT" -gt 10 ]; then
+            echo "- ... and $((COMMIT_COUNT - 10)) more commits"
+        fi
+    } > "$temp_markdown"
+    
+    echo "$temp_markdown"
 }
 
-# Generate a PR body that actually summarizes changes
-if [ -z "$PR_BODY_FILE" ] && [ -z "$PR_BODY_TEXT" ]; then
-    # Create a temporary file for the PR body
-    PR_BODY_FILE=$(mktemp)
-    
-    if [ "$USE_TEMPLATE" = true ] && [ -f "scripts/pr-template.md" ]; then
-        # Start with the template
-        cp scripts/pr-template.md "$PR_BODY_FILE"
-        
-        # Replace the title placeholder with actual title
-        sed -i '' "s/\[PR Title\]/$PR_TITLE/" "$PR_BODY_FILE"
-        
-        # Add auto-generated content after the template
-        {
-            echo ""
-            echo "## Auto-generated Content"
-            echo ""
-            echo "### Files Changed"
-            git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
-                if [[ -f "$file" ]]; then
-                    echo "- \`$file\`"
-                fi
-            done
-            echo ""
-            echo "### Commits"
-            git log --reverse --pretty=format:"- %s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -10
-            if [ "$COMMIT_COUNT" -gt 10 ]; then
-                echo "- ... and $((COMMIT_COUNT - 10)) more commits"
-            fi
-        } >> "$PR_BODY_FILE"
-    else
-        # Generate a useful summary without template
-        {
-            echo "## Summary"
-            echo ""
-            echo "This PR includes changes to:"
-            echo ""
-            echo "### Files Changed"
-            git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
-                if [[ -f "$file" ]]; then
-                    echo "- \`$file\`"
-                fi
-            done
-            echo ""
-            echo "### Commits"
-            git log --reverse --pretty=format:"- %s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -10
-            if [ "$COMMIT_COUNT" -gt 10 ]; then
-                echo "- ... and $((COMMIT_COUNT - 10)) more commits"
-            fi
-        } > "$PR_BODY_FILE"
+# Handle PR body creation
+if [ "$CREATE_MARKDOWN" = true ]; then
+    # Create a markdown file for editing
+    TEMP_MARKDOWN=$(create_markdown_template)
+    echo "Created markdown template at: $TEMP_MARKDOWN"
+    echo "Edit this file with your PR description, then press Enter to continue..."
+    read -p "Press Enter when ready..." DUMMY
+    PR_BODY_FILE="$TEMP_MARKDOWN"
+elif [ -n "$PR_BODY_FILE" ]; then
+    # Use existing markdown file (preferred approach)
+    if [ ! -f "$PR_BODY_FILE" ]; then
+        echo "Error: Markdown file '$PR_BODY_FILE' does not exist."
+        exit 1
     fi
 elif [ -n "$PR_BODY_TEXT" ]; then
-    # Handle multiline body text
-    PR_BODY_FILE=$(handle_multiline_input "$PR_BODY_TEXT")
-elif [ -n "$PR_BODY_FILE" ]; then
-    # Handle body file
-    PR_BODY_FILE=$(handle_multiline_input "$PR_BODY_FILE")
+    # Handle text input (less preferred)
+    TEMP_MARKDOWN=$(mktemp)
+    echo -e "$PR_BODY_TEXT" > "$TEMP_MARKDOWN"
+    PR_BODY_FILE="$TEMP_MARKDOWN"
+elif [ "$USE_TEMPLATE" = true ] && [ -f "scripts/pr-template.md" ]; then
+    # Use template
+    TEMP_MARKDOWN=$(mktemp)
+    cp "scripts/pr-template.md" "$TEMP_MARKDOWN"
+    sed -i '' "s/\[PR Title\]/$PR_TITLE/" "$TEMP_MARKDOWN"
+    
+    # Add auto-generated content
+    {
+        echo ""
+        echo "## Auto-generated Content"
+        echo ""
+        echo "### Files Changed"
+        git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
+            if [[ -f "$file" ]]; then
+                echo "- \`$file\`"
+            fi
+        done
+        echo ""
+        echo "### Commits"
+        git log --reverse --pretty=format:"- %s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -10
+        if [ "$COMMIT_COUNT" -gt 10 ]; then
+            echo "- ... and $((COMMIT_COUNT - 10)) more commits"
+        fi
+    } >> "$TEMP_MARKDOWN"
+    PR_BODY_FILE="$TEMP_MARKDOWN"
+else
+    # Generate a default markdown file
+    TEMP_MARKDOWN=$(mktemp)
+    {
+        echo "## Summary"
+        echo ""
+        echo "This PR includes changes to:"
+        echo ""
+        echo "### Files Changed"
+        git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
+            if [[ -f "$file" ]]; then
+                echo "- \`$file\`"
+            fi
+        done
+        echo ""
+        echo "### Commits"
+        git log --reverse --pretty=format:"- %s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -10
+        if [ "$COMMIT_COUNT" -gt 10 ]; then
+            echo "- ... and $((COMMIT_COUNT - 10)) more commits"
+        fi
+    } > "$TEMP_MARKDOWN"
+    PR_BODY_FILE="$TEMP_MARKDOWN"
 fi
 
-# Read the PR body
+# Read the PR body from file
 PR_BODY=$(cat "$PR_BODY_FILE")
 
 # Clean up temporary files
