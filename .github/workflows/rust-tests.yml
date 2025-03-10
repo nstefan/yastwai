@@ -18,13 +18,22 @@ env:
   CARGO_TERM_COLOR: always
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: "sccache"
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+
+permissions:
+  contents: read
 
 jobs:
   test:
     name: Run tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -36,23 +45,17 @@ jobs:
       
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      
+      - name: Check code formatting
+        run: cargo fmt --check
+      
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
       
       - name: Run tests
         run: cargo test --verbose
-        
-      - name: Check code formatting
-        run: cargo fmt --check
-        
-      - name: Generate coverage report
-        run: |
-          cargo install cargo-tarpaulin --locked
-          cargo tarpaulin --out Xml
-        
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-        
+      
       - name: Build in release mode
         run: cargo build --release 
