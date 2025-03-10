@@ -224,12 +224,10 @@ create_pr_body() {
     
     # If we get here, we need to generate a PR body
     
-    # Start with template if requested (unless in compact or summary mode)
+    # Remove template usage and ensure PR body is generated without placeholders
     if [ "$USE_TEMPLATE" = true ] && [ -f "scripts/pr-template.md" ] && [ "$COMPACT_MODE" = false ] && [ "$SUMMARY_ONLY" = false ]; then
         cp "scripts/pr-template.md" "$temp_file"
-        # Replace the title placeholder with actual title
-        sed -i.bak "s/\[PR Title\]/$PR_TITLE/" "$temp_file" && rm -f "$temp_file.bak"
-        
+        # Remove any placeholder replacements
         # Add auto-generated content after the template
         {
             echo ""
@@ -279,7 +277,6 @@ create_pr_body() {
                 if [ "$COMMIT_COUNT" -gt 10 ]; then
                     echo "- ... and $((COMMIT_COUNT - 10)) more commits"
                 fi
-                
                 if [ "$COMPACT_MODE" = false ]; then
                     # Add additional context for regular mode
                     echo ""
