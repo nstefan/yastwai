@@ -19,6 +19,8 @@ alwaysApply: true
     - Use the full prompt made by the user as the commit description header as the "Prompt:" part.
     - Use the final summary as the rest of the commit description body as the "Description:" part.
     - Analyse all the faced difficulties and add a summary as the "Discussion:" part.
+    - Use the ./scripts/create-commit.sh script to generate commits in the correct format.
+    - Follow the detailed guidelines in CONTRIBUTING.md for reference.
 
 4. Always finish by building the app and run unit tests in release mode.
     - Don't adress warnings in test files as long as they run properly.
@@ -26,3 +28,38 @@ alwaysApply: true
 
 5. When a test breaks, be careful.
     - You must check first if it's the modification the problem before adapting the test to the new change.
+
+6. For PR creation, ONLY create PRs when EXPLICITLY requested by the user.
+    - NEVER create a PR automatically or as part of another task unless directly requested.
+    - Use the scripts/create-pr.sh script ONLY when the user has asked to "create a PR" or similar explicit instructions.
+    - When a PR is explicitly requested, leverage AI capabilities for intelligent summarization:
+        - Analyzing all commits on the branch to understand the complete change set
+        - Creating a concise PR title that accurately reflects all changes
+        - Generating a well-structured PR body with emoji-enhanced sections
+    - For branches with multiple commits, structure the summary as follows:
+        - 📌 **Overview**: Brief summary of what the PR accomplishes (2-3 sentences)
+        - 🔍 **Key Changes**: Bullet points of the most significant changes
+        - 🧩 **Implementation Details**: Technical approach and design decisions
+        - 🔄 **Migration Notes**: Any changes requiring updates to existing code
+        - ⚠️ **Areas of Attention**: Parts of the PR that need special review focus
+    - Format PR descriptions with emojis according to this convention:
+        - 📝 Commit Details: Historical record of all commits
+        - 📅 Date: For timestamps
+        - ✅ Commit titles: For each commit
+        - 📁 Files Changed: For listing modified files
+    - When executing the create-pr.sh script (only when requested):
+        - Always copy the full description to clipboard before opening the browser
+        - Paste the complete clipboard content into GitHub's PR description field
+        - Verify the PR has been created with the proper formatting and content
+    - For large PRs, use appropriate markdown (headers, lists, code blocks) to enhance readability.
+
+7. Commit Message Structure Reference:
+    ```
+    <Concise summary as title>
+
+    Prompt: <Original prompt or request>
+
+    Description: <Detailed description of changes>
+
+    Discussion: <Challenges faced and how they were resolved>
+    ```
