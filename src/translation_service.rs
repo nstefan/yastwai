@@ -1,5 +1,5 @@
 use anyhow::{Result, Context, anyhow};
-use log::{error, warn, info, debug};
+use log::{error, warn, info};
 use std::time::{Duration, Instant};
 use url::Url;
 use std::sync::Arc;
@@ -608,7 +608,7 @@ impl TranslationService {
                 if batch_idx > 0 {
                     let delay_ms = translation_service.config.common.rate_limit_delay_ms;
                     if delay_ms > 0 {
-                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms as u64)).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                     }
                 }
                 
@@ -1200,7 +1200,7 @@ impl TranslationService {
                     // Wait before retrying with increasing delay
                     if retry_count < max_retries {
                         let delay_ms = 1000 * retry_count;
-                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms as u64)).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                     }
                 }
             }
@@ -1325,7 +1325,7 @@ impl TranslationService {
                                     // Wait before retrying
                                     if retry_count < max_retries {
                                         let delay_ms = 1000 * retry_count;
-                                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms as u64)).await;
+                                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                                     }
                                 }
                             }
@@ -1435,7 +1435,7 @@ impl TranslationService {
                             // Wait before retrying
                             if retry_count < max_retries {
                                 let delay_ms = 1000 * retry_count;
-                                tokio::time::sleep(std::time::Duration::from_millis(delay_ms as u64)).await;
+                                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                             }
                         }
                     }
@@ -1469,14 +1469,12 @@ impl TranslationService {
             return Ok(result_entries);
         } else {
             // Batch translation failed and individual retry is disabled - use all originals with warnings
-            let result_entries = batch.iter().map(|entry| {
+            Ok(batch.iter().map(|entry| {
                 let mut new_entry = entry.clone();
                 capture_log("ERROR", &format!("Batch translation failed and individual retry disabled for entry {}. Using original with warning.", entry.seq_num));
                 new_entry.text = format!("[NEEDS TRANSLATION] {}", entry.text);
                 new_entry
-            }).collect();
-            
-            return Ok(result_entries);
+            }).collect())
         }
     }
 

@@ -5,7 +5,6 @@ use isolang::Language;
 /// 
 /// This module provides functions for validating, normalizing, and
 /// matching ISO 639-1 (2-letter) and ISO 639-2 (3-letter) language codes.
-
 /// Language code type
 pub enum LanguageCodeType {
     /// ISO 639-1 (2-letter) code
@@ -116,7 +115,7 @@ pub fn normalize_to_part1_or_part2t(code: &str) -> Result<String> {
     
     // If it's already a 2-letter code, validate it
     if normalized_code.len() == 2 {
-        if let Some(_) = Language::from_639_1(&normalized_code) {
+        if Language::from_639_1(&normalized_code).is_some() {
             return Ok(normalized_code);
         }
     } 
