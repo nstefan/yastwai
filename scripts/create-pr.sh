@@ -93,6 +93,8 @@ else
             exit 1
         fi
         echo "Changes successfully pushed to remote."
+    else
+        echo "Branch is up to date with remote. No need to push."
     fi
 fi
 
