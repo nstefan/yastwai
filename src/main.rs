@@ -4,7 +4,7 @@
 // Add other lints specific to this module that you want to allow but not auto-fix
 
 use anyhow::{Result, anyhow, Context};
-use log::{error, warn, LevelFilter, Log, Metadata, Record, Level, SetLoggerError};
+use log::{error, warn, info, debug, LevelFilter, Log, Metadata, Record, Level, SetLoggerError};
 use std::process;
 use std::path::{Path, PathBuf};
 use std::io::Write;
@@ -33,6 +33,9 @@ struct CommandLineOptions {
     target_language: Option<String>,
     config_path: String,
     log_level: Option<app_config::LogLevel>,
+    // New fields for extraction-only mode
+    extract_only: bool,
+    extract_language: Option<String>,
 }
 
 // @struct: Custom logger implementation
@@ -224,6 +227,30 @@ async fn main() -> Result<()> {
     // Create controller
     let controller = Controller::with_config(config.clone())?;
     
+    // Handle extraction-only mode if enabled
+    if options.extract_only {
+        // Run the extraction-only mode with the input file(s) and output directory
+        if options.input_path.is_file() {
+            // Process a single file
+            extraction_only_mode(
+                &options.input_path, 
+                options.input_path.parent().unwrap_or(Path::new(".")).to_path_buf(),
+                options.extract_language.as_deref(),
+                options.force_overwrite
+            )?;
+        } else if options.input_path.is_dir() {
+            // Process a directory
+            extraction_only_mode_for_folder(
+                &options.input_path,
+                options.extract_language.as_deref(),
+                options.force_overwrite
+            )?;
+        } else {
+            return Err(anyhow!("Input path does not exist: {:?}", options.input_path));
+        }
+        return Ok(());
+    }
+    
     // Run the controller with the input file(s) and output directory
     if options.input_path.is_file() {
         // Process a single file
@@ -270,6 +297,9 @@ fn parse_command_line_args() -> Result<CommandLineOptions> {
         target_language: None,
         config_path: "conf.json".to_string(),
         log_level: None,
+        // New fields for extraction-only mode
+        extract_only: false,
+        extract_language: None,
     };
     
     // Process in two passes:
@@ -280,6 +310,18 @@ fn parse_command_line_args() -> Result<CommandLineOptions> {
             "-f" | "--force" => {
                 options.force_overwrite = true;
                 i += 1;
+            },
+            "-e" | "--extract" => {
+                options.extract_only = true;
+                
+                // Check if the next argument is a language code
+                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                    options.extract_language = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    // If no language specified, we'll determine it later
+                    i += 1;
+                }
             },
             "-p" | "--provider" => {
                 if i + 1 < args.len() && !args[i + 1].starts_with('-') {
@@ -394,6 +436,8 @@ fn print_usage(program_name: &str) {
     println!("Options:");
     println!("  -h, --help              Show this help message");
     println!("  -f, --force             Force overwrite of existing output files");
+    println!("  -e, --extract [LANG]    Extract subtitle in specified language without translation");
+    println!("                          (LANG is a 2 or 3-letter language code, e.g., 'en', 'fra')");
     println!("  -p, --provider VALUE    Override the translation provider (ollama, openai, anthropic)");
     println!("  -m, --model VALUE       Override the model name");
     println!("  -s, --source VALUE      Override the source language code");
@@ -407,4 +451,127 @@ fn print_usage(program_name: &str) {
     println!("  {} -p openai -m gpt-4-turbo movie.mkv", program_name);
     println!("  {} -s en -t es movie.mkv", program_name);
     println!("  {} -l debug movie.mkv", program_name);
+}
+
+// Helper function to implement extraction-only mode
+fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: Option<&str>, force_overwrite: bool) -> Result<()> {
+    use crate::subtitle_processor::SubtitleCollection;
+    
+    info!("Starting subtitle extraction mode for file: {:?}", input_file);
+    
+    // List available subtitle tracks
+    let tracks = SubtitleCollection::list_subtitle_tracks(input_file)
+        .context("Failed to list subtitle tracks")?;
+    
+    if tracks.is_empty() {
+        warn!("No subtitle tracks found in file: {:?}", input_file);
+        return Ok(());
+    }
+    
+    // Display available tracks
+    info!("Found {} subtitle track(s):", tracks.len());
+    for track in tracks.iter() {
+        info!("  Track {}: {} ({})", 
+             track.index, 
+             track.language.as_deref().unwrap_or("unknown"), 
+             track.title.as_deref().unwrap_or("No title"));
+    }
+    
+    // Determine which track to extract
+    let track_id = if let Some(lang) = language_code {
+        // Find track matching the requested language
+        let lang = lang.to_lowercase();
+        if let Some(matching_track) = tracks.iter().find(|t| 
+            t.language.as_ref().map_or(false, |track_lang| language_utils::language_codes_match(track_lang, &lang))) {
+            info!("Selected track {} matching requested language: {}", 
+                 matching_track.index, 
+                 matching_track.language.as_deref().unwrap_or("unknown"));
+            matching_track.index as usize
+        } else {
+            warn!("No track found matching requested language: {}. Available languages: {}", 
+                 lang, 
+                 tracks.iter()
+                     .filter_map(|t| t.language.clone())
+                     .collect::<Vec<_>>()
+                     .join(", "));
+            return Ok(());
+        }
+    } else {
+        // If no language specified, use the first track
+        info!("No language specified, using first track: {} ({})", 
+             tracks[0].language.as_deref().unwrap_or("unknown"), 
+             tracks[0].title.as_deref().unwrap_or("No title"));
+        tracks[0].index as usize
+    };
+    
+    // Create output filename
+    let track_info = tracks.iter().find(|t| t.index as usize == track_id)
+        .expect("Track should exist");
+    
+    let output_filename = format!("{}.{}.srt", 
+        input_file.file_stem().unwrap().to_string_lossy(),
+        track_info.language.as_deref().unwrap_or("unknown").to_lowercase());
+    
+    let output_file = output_dir.join(output_filename);
+    
+    // Check if output file exists
+    if output_file.exists() && !force_overwrite {
+        warn!("Output file already exists: {:?}. Use -f to force overwrite.", output_file);
+        return Ok(());
+    }
+    
+    // Extract the subtitle
+    info!("Extracting subtitle to: {:?}", output_file);
+    let subtitles = SubtitleCollection::extract_from_video(
+        input_file, 
+        track_id, 
+        track_info.language.as_deref().unwrap_or("unknown"),
+        &output_file,
+    ).context("Failed to extract subtitle")?;
+    
+    info!("Successfully extracted {} subtitle entries to: {:?}", subtitles.entries.len(), output_file);
+    
+    Ok(())
+}
+
+// Helper function to process an entire folder in extraction-only mode
+fn extraction_only_mode_for_folder(input_dir: &Path, language_code: Option<&str>, force_overwrite: bool) -> Result<()> {
+    use walkdir::WalkDir;
+    
+    info!("Starting subtitle extraction mode for directory: {:?}", input_dir);
+    
+    let mut processed_count = 0;
+    
+    // Walk the directory recursively
+    for entry in WalkDir::new(input_dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file()) {
+            
+        let path = entry.path();
+        
+        // Check if it's a video file
+        let file_type = file_utils::FileManager::detect_file_type(path);
+        if let Ok(file_type) = file_type {
+            if let file_utils::FileType::Video = file_type {
+                info!("Processing video: {:?}", path);
+                
+                // Extract subtitles for this file
+                if let Err(e) = extraction_only_mode(
+                    path, 
+                    path.parent().unwrap_or(Path::new(".")).to_path_buf(),
+                    language_code,
+                    force_overwrite
+                ) {
+                    error!("Failed to process file {:?}: {}", path, e);
+                } else {
+                    processed_count += 1;
+                }
+            }
+        }
+    }
+    
+    info!("Finished processing {} files", processed_count);
+    
+    Ok(())
 } 
