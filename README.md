@@ -2,14 +2,14 @@
 
 <!-- AI-METADATA
 project_name: YASTwAI
-project_description: Yet Another Subtitles Translation with AI
+project_description: Yet Another Subtitles Translator with AI
 project_type: CLI tool
 language: Rust
 primary_purpose: Subtitle translation
 license: MIT
 -->
 
-Yet Another Subtitles Translation with AI - A Rust application for extracting and automatically translating video subtitles.
+Yet Another Subtitles Translator with AI - A Rust application for extracting and automatically translating video subtitles.
 
 ## Overview
 
