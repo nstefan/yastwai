@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use crate::translation_service::LogEntry;
 use crate::file_utils::FileManager;
 use chrono;
+use std::time::Duration;
 
 // @module: Application controller for subtitle processing
 
@@ -108,7 +109,7 @@ impl Controller {
         // Start the translation process
         
         // Translate the subtitles
-        let (translated, translation_elapsed) = self.translate_subtitles_with_progress(subtitles, multi_progress).await?;
+        let (translated, translation_elapsed) = self.translate_subtitles_with_progress(subtitles, multi_progress, &output_dir).await?;
         
         // Save the translated subtitles
         self.save_translated_subtitles(translated, &input_file, &output_dir)?;
@@ -157,11 +158,13 @@ impl Controller {
     async fn translate_subtitles(&self, subtitles: SubtitleCollection) -> Result<(SubtitleCollection, std::time::Duration)> {
         // Create a new empty progress indicator for use with translate_subtitles_with_progress
         let multi_progress = MultiProgress::new();
-        self.translate_subtitles_with_progress(subtitles, &multi_progress).await
+        // Use a temporary directory for logs when no specific output directory is provided
+        let temp_dir = std::env::temp_dir();
+        self.translate_subtitles_with_progress(subtitles, &multi_progress, &temp_dir).await
     }
     
     /// Internal method to translate subtitles with a progress bar from the provided MultiProgress
-    async fn translate_subtitles_with_progress(&self, subtitles: SubtitleCollection, multi_progress: &MultiProgress) -> Result<(SubtitleCollection, std::time::Duration)> {
+    async fn translate_subtitles_with_progress(&self, subtitles: SubtitleCollection, multi_progress: &MultiProgress, output_dir: &Path) -> Result<(SubtitleCollection, std::time::Duration)> {
         // Start timing the translation process
         let translation_start_time = std::time::Instant::now();
         
@@ -214,8 +217,9 @@ impl Controller {
             }
         ).await?;
         
-        // Finish the progress bar
-        progress_bar.finish_with_message("Translation complete");
+        // Finish and clear the progress bar instead of just finishing it
+        // This ensures only the folder progress bar remains visible when processing multiple files
+        progress_bar.finish_and_clear();
         
         // Now that the progress bar is finished, print any captured logs
         let logs = {
@@ -245,13 +249,13 @@ impl Controller {
             }
             
             // Write logs to yastwai.issues.log file
-            let log_file_path = "yastwai.issues.log";
+            let log_file_path = output_dir.join("yastwai.issues.log").to_string_lossy().to_string();
             let context = format!("{} - {} ({})",
                 self.config.translation.provider.display_name(), 
                 self.config.translation.get_model(),
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
                 
-            if let Err(e) = self.write_logs_to_file(&logs, log_file_path, &context) {
+            if let Err(e) = self.write_logs_to_file(&logs, &log_file_path, &context) {
                 warn!("Failed to write logs to file: {}", e);
             } else {
                 info!("Logs written to {}", log_file_path);
@@ -380,6 +384,9 @@ impl Controller {
                 .map(|f| f.to_string_lossy().to_string())
                 .unwrap_or_else(|| "unknown".to_string());
             
+            // Update the folder progress bar to show current file
+            folder_pb.set_message(format!("Processing: {}", file_name));
+            
             // Get output directory (use input dir)
             let output_dir = match video_file.parent() {
                 Some(parent) => parent.to_path_buf(),
@@ -422,10 +429,10 @@ impl Controller {
         // Give summary results - important for batch operations
         let summary_message = format!("Folder processing completed: {} processed, {} skipped, {} errors", 
              success_count, skip_count, error_count);
-        warn!("{}", summary_message);
+        info!("{}", summary_message);
         
         // Write summary to log file
-        let log_file_path = "yastwai.issues.log";
+        let log_file_path = input_dir.join("yastwai.issues.log").to_string_lossy().to_string();
         let context = format!("Folder Processing: {} ({})",
             input_dir.display(),
             chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
@@ -438,7 +445,7 @@ impl Controller {
         // Create a vector with just the summary log entry for folder processing
         let folder_logs = vec![folder_log_entry];
         
-        if let Err(e) = self.write_logs_to_file(&folder_logs, log_file_path, &context) {
+        if let Err(e) = self.write_logs_to_file(&folder_logs, &log_file_path, &context) {
             warn!("Failed to write folder logs to file: {}", e);
         } else {
             info!("Folder processing logs written to {}", log_file_path);
@@ -455,16 +462,85 @@ impl Controller {
     }
 
     // Helper method for testing with simulated run (no actual translation)
-    #[cfg(test)]
     pub async fn test_run(&self, _input_file: PathBuf, _output_dir: PathBuf, _force_overwrite: bool) -> Result<()> {
-        // Simplified implementation for testing
+        // Test method that simulates the progress bar behavior without doing actual work
+        info!("Running test_run with progress bar simulation");
+        
+        // Create a new multi-progress instance
+        let multi_progress = MultiProgress::new();
+        
+        // Create a file progress bar
+        let file_pb = multi_progress.add(ProgressBar::new(10));
+        file_pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg}")
+                .expect("Invalid progress bar template")
+                .progress_chars("█▓▒░")
+        );
+        file_pb.set_message("Translating test file");
+        
+        // Simulate progress updates
+        for i in 0..10 {
+            file_pb.inc(1);
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        
+        // Finish and clear the file progress bar
+        file_pb.finish_and_clear();
+        
         Ok(())
     }
     
     // Helper method for testing with simulated run_folder
-    #[cfg(test)]
     pub async fn test_run_folder(&self, _input_dir: PathBuf, _force_overwrite: bool) -> Result<()> {
-        // Simplified implementation for testing
+        // Test method that simulates folder processing with progress bars
+        info!("Running test_run_folder with progress bar simulation");
+        
+        // Create a new multi-progress instance
+        let multi_progress = MultiProgress::new();
+        
+        // Create a folder progress bar
+        let folder_pb = multi_progress.add(ProgressBar::new(3));
+        folder_pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({percent}%) {msg}")
+                .expect("Invalid progress bar template")
+                .progress_chars("█▓▒░")
+        );
+        folder_pb.set_message("Processing test files");
+        
+        // Simulate processing 3 files
+        for i in 0..3 {
+            // Update folder progress message
+            let file_name = format!("test_file_{}.mp4", i+1);
+            folder_pb.set_message(format!("Processing: {}", file_name));
+            
+            // Create a file progress bar
+            let file_pb = multi_progress.add(ProgressBar::new(5));
+            file_pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg}")
+                    .expect("Invalid progress bar template")
+                    .progress_chars("█▓▒░")
+            );
+            file_pb.set_message(format!("Translating {}", file_name));
+            
+            // Simulate progress updates
+            for _ in 0..5 {
+                file_pb.inc(1);
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            
+            // Finish and clear the file progress bar
+            file_pb.finish_and_clear();
+            
+            // Update the folder progress bar
+            folder_pb.inc(1);
+        }
+        
+        // Finish the folder progress bar
+        folder_pb.finish_with_message("Folder processing complete");
+        
         Ok(())
     }
 
