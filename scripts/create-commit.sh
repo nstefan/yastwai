@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to help create commit messages following the yastai.mdc guidelines
+# Script to help create commit messages following the yastwai.mdc guidelines
 # Uses multi-line format by default to improve readability and comply with guidelines
 # Non-interactive version for automated use by bots
 

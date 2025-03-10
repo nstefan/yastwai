@@ -58,6 +58,46 @@ if [ -z "$CURRENT_BRANCH" ]; then
     exit 1
 fi
 
+# Check for uncommitted changes
+if [ -n "$(git status --porcelain)" ]; then
+    echo "Error: You have uncommitted changes. Please commit or stash them before creating a PR."
+    exit 1
+fi
+
+# Check if there are unpushed changes that need to be pushed first
+REMOTE_EXISTS=$(git ls-remote --heads origin $CURRENT_BRANCH 2>/dev/null | cat)
+LOCAL_COMMIT=$(git rev-parse $CURRENT_BRANCH 2>/dev/null | cat)
+
+if [ -z "$REMOTE_EXISTS" ]; then
+    echo "Remote branch does not exist. Pushing changes..."
+    if ! git push -u origin $CURRENT_BRANCH; then
+        echo "Error: Failed to push to remote. Please check your connection and permissions."
+        exit 1
+    fi
+    echo "Branch successfully pushed to remote."
+else
+    REMOTE_COMMIT=$(git ls-remote origin $CURRENT_BRANCH | awk '{print $1}' | cat)
+    BEHIND_COUNT=$(git rev-list --count $CURRENT_BRANCH..origin/$CURRENT_BRANCH 2>/dev/null | cat)
+    AHEAD_COUNT=$(git rev-list --count origin/$CURRENT_BRANCH..$CURRENT_BRANCH 2>/dev/null | cat)
+    
+    if [ "$BEHIND_COUNT" -gt 0 ]; then
+        echo "Error: Your branch is behind the remote by $BEHIND_COUNT commit(s)."
+        echo "Please pull the latest changes with 'git pull' before creating a PR."
+        exit 1
+    fi
+    
+    if [ "$AHEAD_COUNT" -gt 0 ]; then
+        echo "Your branch is ahead of remote by $AHEAD_COUNT commit(s). Pushing changes..."
+        if ! git push origin $CURRENT_BRANCH; then
+            echo "Error: Failed to push to remote. Please check your connection and permissions."
+            exit 1
+        fi
+        echo "Changes successfully pushed to remote."
+    else
+        echo "Branch is up to date with remote. No need to push."
+    fi
+fi
+
 # Get commit count
 COMMIT_COUNT=$(git rev-list --count "$BASE_BRANCH..$CURRENT_BRANCH" | cat)
 if [ "$COMMIT_COUNT" -eq 0 ]; then
