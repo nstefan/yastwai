@@ -501,9 +501,55 @@ impl Controller {
     
     /// Get the expected subtitle output filename for a video file
     fn get_subtitle_output_filename(&self, input_file: &Path, target_language: &str) -> String {
-        let _input_stem = input_file.file_stem().unwrap_or_default();
-        let input_name = _input_stem.to_string_lossy();
-        format!("{}.{}.srt", input_name, target_language)
+        // Check if this is an SRT file and handle appropriately
+        if input_file.extension().and_then(|ext| ext.to_str()) == Some("srt") {
+            // For SRT files, we need to keep the full path and replace the language code
+            let input_str = input_file.to_string_lossy().to_string();
+            
+            // If this is a path with directories
+            if let Some(filename) = input_file.file_name().map(|f| f.to_string_lossy()) {
+                // Split the filename by dots
+                let parts: Vec<&str> = filename.split('.').collect();
+                
+                if parts.len() >= 3 {
+                    // Format with multiple dots: "video.source.en.srt"
+                    // Replace the language code (second to last part) with target language
+                    let mut new_parts = parts.clone();
+                    new_parts[parts.len() - 2] = target_language;
+                    let new_filename = new_parts.join(".");
+                    
+                    // Replace the old filename with the new one, keeping the path
+                    if let Some(parent) = input_file.parent() {
+                        return parent.join(new_filename).to_string_lossy().to_string();
+                    }
+                    return new_filename.to_string();
+                } else if parts.len() == 2 {
+                    // Simple case: "single.srt"
+                    // Append the target language before the extension
+                    let new_filename = format!("{}.{}.srt", parts[0], target_language);
+                    
+                    // Replace the old filename with the new one, keeping the path
+                    if let Some(parent) = input_file.parent() {
+                        return parent.join(new_filename).to_string_lossy().to_string();
+                    }
+                    return new_filename;
+                }
+            }
+        } else {
+            // For video files, just extract the filename (no path) and append the target language
+            if let Some(filename) = input_file.file_name() {
+                if let Some(stem) = input_file.file_stem() {
+                    return format!("{}.{}.srt", stem.to_string_lossy(), target_language);
+                }
+            }
+        }
+        
+        // Fallback: use the file stem if available, or a default name
+        if let Some(stem) = input_file.file_stem() {
+            format!("{}.{}.srt", stem.to_string_lossy(), target_language)
+        } else {
+            format!("output.{}.srt", target_language)
+        }
     }
 
     // Helper method for testing with simulated run (no actual translation)
@@ -724,15 +770,25 @@ mod tests {
         
         // Test with different file paths and extensions
         let test_cases = [
+            // Video files - should append target language
             ("video.mp4", "fr", "video.fr.srt"),
             ("path/to/video.mkv", "es", "video.es.srt"),
             ("with spaces.mov", "de", "with spaces.de.srt"),
             ("/absolute/path/video.avi", "it", "video.it.srt"),
+            
+            // SRT files - should replace source language with target language
+            ("video.source.en.srt", "fr", "video.source.fr.srt"),
+            ("path/to/movie.en.srt", "es", "path/to/movie.es.srt"),
+            ("subtitles.with.dots.en.srt", "de", "subtitles.with.dots.de.srt"),
+            ("/absolute/path/video.source.en.srt", "it", "/absolute/path/video.source.it.srt"),
+            
+            // Edge cases for SRT files
+            ("single.srt", "fr", "single.fr.srt"), // No language code to replace, should append
         ];
         
         for (input, lang, expected) in test_cases {
             let output = controller.get_subtitle_output_filename(&PathBuf::from(input), lang);
-            assert_eq!(output, expected);
+            assert_eq!(output, expected, "Failed for input: {}", input);
         }
         
         Ok(())
