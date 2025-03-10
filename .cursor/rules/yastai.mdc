@@ -3,10 +3,23 @@ description: TASTwAI
 globs: *.*
 alwaysApply: true
 ---
-- Everything must be writen in english.
-- Compile using: `cargo build --release`, unless instructed otherwise.
-- Check for issues using: cargo clippy.
-- #[allow(dead_code)] directive is forbidden to fix warnings except to silence warnings related to tests.
-- Regularly check unit tests when adding, modifying or removing features.
-- When a test breaks, be careful, you must check first if it's the modification the problem before adapting the test to the new change.
-- Always finish by building the app and run unit tests.
+1. Everything must be produced in english.
+    - code
+    - comments
+    - documentation (README and other file headers)
+
+2. Everytime I send a prompt, prepare an associated future git commit.
+    - Check if we already are on a different branch than the "main" one. If not create a new branch.
+    - Check if the prompt is still related to the current branch, if not create a new branch from the main one.
+    - Use " | cat" to not stay stuck when checking status and branch names.
+    - Use a consise summary as commit title
+    - Use the full prompt made by the user as the commit description header as the "Objective:" part.
+    - Use the final summary as the rest of the commit description body as the "Description:" part.
+
+3. Check for issues using: cargo clippy.
+    - Don't adress warnings in test files as long as they run properly.
+    - #[allow(dead_code)] directive is forbidden to fix warnings except to silence warnings related to tests in production code.
+
+6. Always finish by building the app and run unit tests in release mode.
+
+7. When a test breaks, be careful, you must check first if it's the modification the problem before adapting the test to the new change.

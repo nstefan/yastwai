@@ -40,3 +40,6 @@ rand = "0.9"
 isolang = { version = "2.4.0", features = ["local_names", "english_names"] }
 thiserror = "1.0.50" 
 parking_lot = "0.12.3"
+
+[dev-dependencies]
+tokio-test = "0.4.3"
