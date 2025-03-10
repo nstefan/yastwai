@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to check and manage branches according to yastai.mdc requirements
+# Script to check and manage branches according to yastwai.mdc requirements
 
 # Get the current branch
 CURRENT_BRANCH=$(git branch --show-current)

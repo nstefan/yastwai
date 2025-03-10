@@ -83,7 +83,7 @@ All pull requests should:
 
 ## Commit Guidelines
 
-YASTwAI follows the standards defined in the `yastai.mdc` ruleset for commit messages. Each commit should provide clear information about what changes were made, why they were made, and any challenges encountered.
+YASTwAI follows the standards defined in the `yastwai.mdc` ruleset for commit messages. Each commit should provide clear information about what changes were made, why they were made, and any challenges encountered.
 
 ### Commit Message Structure
 

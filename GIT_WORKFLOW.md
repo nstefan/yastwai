@@ -1,6 +1,6 @@
 # YASTwAI Git Workflow
 
-This document explains the Git workflow for the YASTwAI project, including how to use the helper scripts to follow the yastai.mdc ruleset.
+This document explains the Git workflow for the YASTwAI project, including how to use the helper scripts to follow the yastwai.mdc ruleset.
 
 ## Workflow Overview
 
@@ -17,7 +17,7 @@ Two scripts are provided to help with this workflow:
 
 ### 1. Branch Management (`branch-check.sh`)
 
-This script helps you manage branches according to the yastai.mdc requirements.
+This script helps you manage branches according to the yastwai.mdc requirements.
 
 ```bash
 ./scripts/branch-check.sh
@@ -91,4 +91,4 @@ See `COMMIT_GUIDELINES.md` for detailed information about each section.
 - When fixing tests, always check if the code is the problem before modifying the test
 - Never use `#[allow(dead_code)]` directives except for test-related code
 
-For more detailed information, refer to the yastai.mdc ruleset and the `COMMIT_GUIDELINES.md` document. 
+For more detailed information, refer to the yastwai.mdc ruleset and the `COMMIT_GUIDELINES.md` document. 
