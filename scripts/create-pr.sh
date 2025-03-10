@@ -5,32 +5,22 @@
 
 # Function to show usage
 show_usage() {
-    echo "Usage: ./create-pr.sh [options]"
+    echo "Usage: ./scripts/create-pr.sh [options]"
     echo ""
     echo "Options:"
-    echo "  --title TITLE       - PR title (optional, will use first commit message if not provided)"
+    echo "  --title TITLE       - PR title (optional, will be auto-generated if not provided)"
     echo "  --body FILE         - File containing PR body (optional)"
-    echo "  --body-text TEXT    - PR body text (optional, can use escaped newlines)"
     echo "  --base BRANCH       - Base branch to merge into (default: main)"
     echo "  --draft             - Create PR as draft (default: false)"
-    echo "  --no-generate       - Skip auto-generation of PR body (default: false)"
-    echo "  --no-template       - Skip using PR template (default: false)"
     echo "  --help              - Display this help message"
-    echo ""
-    echo "If neither --body nor --body-text is provided, a PR body will be generated from commit messages."
-    echo "By default, the PR template from scripts/pr-template.md will be used if available."
     exit 1
 }
 
 # Default values
 BASE_BRANCH="main"
 DRAFT=false
-AUTO_GENERATE=true
-USE_TEMPLATE=true
 PR_TITLE=""
-PR_BODY=""
 PR_BODY_FILE=""
-PR_TEMPLATE_PATH="scripts/pr-template.md"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -43,24 +33,12 @@ while [[ $# -gt 0 ]]; do
             PR_BODY_FILE="$2"
             shift 2
             ;;
-        --body-text)
-            PR_BODY=$(echo -e "$2")
-            shift 2
-            ;;
         --base)
             BASE_BRANCH="$2"
             shift 2
             ;;
         --draft)
             DRAFT=true
-            shift
-            ;;
-        --no-generate)
-            AUTO_GENERATE=false
-            shift
-            ;;
-        --no-template)
-            USE_TEMPLATE=false
             shift
             ;;
         --help|-h)
@@ -80,105 +58,137 @@ if [ -z "$CURRENT_BRANCH" ]; then
     exit 1
 fi
 
-# Ensure we have commits
+# Get commit count
 COMMIT_COUNT=$(git rev-list --count "$BASE_BRANCH..$CURRENT_BRANCH" | cat)
 if [ "$COMMIT_COUNT" -eq 0 ]; then
     echo "Error: No commits found between $BASE_BRANCH and $CURRENT_BRANCH"
     exit 1
 fi
 
-# Generate PR title if not provided
+# Generate a meaningful PR title if not provided
 if [ -z "$PR_TITLE" ]; then
-    PR_TITLE=$(git log -1 --pretty=%s "$CURRENT_BRANCH" | cat)
-fi
-
-# Generate PR body if needed
-if [ -z "$PR_BODY" ] && [ -z "$PR_BODY_FILE" ] && [ "$AUTO_GENERATE" = true ]; then
-    TEMP_BODY=$(mktemp)
+    # Get all commit messages
+    COMMIT_MSGS=$(git log --pretty=format:"%s" "$BASE_BRANCH..$CURRENT_BRANCH")
     
-    # Start with PR template if available and requested
-    if [ "$USE_TEMPLATE" = true ] && [ -f "$PR_TEMPLATE_PATH" ]; then
-        cat "$PR_TEMPLATE_PATH" > "$TEMP_BODY"
-        echo "" >> "$TEMP_BODY"
-        echo "---" >> "$TEMP_BODY"
-        echo "" >> "$TEMP_BODY"
+    # For a single commit, just use its message
+    if [ "$COMMIT_COUNT" -eq 1 ]; then
+        PR_TITLE=$(echo "$COMMIT_MSGS" | head -1)
     else
-        # Add summary header
-        echo "# Changes in this PR" > "$TEMP_BODY"
-        echo "" >> "$TEMP_BODY"
+        # Extract common file types that were modified
+        FILE_EXTENSIONS=$(git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | grep -o '\.[^/.]*$' | sort | uniq | tr -d '.' | tr '\n' ',' | sed 's/,$//')
+        
+        # Extract key action verbs from commit messages
+        ACTION_VERBS=$(echo "$COMMIT_MSGS" | grep -o -E '^(Add|Update|Fix|Remove|Refactor|Improve|Implement|Create|Move|Rename|Delete)' | sort | uniq | tr '\n' ',' | sed 's/,$//')
+        
+        # Get first and last commit messages
+        FIRST_COMMIT=$(echo "$COMMIT_MSGS" | head -1)
+        LAST_COMMIT=$(echo "$COMMIT_MSGS" | tail -1)
+        
+        # Create summary title based on number of commits and patterns
+        if [[ "$FIRST_COMMIT" == "$LAST_COMMIT" ]]; then
+            # Same message appears multiple times
+            PR_TITLE="$FIRST_COMMIT"
+        elif [[ -n "$ACTION_VERBS" && $(echo "$ACTION_VERBS" | tr -cd ',' | wc -c) -eq 0 ]]; then
+            # Only one action verb across all commits
+            MAIN_VERB=$(echo "$ACTION_VERBS" | tr ',' ' ')
+            if [[ "$FILE_EXTENSIONS" == "sh" || "$COMMIT_MSGS" == *"script"* ]]; then
+                PR_TITLE="$MAIN_VERB scripts for automation"
+            else
+                # Use branch name to add context but with the correct verb
+                CLEAN_BRANCH=$(echo "$CURRENT_BRANCH" | sed 's/-/ /g' | sed 's/_/ /g')
+                CONTEXT=$(echo "$CLEAN_BRANCH" | awk '{for(i=2;i<=NF;i++) printf "%s ", $i}')
+                PR_TITLE="$MAIN_VERB $CONTEXT"
+            fi
+        else
+            # Multiple action types - create summary from first and last commit
+            FIRST_ACTION=$(echo "$FIRST_COMMIT" | grep -o -E '^(Add|Update|Fix|Remove|Refactor|Improve|Implement|Create|Move|Rename|Delete)' || echo "Update")
+            LAST_ACTION=$(echo "$LAST_COMMIT" | grep -o -E '^(Add|Update|Fix|Remove|Refactor|Improve|Implement|Create|Move|Rename|Delete)' || echo "cleanup")
+            
+            # Extract main component being modified
+            if [[ "$COMMIT_MSGS" == *"commit script"* || "$COMMIT_MSGS" == *"create-commit"* ]]; then
+                COMPONENT="commit tooling"
+            elif [[ "$COMMIT_MSGS" == *"PR"* || "$COMMIT_MSGS" == *"pull request"* || "$COMMIT_MSGS" == *"create-pr"* ]]; then
+                COMPONENT="PR workflow"
+            elif [[ "$COMMIT_MSGS" == *".github"* ]]; then
+                COMPONENT="GitHub configuration"
+            else
+                # Fall back to using directory most frequently changed
+                COMPONENT=$(git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | grep -o '^[^/]*' | sort | uniq -c | sort -nr | head -1 | awk '{print $2}')
+            fi
+            
+            PR_TITLE="$FIRST_ACTION and $LAST_ACTION $COMPONENT"
+        fi
+        
+        # Ensure title starts with capital letter
+        PR_TITLE="$(echo "${PR_TITLE:0:1}" | tr '[:lower:]' '[:upper:]')${PR_TITLE:1}"
+        
+        # Ensure title isn't too long
+        if [ ${#PR_TITLE} -gt 60 ]; then
+            PR_TITLE="${PR_TITLE:0:57}..."
+        fi
     fi
-    
-    # List all commits with their messages and details
-    echo "## Commit Details" >> "$TEMP_BODY"
-    echo "" >> "$TEMP_BODY"
-    
-    git log --reverse --pretty=format:"### %s%n%n**Date:** %ad%n%n%b%n" "$BASE_BRANCH..$CURRENT_BRANCH" >> "$TEMP_BODY"
-    
-    # List changed files
-    echo "## Files Changed" >> "$TEMP_BODY"
-    echo "" >> "$TEMP_BODY"
-    git diff --stat "$BASE_BRANCH..$CURRENT_BRANCH" >> "$TEMP_BODY"
-    
-    PR_BODY_FILE="$TEMP_BODY"
 fi
 
-# Read body from file if provided
-if [ -n "$PR_BODY_FILE" ]; then
-    PR_BODY=$(cat "$PR_BODY_FILE")
+# Generate a PR body that actually summarizes changes
+if [ -z "$PR_BODY_FILE" ]; then
+    # Create a temporary file for the PR body
+    PR_BODY_FILE=$(mktemp)
     
-    # Clean up temporary file if we created one
-    if [[ "$PR_BODY_FILE" == /tmp/* ]]; then
-        rm "$PR_BODY_FILE"
-    fi
+    # Get the first commit message for context
+    FIRST_COMMIT_MSG=$(git log --reverse --pretty=format:"%s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -1)
+    
+    # Generate a useful summary
+    {
+        echo "## Summary"
+        echo ""
+        echo "This PR includes changes to:"
+        
+        # List files changed grouped by type
+        echo "### Files Changed:"
+        git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
+            if [[ -f "$file" ]]; then
+                # Get file extension for categorization
+                EXT="${file##*.}"
+                echo "- \`$file\`"
+            fi
+        done
+        echo ""
+        
+        # List commit messages as bullet points
+        echo "### Commits:"
+        git log --reverse --pretty=format:"- %s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -10
+        if [ "$COMMIT_COUNT" -gt 10 ]; then
+            echo "- ... and $((COMMIT_COUNT - 10)) more commits"
+        fi
+    } > "$PR_BODY_FILE"
 fi
 
-# Encode the PR body for URL
-encode_url_param() {
-    echo -n "$1" | perl -pe 's/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/ge'
-}
+# Read the PR body
+PR_BODY=$(cat "$PR_BODY_FILE")
+
+# Clean up temporary file if we created one
+if [[ "$PR_BODY_FILE" == /tmp/* ]]; then
+    rm "$PR_BODY_FILE"
+fi
 
 # Get the GitHub repo URL
 get_github_url() {
-    # Get the remote URL
     REMOTE_URL=$(git config --get remote.origin.url | cat)
     
-    # Remove .git suffix if present and convert SSH URL to HTTPS URL if needed
     if [[ "$REMOTE_URL" == git@github.com:* ]]; then
-        # Convert from SSH format (git@github.com:user/repo.git) to HTTPS format
         REPO_PATH=${REMOTE_URL#git@github.com:}
         REPO_PATH=${REPO_PATH%.git}
         echo "https://github.com/$REPO_PATH"
     elif [[ "$REMOTE_URL" == https://github.com/* ]]; then
-        # Already HTTPS format, just remove .git if present
         echo "${REMOTE_URL%.git}"
     else
-        # Unknown format, return as is
         echo "$REMOTE_URL"
     fi
 }
 
-# Construct the PR URL
-construct_pr_url() {
-    local base_url="$1"
-    local base_branch="$2"
-    local head_branch="$3"
-    local title="$4"
-    local body="$5"
-    local is_draft="$6"
-    
-    # Encode parameters for URL
-    local encoded_title=$(encode_url_param "$title")
-    local encoded_body=$(encode_url_param "$body")
-    
-    # Construct the URL
-    local url="${base_url}/compare/${base_branch}...${head_branch}?quick_pull=1&title=${encoded_title}&body=${encoded_body}"
-    
-    # Add draft parameter if needed
-    if [ "$is_draft" = true ]; then
-        url="${url}&draft=1"
-    fi
-    
-    echo "$url"
+# URL encode a string for use in a URL
+url_encode() {
+    echo -n "$1" | perl -pe 's/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/ge'
 }
 
 # Get the GitHub repository URL
@@ -188,40 +198,28 @@ if [ -z "$REPO_URL" ]; then
     exit 1
 fi
 
+# Create the PR URL
+PR_URL="$REPO_URL/compare/$BASE_BRANCH...$CURRENT_BRANCH?quick_pull=1&title=$(url_encode "$PR_TITLE")&body=$(url_encode "$PR_BODY")"
+if [ "$DRAFT" = true ]; then
+    PR_URL="${PR_URL}&draft=1"
+fi
+
 echo "Creating PR:"
 echo "Title: $PR_TITLE"
 echo "Base branch: $BASE_BRANCH"
 echo "Current branch: $CURRENT_BRANCH"
-echo "Repository: $REPO_URL"
-if [ "$USE_TEMPLATE" = true ] && [ -f "$PR_TEMPLATE_PATH" ]; then
-    echo "Using PR template: $PR_TEMPLATE_PATH"
-fi
 
-# Construct the PR URL
-PR_URL=$(construct_pr_url "$REPO_URL" "$BASE_BRANCH" "$CURRENT_BRANCH" "$PR_TITLE" "$PR_BODY" "$DRAFT")
-
-# Check which browser opening command is available
+# Open the PR URL in the browser
 if command -v open &> /dev/null; then
-    # macOS
     open "$PR_URL"
 elif command -v xdg-open &> /dev/null; then
-    # Linux
     xdg-open "$PR_URL"
 elif command -v start &> /dev/null; then
-    # Windows
     start "$PR_URL"
 else
     echo "Could not detect browser opening command. Please open this URL manually:"
     echo "$PR_URL"
-    # Copy URL to clipboard if possible
-    if command -v pbcopy &> /dev/null; then
-        echo "$PR_URL" | pbcopy
-        echo "URL copied to clipboard."
-    elif command -v xclip &> /dev/null; then
-        echo "$PR_URL" | xclip -selection clipboard
-        echo "URL copied to clipboard."
-    fi
 fi
 
 echo "Pull request URL opened in browser."
-echo "URL: $PR_URL" 
+exit 0 
