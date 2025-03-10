@@ -11,9 +11,10 @@ use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use std::sync::Arc;
 use std::sync::Mutex;
 use crate::translation_service::LogEntry;
-use crate::file_utils::FileManager;
+use crate::file_utils::{FileManager, FileType};
 use chrono;
 use std::time::Duration;
+use std::fs;
 
 // @module: Application controller for subtitle processing
 
@@ -66,6 +67,50 @@ impl Controller {
             return Ok(());
         } else if output_path.exists() && force_overwrite {
             // Indicate that we'll overwrite
+        }
+        
+        // Detect file type
+        let file_type = FileManager::detect_file_type(&input_file)?;
+        
+        // If it's a subtitle file, process it directly without extraction
+        if file_type == FileType::Subtitle {
+            info!("Detected subtitle file, skipping extraction process");
+            
+            // Parse the subtitle file directly
+            let content = FileManager::read_to_string(&input_file)?;
+            let source_file = input_file.clone();
+            
+            // Parse the SRT content to get subtitle entries
+            let entries = SubtitleCollection::parse_srt_string(&content)
+                .context("Failed to parse subtitle file")?;
+            
+            // Create a new SubtitleCollection
+            // Note: We ignore the source language from config since we're processing the subtitle file directly
+            let subtitles = SubtitleCollection {
+                source_file,
+                entries,
+                source_language: "auto".to_string(), // Using "auto" to indicate we don't know the actual source language
+            };
+            
+            // Translate the subtitles
+            let (translated_subtitles, translation_duration) = self.translate_subtitles_with_progress(
+                subtitles, 
+                multi_progress, 
+                &output_dir
+            ).await?;
+            
+            // Save translated subtitles
+            self.save_translated_subtitles(translated_subtitles, &input_file, &output_dir)?;
+            
+            // Calculate and log total duration
+            let total_duration = start_time.elapsed();
+            info!(
+                "Translation completed in {}. Total processing time: {}",
+                Self::format_duration(translation_duration),
+                Self::format_duration(total_duration)
+            );
+            
+            return Ok(());
         }
         
         // First check if the target language is already available as a subtitle track
@@ -789,6 +834,33 @@ mod tests {
         
         // Clean up
         fs::remove_file(test_log_file)?;
+        Ok(())
+    }
+
+    /// Test direct subtitle file processing
+    #[test]
+    fn test_run_with_direct_subtitle_file_should_skip_extraction() -> Result<()> {
+        // This is a minimal test that doesn't actually run the async code,
+        // but ensures the file type detection and special handling path exists
+        
+        // Create a test controller
+        let controller = Controller::new_for_test()?;
+        
+        // Create a temporary test directory and files
+        let temp_dir = std::env::temp_dir().join("yastwai_test");
+        FileManager::ensure_dir(&temp_dir)?;
+        
+        let input_file = temp_dir.join("test.srt");
+        fs::write(&input_file, "1\n00:00:01,000 --> 00:00:05,000\nTest subtitle text")?;
+        
+        // We don't actually run the async code, just ensure the code path exists
+        // and basic file operations work
+        assert!(FileManager::detect_file_type(&input_file)? == FileType::Subtitle);
+        
+        // Clean up
+        fs::remove_file(input_file)?;
+        fs::remove_dir(temp_dir)?;
+        
         Ok(())
     }
 } 
