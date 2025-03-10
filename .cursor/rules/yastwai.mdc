@@ -32,7 +32,13 @@ alwaysApply: true
 
 6. For PR creation, ONLY create PRs when EXPLICITLY requested by the user.
     - NEVER create a PR automatically or as part of another task unless directly requested.
-    - Use the scripts/create-pr.sh script ONLY when the user has asked to "create pr" or similar explicit instructions.
+    - ALWAYS use the scripts/ai-pr-helper.sh script as the preferred method for PR creation.
+    - The helper script avoids multiline command issues and creates well-structured PRs:
+        ```bash
+        ./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
+        ```
+    - Use this syntax with comma-separated lists instead of trying to create multiline strings directly.
+    - Only fall back to scripts/create-pr.sh if the ai-pr-helper.sh is not available.
     - When a PR is explicitly requested, leverage AI capabilities for intelligent summarization:
         - Analyzing all commits on the branch to understand the complete change set
         - Generating a well-structured PR body with emoji-enhanced sections
@@ -48,7 +54,6 @@ alwaysApply: true
         - 📅 Date: For timestamps
         - ✅ Commit titles: For each commit
         - 📁 Files Changed: For listing modified files
-    - Executing the create-pr.sh script only when requested.
     - For large PRs, use appropriate markdown (headers, lists, code blocks and line breaks) to enhance readability.
 
 7. Commit Message Structure Reference:

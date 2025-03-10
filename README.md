@@ -264,6 +264,23 @@ Please read our [Contributing Guidelines](CONTRIBUTING.md) before starting devel
 - Testing requirements
 - PR process
 
+### Helper Scripts
+
+The repository includes several scripts to facilitate development:
+
+```bash
+# Create properly formatted commits
+./scripts/create-commit.sh "Commit title" "Prompt" "Description" "Discussion"
+
+# Create pull requests
+./scripts/create-pr.sh --title "PR Title" --body "Description"
+
+# Create pull requests using AI-friendly helper
+./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2"
+```
+
+The `ai-pr-helper.sh` script is specifically designed for AI assistants to easily create well-structured PRs without dealing with multiline string issues.
+
 ### Running Tests
 
 ```bash
