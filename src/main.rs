@@ -400,7 +400,7 @@ fn print_usage(program_name: &str) {
     println!("  -t, --target VALUE      Override the target language code");
     println!("  -c, --config VALUE      Specify config file path (default: conf.json)");
     println!("  -l, --log-level VALUE   Set log level (error, warn, info, debug, trace)");
-    println!("");
+    println!();
     println!("Examples:");
     println!("  {} movie.mkv", program_name);
     println!("  {} -f movie.mkv", program_name);

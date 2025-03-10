@@ -480,7 +480,7 @@ impl Controller {
         file_pb.set_message("Translating test file");
         
         // Simulate progress updates
-        for i in 0..10 {
+        for _i in 0..10 {
             file_pb.inc(1);
             tokio::time::sleep(Duration::from_millis(10)).await;
         }

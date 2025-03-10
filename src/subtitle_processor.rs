@@ -107,7 +107,7 @@ impl SubtitleEntry {
     /// Parse an SRT timestamp to milliseconds
     pub fn parse_timestamp(timestamp: &str) -> Result<u64> {
         // Parse HH:MM:SS,mmm format
-        let parts: Vec<&str> = timestamp.split(|c| c == ':' || c == ',' || c == '.').collect();
+        let parts: Vec<&str> = timestamp.split(&[':', ',', '.'][..]).collect();
         
         if parts.len() != 4 {
             return Err(anyhow!("Invalid timestamp format: {}", timestamp));
@@ -663,7 +663,7 @@ impl SubtitleCollection {
             }
         };
         
-        while let Some(line) = lines.next() {
+        for line in lines {
             line_count += 1;
             let trimmed = line.trim();
             

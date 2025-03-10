@@ -1,7 +1,6 @@
-use anyhow::{Result, anyhow, Context};
+use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::BufReader;
+use std::fs;
 use std::path::Path;
 use std::default::Default;
 use std::fmt;
@@ -423,10 +422,10 @@ fn default_system_prompt() -> String {
 impl Config {
     /// Load configuration from a file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let file = File::open(path.as_ref())
+        let file = fs::File::open(path.as_ref())
             .with_context(|| format!("Failed to open config file: {:?}", path.as_ref()))?;
         
-        let reader = BufReader::new(file);
+        let reader = std::io::BufReader::new(file);
         let config: Config = serde_json::from_reader(reader)?;
         
         Ok(config)
@@ -459,16 +458,13 @@ impl Config {
     }
     
     /// Create a new configuration with default values
-    pub fn default_config() -> Self {
-        // Create default configuration
-        let config = Config {
+    pub fn default() -> Self {
+        Config {
             source_language: "en".to_string(),
             target_language: "fr".to_string(),
             translation: TranslationConfig::default(),
             log_level: LogLevel::default(),
-        };
-        
-        config
+        }
     }
     
     /// Save the configuration to a file
@@ -481,7 +477,7 @@ impl Config {
 }
 
 pub fn create_default_config_file<P: AsRef<Path>>(path: P) -> Result<Config> {
-    let config = Config::default_config();
+    let config = Config::default();
     config.save_to_file(&path)?;
     Ok(config)
 }
@@ -612,7 +608,7 @@ mod tests {
 
     #[test]
     fn test_default_config() {
-        let config = Config::default_config();
+        let config = Config::default();
         
         // Test default values
         assert_eq!(config.source_language, "en");
@@ -633,7 +629,7 @@ mod tests {
     #[test]
     fn test_config_validation() {
         // Start with a valid config
-        let mut config = Config::default_config();
+        let mut config = Config::default();
         assert!(config.validate().is_ok());
         
         // Invalid source language
