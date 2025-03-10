@@ -4,7 +4,7 @@
 
 # Function to show usage
 show_usage() {
-    echo "Usage: ./create-commit.sh \"Commit title\" \"Prompt\" \"Description\" \"Discussion\" [--no-stage] [--multi-line]"
+    echo "Usage: ./scripts/create-commit.sh \"Commit title\" \"Prompt\" \"Description\" \"Discussion\" [--no-stage] [--multi-line]"
     echo ""
     echo "Parameters:"
     echo "  Commit title  - The title of the commit (required)"

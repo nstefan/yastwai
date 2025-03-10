@@ -1,3 +1,8 @@
+// Module-specific lints configuration
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::too_many_arguments)]
+// Add other lints specific to this module that you want to allow but not auto-fix
+
 use anyhow::{Result, anyhow, Context};
 use log::{error, warn, LevelFilter, Log, Metadata, Record, Level, SetLoggerError};
 use std::process;

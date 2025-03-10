@@ -86,39 +86,8 @@ All pull requests should:
 
 ## Commit Guidelines
 
-YASTwAI uses structured commit messages to maintain a clear project history. You can use the provided `create-commit.sh` script for consistent commit formatting:
+YASTwAI uses structured commit messages to maintain a clear project history. You can use the provided `scripts/create-commit.sh` script for consistent commit formatting:
 
 ```bash
-./create-commit.sh --title "Brief description" --prompt "Original task" --description "Detailed explanation" --discussion "Challenges faced"
+./scripts/create-commit.sh --title "Brief description" --prompt "Original task" --description "Detailed explanation" --discussion "Challenges faced"
 ```
-
-Each commit should:
-- Have a concise summary as the title
-- Include the full prompt as the commit description header
-- Provide a detailed explanation of changes
-- Discuss any challenges or decisions made
-
-## Coding Standards
-
-- Write all code, comments, and documentation in English
-- Follow Rust's official style guide and idioms
-- Implement functional programming best practices where appropriate
-- Adhere to SOLID principles
-- Use dependency injection for maintainable code
-- Write clean, self-documenting code with appropriate comments
-
-## Testing
-
-- Write tests for all new functionality
-- Ensure existing tests continue to pass
-- Follow the project's test naming convention: `test_operation_withCertainInputs_shouldDoSomething()`
-- Run tests in release mode before submitting your PR
-
-## Documentation
-
-- Update the README.md for major feature additions
-- Document public API functions and types
-- Provide examples for new functionality
-- Keep documentation in sync with code changes
-
-Thank you for contributing to YASTwAI! 

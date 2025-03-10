@@ -34,6 +34,12 @@
  * This project is licensed under the MIT License
  */
 
+// Global lints configuration
+// These lints will be allowed but not auto-fixed
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::redundant_closure_for_method_calls)]
+// Add other lints you want to allow but not auto-fix
+
 // Public modules
 pub mod app_config;
 pub mod file_utils;
