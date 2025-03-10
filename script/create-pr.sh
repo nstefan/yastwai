@@ -18,7 +18,7 @@ show_usage() {
     echo "  --help              - Display this help message"
     echo ""
     echo "If neither --body nor --body-text is provided, a PR body will be generated from commit messages."
-    echo "By default, the PR template from .github/pull_request_template.md will be used if available."
+    echo "By default, the PR template from script/pr-template.md will be used if available."
     exit 1
 }
 
@@ -30,7 +30,7 @@ USE_TEMPLATE=true
 PR_TITLE=""
 PR_BODY=""
 PR_BODY_FILE=""
-PR_TEMPLATE_PATH=".github/pull_request_template.md"
+PR_TEMPLATE_PATH="script/pr-template.md"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
