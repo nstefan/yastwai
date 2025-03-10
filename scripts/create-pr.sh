@@ -181,6 +181,21 @@ if [ -z "$PR_TITLE" ]; then
     fi
 fi
 
+# Function to handle multiline input
+handle_multiline_input() {
+    local input_file="$1"
+    local output_file=$(mktemp)
+    
+    if [ -f "$input_file" ]; then
+        # If input is a file, just copy it
+        cp "$input_file" "$output_file"
+    else
+        # If input is text with \n, convert to actual newlines
+        echo -e "$input_file" > "$output_file"
+    fi
+    echo "$output_file"
+}
+
 # Generate a PR body that actually summarizes changes
 if [ -z "$PR_BODY_FILE" ] && [ -z "$PR_BODY_TEXT" ]; then
     # Create a temporary file for the PR body
@@ -232,10 +247,20 @@ if [ -z "$PR_BODY_FILE" ] && [ -z "$PR_BODY_TEXT" ]; then
             fi
         } > "$PR_BODY_FILE"
     fi
-elif [ -n "$PR_BODY_TEXT" ] && [ -z "$PR_BODY_FILE" ]; then
-    # Create a temporary file with the provided body text
-    PR_BODY_FILE=$(mktemp)
-    echo "$PR_BODY_TEXT" > "$PR_BODY_FILE"
+elif [ -n "$PR_BODY_TEXT" ]; then
+    # Handle multiline body text
+    PR_BODY_FILE=$(handle_multiline_input "$PR_BODY_TEXT")
+elif [ -n "$PR_BODY_FILE" ]; then
+    # Handle body file
+    PR_BODY_FILE=$(handle_multiline_input "$PR_BODY_FILE")
+fi
+
+# Read the PR body
+PR_BODY=$(cat "$PR_BODY_FILE")
+
+# Clean up temporary files
+if [[ "$PR_BODY_FILE" == /tmp/* ]]; then
+    rm "$PR_BODY_FILE"
 fi
 
 # URL encode a string for use in a URL
