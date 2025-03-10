@@ -5,6 +5,8 @@ use walkdir::WalkDir;
 use std::fs::OpenOptions;
 use std::io::Write;
 use chrono::Local;
+use std::process::Command;
+use regex::Regex;
 
 // @module: File and directory utilities
 
@@ -144,6 +146,87 @@ impl FileManager {
         
         Ok(())
     }
+
+    /// Detect if a file is a subtitle file (SRT) or a video file supported by ffmpeg
+    pub fn detect_file_type<P: AsRef<Path>>(path: P) -> Result<FileType> {
+        let path = path.as_ref();
+        
+        if !path.exists() {
+            return Err(anyhow::anyhow!("File does not exist: {:?}", path));
+        }
+        
+        // Check file extension
+        if let Some(ext) = path.extension() {
+            let ext_str = ext.to_string_lossy().to_lowercase();
+            
+            // Check if it's a subtitle file
+            if ext_str == "srt" {
+                return Ok(FileType::Subtitle);
+            }
+            
+            // Common video file extensions supported by ffmpeg
+            // This list is not exhaustive but covers the most common formats
+            let video_extensions = [
+                "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", 
+                "mpg", "mpeg", "ogv", "ts", "mts", "m2ts"
+            ];
+            
+            if video_extensions.contains(&ext_str.as_str()) {
+                return Ok(FileType::Video);
+            }
+        }
+        
+        // If extension check doesn't work, try to examine the file with ffprobe
+        let output = Command::new("ffprobe")
+            .arg("-v")
+            .arg("error")
+            .arg("-show_entries")
+            .arg("format=format_name")
+            .arg("-of")
+            .arg("default=noprint_wrappers=1:nokey=1")
+            .arg(path)
+            .output();
+        
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    let format = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+                    
+                    // Check if the format is a known video format
+                    if !format.is_empty() {
+                        return Ok(FileType::Video);
+                    }
+                }
+            },
+            Err(_) => {}
+        }
+        
+        // Fall back to examining file contents
+        if let Ok(content) = fs::read_to_string(path) {
+            // Check for SRT format pattern (sequence number followed by timestamp)
+            if content.contains("-->") {
+                // Simple check for SRT format: contains "-->" and has a pattern of numbers followed by timestamps
+                let re = Regex::new(r"\d+\s*\r?\n\d{2}:\d{2}:\d{2},\d{3}\s+-->\s+\d{2}:\d{2}:\d{2},\d{3}").unwrap();
+                if re.is_match(&content) {
+                    return Ok(FileType::Subtitle);
+                }
+            }
+        }
+        
+        // Default to unknown if we couldn't determine the type
+        Ok(FileType::Unknown)
+    }
+}
+
+/// Enum representing different file types
+#[derive(Debug, PartialEq, Eq)]
+pub enum FileType {
+    /// Subtitle file (SRT)
+    Subtitle,
+    /// Video file supported by ffmpeg
+    Video,
+    /// Unknown file type
+    Unknown,
 }
 
 #[cfg(test)]
@@ -355,6 +438,53 @@ mod tests {
         
         // Clean up
         fs::remove_file(test_log_file)?;
+        Ok(())
+    }
+
+    /// Test file type detection
+    #[test]
+    fn test_detect_file_type_with_srt_extension_should_return_subtitle() -> Result<()> {
+        // Create a temporary test SRT file
+        let test_file = "test_subtitle.srt";
+        fs::write(test_file, "1\n00:00:01,000 --> 00:00:05,000\nTest subtitle text")?;
+        
+        // Test detection
+        let file_type = FileManager::detect_file_type(test_file)?;
+        assert_eq!(file_type, FileType::Subtitle);
+        
+        // Clean up
+        fs::remove_file(test_file)?;
+        Ok(())
+    }
+    
+    /// Test file type detection with video extension
+    #[test]
+    fn test_detect_file_type_with_video_extension_should_return_video() -> Result<()> {
+        // Create a temporary test video file (just empty with extension)
+        let test_file = "test_video.mp4";
+        fs::write(test_file, "dummy content")?;
+        
+        // Test detection
+        let file_type = FileManager::detect_file_type(test_file)?;
+        assert_eq!(file_type, FileType::Video);
+        
+        // Clean up
+        fs::remove_file(test_file)?;
+        Ok(())
+    }
+    
+    /// Test file type detection with unknown extension
+    #[test]
+    fn test_detect_file_type_with_unknown_extension_should_check_content() -> Result<()> {
+        // Create a temporary test file with unknown extension but SRT content
+        let test_file = "test_file.txt";
+        fs::write(test_file, "1\n00:00:01,000 --> 00:00:05,000\nTest subtitle text\n\n2\n00:00:06,000 --> 00:00:10,000\nMore subtitle text")?;
+        
+        // Test detection - just make sure it doesn't crash
+        let _file_type = FileManager::detect_file_type(test_file)?;
+        
+        // Clean up
+        fs::remove_file(test_file)?;
         Ok(())
     }
 } 

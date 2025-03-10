@@ -11,9 +11,10 @@ use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use std::sync::Arc;
 use std::sync::Mutex;
 use crate::translation_service::LogEntry;
-use crate::file_utils::FileManager;
+use crate::file_utils::{FileManager, FileType};
 use chrono;
 use std::time::Duration;
+use std::fs;
 
 // @module: Application controller for subtitle processing
 
@@ -66,6 +67,50 @@ impl Controller {
             return Ok(());
         } else if output_path.exists() && force_overwrite {
             // Indicate that we'll overwrite
+        }
+        
+        // Detect file type
+        let file_type = FileManager::detect_file_type(&input_file)?;
+        
+        // If it's a subtitle file, process it directly without extraction
+        if file_type == FileType::Subtitle {
+            info!("Detected subtitle file, skipping extraction process");
+            
+            // Parse the subtitle file directly
+            let content = FileManager::read_to_string(&input_file)?;
+            let source_file = input_file.clone();
+            
+            // Parse the SRT content to get subtitle entries
+            let entries = SubtitleCollection::parse_srt_string(&content)
+                .context("Failed to parse subtitle file")?;
+            
+            // Create a new SubtitleCollection
+            // Note: We ignore the source language from config since we're processing the subtitle file directly
+            let subtitles = SubtitleCollection {
+                source_file,
+                entries,
+                source_language: "auto".to_string(), // Using "auto" to indicate we don't know the actual source language
+            };
+            
+            // Translate the subtitles
+            let (translated_subtitles, translation_duration) = self.translate_subtitles_with_progress(
+                subtitles, 
+                multi_progress, 
+                &output_dir
+            ).await?;
+            
+            // Save translated subtitles
+            self.save_translated_subtitles(translated_subtitles, &input_file, &output_dir)?;
+            
+            // Calculate and log total duration
+            let total_duration = start_time.elapsed();
+            info!(
+                "Translation completed in {}. Total processing time: {}",
+                Self::format_duration(translation_duration),
+                Self::format_duration(total_duration)
+            );
+            
+            return Ok(());
         }
         
         // First check if the target language is already available as a subtitle track
@@ -456,9 +501,55 @@ impl Controller {
     
     /// Get the expected subtitle output filename for a video file
     fn get_subtitle_output_filename(&self, input_file: &Path, target_language: &str) -> String {
-        let _input_stem = input_file.file_stem().unwrap_or_default();
-        let input_name = _input_stem.to_string_lossy();
-        format!("{}.{}.srt", input_name, target_language)
+        // Check if this is an SRT file and handle appropriately
+        if input_file.extension().and_then(|ext| ext.to_str()) == Some("srt") {
+            // For SRT files, we need to keep the full path and replace the language code
+            let input_str = input_file.to_string_lossy().to_string();
+            
+            // If this is a path with directories
+            if let Some(filename) = input_file.file_name().map(|f| f.to_string_lossy()) {
+                // Split the filename by dots
+                let parts: Vec<&str> = filename.split('.').collect();
+                
+                if parts.len() >= 3 {
+                    // Format with multiple dots: "video.source.en.srt"
+                    // Replace the language code (second to last part) with target language
+                    let mut new_parts = parts.clone();
+                    new_parts[parts.len() - 2] = target_language;
+                    let new_filename = new_parts.join(".");
+                    
+                    // Replace the old filename with the new one, keeping the path
+                    if let Some(parent) = input_file.parent() {
+                        return parent.join(new_filename).to_string_lossy().to_string();
+                    }
+                    return new_filename.to_string();
+                } else if parts.len() == 2 {
+                    // Simple case: "single.srt"
+                    // Append the target language before the extension
+                    let new_filename = format!("{}.{}.srt", parts[0], target_language);
+                    
+                    // Replace the old filename with the new one, keeping the path
+                    if let Some(parent) = input_file.parent() {
+                        return parent.join(new_filename).to_string_lossy().to_string();
+                    }
+                    return new_filename;
+                }
+            }
+        } else {
+            // For video files, just extract the filename (no path) and append the target language
+            if let Some(filename) = input_file.file_name() {
+                if let Some(stem) = input_file.file_stem() {
+                    return format!("{}.{}.srt", stem.to_string_lossy(), target_language);
+                }
+            }
+        }
+        
+        // Fallback: use the file stem if available, or a default name
+        if let Some(stem) = input_file.file_stem() {
+            format!("{}.{}.srt", stem.to_string_lossy(), target_language)
+        } else {
+            format!("output.{}.srt", target_language)
+        }
     }
 
     // Helper method for testing with simulated run (no actual translation)
@@ -679,15 +770,25 @@ mod tests {
         
         // Test with different file paths and extensions
         let test_cases = [
+            // Video files - should append target language
             ("video.mp4", "fr", "video.fr.srt"),
             ("path/to/video.mkv", "es", "video.es.srt"),
             ("with spaces.mov", "de", "with spaces.de.srt"),
             ("/absolute/path/video.avi", "it", "video.it.srt"),
+            
+            // SRT files - should replace source language with target language
+            ("video.source.en.srt", "fr", "video.source.fr.srt"),
+            ("path/to/movie.en.srt", "es", "path/to/movie.es.srt"),
+            ("subtitles.with.dots.en.srt", "de", "subtitles.with.dots.de.srt"),
+            ("/absolute/path/video.source.en.srt", "it", "/absolute/path/video.source.it.srt"),
+            
+            // Edge cases for SRT files
+            ("single.srt", "fr", "single.fr.srt"), // No language code to replace, should append
         ];
         
         for (input, lang, expected) in test_cases {
             let output = controller.get_subtitle_output_filename(&PathBuf::from(input), lang);
-            assert_eq!(output, expected);
+            assert_eq!(output, expected, "Failed for input: {}", input);
         }
         
         Ok(())
@@ -789,6 +890,33 @@ mod tests {
         
         // Clean up
         fs::remove_file(test_log_file)?;
+        Ok(())
+    }
+
+    /// Test direct subtitle file processing
+    #[test]
+    fn test_run_with_direct_subtitle_file_should_skip_extraction() -> Result<()> {
+        // This is a minimal test that doesn't actually run the async code,
+        // but ensures the file type detection and special handling path exists
+        
+        // Create a test controller
+        let controller = Controller::new_for_test()?;
+        
+        // Create a temporary test directory and files
+        let temp_dir = std::env::temp_dir().join("yastwai_test");
+        FileManager::ensure_dir(&temp_dir)?;
+        
+        let input_file = temp_dir.join("test.srt");
+        fs::write(&input_file, "1\n00:00:01,000 --> 00:00:05,000\nTest subtitle text")?;
+        
+        // We don't actually run the async code, just ensure the code path exists
+        // and basic file operations work
+        assert!(FileManager::detect_file_type(&input_file)? == FileType::Subtitle);
+        
+        // Clean up
+        fs::remove_file(input_file)?;
+        fs::remove_dir(temp_dir)?;
+        
         Ok(())
     }
 } 

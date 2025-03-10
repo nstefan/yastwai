@@ -632,8 +632,8 @@ impl SubtitleCollection {
         Self::parse_srt_string(&content)
     }
     
-    /// Parse SRT file content to subtitle entries
-    fn parse_srt_string(content: &str) -> Result<Vec<SubtitleEntry>> {
+    /// Parse SRT format string into subtitle entries
+    pub fn parse_srt_string(content: &str) -> Result<Vec<SubtitleEntry>> {
         let mut entries = Vec::new();
         let mut lines = content.lines().peekable();
         

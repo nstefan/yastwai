@@ -45,6 +45,16 @@ These checks will help maintain code quality and ensure that all contributions m
 - Batch processing for translating multiple files
 - Translated subtitles are always saved next to the original video files
 - Option to force overwriting existing translations
+- YASTWAI automatically extracts subtitles from video files, translates them to a target language, and saves the translated subtitles
+- Supports multiple translation providers
+- Configurable language pairs for translation
+- Handles video files with or without embedded subtitles
+- Direct translation of subtitle files (SRT) without needing a video file
+- Smart batch processing for faster translation
+- Filter videos by format, subtitle presence, etc.
+- Rate limiting and retry mechanism to avoid API issues
+- Preserves subtitle formatting and timing
+- Optimized for high-quality translation of subtitles
 <!-- END_SECTION: features -->
 
 ## Installation
@@ -88,7 +98,10 @@ cp conf.example.json conf.json
 ./target/release/yastwai video.mkv
 
 # For a directory of video files
-./target/release/yastwai /path/to/videos
+./target/release/yastwai videos/
+
+# For direct subtitle translation (without needing a video file)
+./target/release/yastwai subtitles.srt
 
 # Force overwrite of existing translations
 ./target/release/yastwai -f video.mkv
@@ -97,6 +110,12 @@ cp conf.example.json conf.json
 # With environment variable RUST_LOG for logging
 RUST_LOG=debug ./target/release/yastwai video.mkv
 ```
+
+3. The application will automatically detect if the input is a subtitle file (SRT) or a video file:
+   - For subtitle files, it will skip the extraction process and translate the source subtitle file directly
+   - For video files, it will extract the subtitles first and then translate them
+
+Note: When processing a subtitle file directly, the source language specified in the configuration is ignored, and the subtitle text is translated directly.
 
 The translated subtitles will be saved next to the original video files with a filename format of `original_name.{target_language}.srt`. By default, the tool will skip any video that already has a subtitle file in the target language. Use the `-f` or `--force` flag to overwrite existing translations.
 <!-- END_SECTION: usage -->
