@@ -2,16 +2,9 @@
 
 This document explains how to use the `create-pr.sh` script to automate Pull Request creation for the YASTwAI project.
 
-## PR for Current Branch: `update-create-commit-script`
+## PR Creation Script: `create-pr.sh`
 
-The current branch contains changes that:
-
-1. Added a non-interactive `create-commit.sh` script optimized for bot usage
-2. Updated the Cursor rules for clarity and better organization
-
-## Using `create-pr.sh`
-
-The `create-pr.sh` script automates PR creation with smart defaults while providing flexibility through command-line options.
+The `create-pr.sh` script automates PR creation with smart defaults while providing flexibility through command-line options. It doesn't require the GitHub CLI.
 
 ### Basic Usage
 
@@ -25,7 +18,7 @@ This will:
 - Use the first commit message as the PR title
 - Generate a PR body from all commit details and file changes
 - Target the `main` branch
-- Create the PR using GitHub CLI
+- Open your browser with the PR creation page pre-filled
 
 ### Advanced Options
 
@@ -53,8 +46,33 @@ When auto-generating the PR body, the script:
 
 ### Requirements
 
-- GitHub CLI (`gh`) must be installed and authenticated
 - Git command-line tools
+- A web browser
+- Perl (for URL encoding)
+
+### How It Works
+
+The script:
+
+1. Gathers information about your current branch and changes
+2. Constructs a properly formatted GitHub PR URL with all parameters
+3. Opens your default browser to GitHub's pull request creation page
+4. Pre-fills the PR title, body, and other settings based on your inputs
+5. Allows you to review and submit the PR in your browser
+
+### Automation Notes
+
+- The script is designed to be non-interactive, making it suitable for use in automated workflows
+- All temporary files are automatically cleaned up
+- Browser detection works on macOS, Linux, and Windows
+- If a browser can't be opened, the URL is displayed and copied to clipboard when possible
+
+## PR for Current Branch: `update-create-commit-script`
+
+The current branch contains changes that:
+
+1. Added a non-interactive `create-commit.sh` script optimized for bot usage
+2. Updated the Cursor rules for clarity and better organization
 
 ## Example: Current Branch PR
 

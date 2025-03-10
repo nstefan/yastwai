@@ -1,6 +1,7 @@
 #!/bin/bash
 # Script to create a GitHub Pull Request based on commits in the current branch
 # Non-interactive version for automated use by bots
+# This version does not rely on GitHub CLI (gh)
 
 # Function to show usage
 show_usage() {
@@ -65,14 +66,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Get current branch
-CURRENT_BRANCH=$(git branch --show-current)
+CURRENT_BRANCH=$(git branch --show-current | cat)
 if [ -z "$CURRENT_BRANCH" ]; then
     echo "Error: Not on any branch"
     exit 1
 fi
 
 # Ensure we have commits
-COMMIT_COUNT=$(git rev-list --count "$BASE_BRANCH..$CURRENT_BRANCH")
+COMMIT_COUNT=$(git rev-list --count "$BASE_BRANCH..$CURRENT_BRANCH" | cat)
 if [ "$COMMIT_COUNT" -eq 0 ]; then
     echo "Error: No commits found between $BASE_BRANCH and $CURRENT_BRANCH"
     exit 1
@@ -80,29 +81,29 @@ fi
 
 # Generate PR title if not provided
 if [ -z "$PR_TITLE" ]; then
-    PR_TITLE=$(git log -1 --pretty=%s "$CURRENT_BRANCH")
+    PR_TITLE=$(git log -1 --pretty=%s "$CURRENT_BRANCH" | cat)
 fi
 
 # Generate PR body if needed
 if [ -z "$PR_BODY" ] && [ -z "$PR_BODY_FILE" ] && [ "$AUTO_GENERATE" = true ]; then
-    TEMP_BODY_FILE=$(mktemp)
+    TEMP_BODY=$(mktemp)
     
     # Add summary header
-    echo "# Changes in this PR" > "$TEMP_BODY_FILE"
-    echo "" >> "$TEMP_BODY_FILE"
+    echo "# Changes in this PR" > "$TEMP_BODY"
+    echo "" >> "$TEMP_BODY"
     
     # List all commits with their messages and details
-    echo "## Commit Details" >> "$TEMP_BODY_FILE"
-    echo "" >> "$TEMP_BODY_FILE"
+    echo "## Commit Details" >> "$TEMP_BODY"
+    echo "" >> "$TEMP_BODY"
     
-    git log --reverse --pretty=format:"### %s%n%n**Date:** %ad%n%n%b%n" "$BASE_BRANCH..$CURRENT_BRANCH" >> "$TEMP_BODY_FILE"
+    git log --reverse --pretty=format:"### %s%n%n**Date:** %ad%n%n%b%n" "$BASE_BRANCH..$CURRENT_BRANCH" >> "$TEMP_BODY"
     
     # List changed files
-    echo "## Files Changed" >> "$TEMP_BODY_FILE"
-    echo "" >> "$TEMP_BODY_FILE"
-    git diff --stat "$BASE_BRANCH..$CURRENT_BRANCH" >> "$TEMP_BODY_FILE"
+    echo "## Files Changed" >> "$TEMP_BODY"
+    echo "" >> "$TEMP_BODY"
+    git diff --stat "$BASE_BRANCH..$CURRENT_BRANCH" >> "$TEMP_BODY"
     
-    PR_BODY_FILE="$TEMP_BODY_FILE"
+    PR_BODY_FILE="$TEMP_BODY"
 fi
 
 # Read body from file if provided
@@ -110,50 +111,98 @@ if [ -n "$PR_BODY_FILE" ]; then
     PR_BODY=$(cat "$PR_BODY_FILE")
     
     # Clean up temporary file if we created one
-    if [ -n "$TEMP_BODY_FILE" ] && [ "$PR_BODY_FILE" = "$TEMP_BODY_FILE" ]; then
-        rm "$TEMP_BODY_FILE"
+    if [[ "$PR_BODY_FILE" == /tmp/* ]]; then
+        rm "$PR_BODY_FILE"
     fi
 fi
 
-# Check if gh CLI is installed
-if ! command -v gh &> /dev/null; then
-    echo "Error: GitHub CLI (gh) is not installed. Please install it first."
-    echo "See: https://github.com/cli/cli#installation"
+# Encode the PR body for URL
+encode_url_param() {
+    echo -n "$1" | perl -pe 's/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/ge'
+}
+
+# Get the GitHub repo URL
+get_github_url() {
+    # Get the remote URL
+    REMOTE_URL=$(git config --get remote.origin.url | cat)
+    
+    # Remove .git suffix if present and convert SSH URL to HTTPS URL if needed
+    if [[ "$REMOTE_URL" == git@github.com:* ]]; then
+        # Convert from SSH format (git@github.com:user/repo.git) to HTTPS format
+        REPO_PATH=${REMOTE_URL#git@github.com:}
+        REPO_PATH=${REPO_PATH%.git}
+        echo "https://github.com/$REPO_PATH"
+    elif [[ "$REMOTE_URL" == https://github.com/* ]]; then
+        # Already HTTPS format, just remove .git if present
+        echo "${REMOTE_URL%.git}"
+    else
+        # Unknown format, return as is
+        echo "$REMOTE_URL"
+    fi
+}
+
+# Construct the PR URL
+construct_pr_url() {
+    local base_url="$1"
+    local base_branch="$2"
+    local head_branch="$3"
+    local title="$4"
+    local body="$5"
+    local is_draft="$6"
+    
+    # Encode parameters for URL
+    local encoded_title=$(encode_url_param "$title")
+    local encoded_body=$(encode_url_param "$body")
+    
+    # Construct the URL
+    local url="${base_url}/compare/${base_branch}...${head_branch}?quick_pull=1&title=${encoded_title}&body=${encoded_body}"
+    
+    # Add draft parameter if needed
+    if [ "$is_draft" = true ]; then
+        url="${url}&draft=1"
+    fi
+    
+    echo "$url"
+}
+
+# Get the GitHub repository URL
+REPO_URL=$(get_github_url)
+if [ -z "$REPO_URL" ]; then
+    echo "Error: Could not determine GitHub repository URL"
     exit 1
 fi
 
-# Create the PR
 echo "Creating PR:"
 echo "Title: $PR_TITLE"
 echo "Base branch: $BASE_BRANCH"
 echo "Current branch: $CURRENT_BRANCH"
+echo "Repository: $REPO_URL"
 
-# Construct the command
-PR_CMD="gh pr create --base \"$BASE_BRANCH\" --head \"$CURRENT_BRANCH\" --title \"$PR_TITLE\""
+# Construct the PR URL
+PR_URL=$(construct_pr_url "$REPO_URL" "$BASE_BRANCH" "$CURRENT_BRANCH" "$PR_TITLE" "$PR_BODY" "$DRAFT")
 
-if [ -n "$PR_BODY" ]; then
-    # Save body to a temporary file for the command
-    BODY_FILE=$(mktemp)
-    echo "$PR_BODY" > "$BODY_FILE"
-    PR_CMD="$PR_CMD --body-file \"$BODY_FILE\""
-fi
-
-if [ "$DRAFT" = true ]; then
-    PR_CMD="$PR_CMD --draft"
-fi
-
-# Execute the command
-eval "$PR_CMD"
-RESULT=$?
-
-# Clean up
-if [ -n "$BODY_FILE" ]; then
-    rm "$BODY_FILE"
-fi
-
-if [ $RESULT -eq 0 ]; then
-    echo "Pull request created successfully!"
+# Check which browser opening command is available
+if command -v open &> /dev/null; then
+    # macOS
+    open "$PR_URL"
+elif command -v xdg-open &> /dev/null; then
+    # Linux
+    xdg-open "$PR_URL"
+elif command -v start &> /dev/null; then
+    # Windows
+    start "$PR_URL"
 else
-    echo "Failed to create pull request. Error code: $RESULT"
-    exit $RESULT
-fi 
+    echo "Could not detect browser opening command. Please open this URL manually:"
+    echo "$PR_URL"
+    # Copy URL to clipboard if possible
+    if command -v pbcopy &> /dev/null; then
+        echo "$PR_URL" | pbcopy
+        echo "URL copied to clipboard."
+    elif command -v xclip &> /dev/null; then
+        echo "$PR_URL" | xclip -selection clipboard
+        echo "URL copied to clipboard."
+    fi
+fi
+
+echo "Pull request URL opened in browser."
+echo "URL: $PR_URL" 
