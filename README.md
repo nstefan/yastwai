@@ -236,6 +236,15 @@ YASTwAI uses a direct translation approach that:
 ## Development
 
 <!-- SECTION: development -->
+### Contributing
+
+Please read our [Contributing Guidelines](CONTRIBUTING.md) before starting development. The guidelines include:
+- Git workflow and branch management
+- Commit message format and requirements
+- Code style and standards
+- Testing requirements
+- PR process
+
 ### Running Tests
 
 ```bash
