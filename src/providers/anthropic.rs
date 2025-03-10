@@ -1,8 +1,8 @@
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
-use anyhow::{Result, anyhow};
-use reqwest::Client;
-use log::{error, info};
+use anyhow::{Result, anyhow, Context};
+use reqwest::{Client, header};
+use log::error;
 
 /// Anthropic client for interacting with Anthropic API
 pub struct Anthropic {

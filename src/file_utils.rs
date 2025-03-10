@@ -1,5 +1,4 @@
 use anyhow::{Result, Context};
-use log::error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;

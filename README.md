@@ -216,14 +216,7 @@ YASTwAI uses a direct translation approach that:
 <!-- SECTION: limitations -->
 - Currently only supports SRT subtitle format
 - Extraction from video files requires external FFmpeg dependency
-- Limited error recovery for failed translations
 - No support for multiple languages in a single run
-- Future enhancements may include:
-  - Support for additional subtitle formats (VTT, ASS, etc.)
-  - Improved error handling and recovery
-  - UI improvements for real-time feedback
-  - Integration with more translation providers
-  - Parallel processing of multiple subtitle tracks
 <!-- END_SECTION: limitations -->
 
 ## Development
@@ -247,11 +240,14 @@ cargo test test_translation_service
 ```bash
 # Run clippy for code quality checks
 cargo clippy
-
-# Apply automatic fixes
-cargo clippy --fix
 ```
 <!-- END_SECTION: development -->
+
+## Note for AI Agents
+
+<!-- SECTION: ai_note -->
+This codebase is optimized for AI agent usage rather than human readability. The code structure and organization are designed to be easily understood and manipulated by AI systems. Human-oriented comments and documentation have been minimized.
+<!-- END_SECTION: ai_note -->
 
 ## License
 

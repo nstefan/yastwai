@@ -1,14 +1,15 @@
 use anyhow::{Result, Context, anyhow};
-use log::{error, warn, info};
-use std::time::Duration;
+use log::{error, warn, info, debug};
+use std::time::{Duration, Instant};
 use url::Url;
 use std::sync::Arc;
 use regex::Regex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use futures::future::join_all;
-use std::time::Instant;
 use std::sync::Mutex as StdMutex;
 use tokio::sync::Semaphore;
+use std::fmt;
+use std::str::FromStr;
+use futures::stream::{self, StreamExt};
 
 use crate::app_config::{TranslationConfig, TranslationProvider as ConfigTranslationProvider};
 use crate::subtitle_processor::SubtitleEntry;
@@ -1230,7 +1231,7 @@ impl TranslationService {
                             continue;
                         }
                     }
-                } else if let Some(entry_num) = current_entry_num {
+                } else if let Some(_entry_num) = current_entry_num {
                     // Add content to the current entry
                     if !current_entry_text.is_empty() {
                         current_entry_text.push('\n');
@@ -1287,8 +1288,8 @@ impl TranslationService {
                         
                         while !individual_success && retry_count < max_retries {
                             // Calculate max_tokens with potential reduction factor
-                            let text_len = individual_text.len();
-                            let mut is_token_limit_error = false;
+                            let _text_len = individual_text.len();
+                            let mut _is_token_limit_error = false;
                             
                             match self.translate_text_with_usage(
                                 &individual_text,
@@ -1306,11 +1307,11 @@ impl TranslationService {
                                     
                                     // Check if this is a max_tokens error for Anthropic
                                     let error_msg = e.to_string().to_lowercase();
-                                    is_token_limit_error = error_msg.contains("max_tokens") && 
+                                    _is_token_limit_error = error_msg.contains("max_tokens") && 
                                                       (error_msg.contains("maximum allowed") || 
                                                        error_msg.contains("exceeds"));
                                     
-                                    if is_token_limit_error && retry_count < max_retries {
+                                    if _is_token_limit_error && retry_count < max_retries {
                                         // This is a token limit error, adjust our max_tokens calculation
                                         reduce_tokens_factor *= 0.7; // Reduce by 30% each time
                                         capture_log("WARN", &format!("Token limit error for entry {}. Reducing max_tokens by factor {}.", 
@@ -1339,12 +1340,12 @@ impl TranslationService {
                                 .join("\n");
                                 
                             if !content.trim().is_empty() {
-                                translated_entry.text = preserve_formatting(&entry.text, &content.trim());
+                                translated_entry.text = preserve_formatting(&entry.text, content.trim());
                                 capture_log("INFO", &format!("Successfully translated entry {} individually", entry.seq_num));
                             } else {
                                 // Couldn't extract proper content - use original with warning
                                 capture_log("ERROR", &format!("Failed to extract translated content for entry {}. Using original text.", entry.seq_num));
-                                translated_entry.text = format!("{}", entry.text);
+                                translated_entry.text = entry.text.to_string();
                             }
                         } else {
                             // Individual translation failed - use original with warning
@@ -1397,8 +1398,8 @@ impl TranslationService {
                 
                 while !individual_success && retry_count < max_retries {
                     // Calculate max_tokens with potential reduction factor
-                    let text_len = individual_text.len();
-                    let mut is_token_limit_error = false;
+                    let _text_len = individual_text.len();
+                    let mut _is_token_limit_error = false;
                     
                     match self.translate_text_with_usage(
                         &individual_text,
@@ -1416,11 +1417,11 @@ impl TranslationService {
                             
                             // Check if this is a max_tokens error for Anthropic
                             let error_msg = e.to_string().to_lowercase();
-                            is_token_limit_error = error_msg.contains("max_tokens") && 
+                            _is_token_limit_error = error_msg.contains("max_tokens") && 
                                                   (error_msg.contains("maximum allowed") || 
                                                    error_msg.contains("exceeds"));
                             
-                            if is_token_limit_error && retry_count < max_retries {
+                            if _is_token_limit_error && retry_count < max_retries {
                                 // This is a token limit error, adjust our max_tokens calculation
                                 reduce_tokens_factor *= 0.7; // Reduce by 30% each time
                                 capture_log("WARN", &format!("Token limit error for entry {}. Reducing max_tokens by factor {}.", 
@@ -1449,12 +1450,12 @@ impl TranslationService {
                         .join("\n");
                         
                     if !content.trim().is_empty() {
-                        translated_entry.text = preserve_formatting(&entry.text, &content.trim());
+                        translated_entry.text = preserve_formatting(&entry.text, content.trim());
                         capture_log("INFO", &format!("Successfully translated entry {} individually", entry.seq_num));
                     } else {
                         // Couldn't extract proper content - use original with warning
                         capture_log("ERROR", &format!("Failed to extract translated content for entry {} after batch failure. Using original text.", entry.seq_num));
-                        translated_entry.text = format!("{}", entry.text);
+                        translated_entry.text = entry.text.to_string();
                     }
                 } else {
                     // Individual translation failed - use original with warning
@@ -1572,199 +1573,6 @@ fn preserve_formatting(original: &str, translated: &str) -> String {
     
     // If no special formatting, return the translation as-is
     translated.to_string()
-}
-
-/// Process translations where the line count doesn't match the original
-fn process_mismatched_translations(
-    batch: &[SubtitleEntry],
-    translated_lines: &[&str],
-    source_language: &str,
-    target_language: &str,
-    log_capture: &Arc<StdMutex<Vec<LogEntry>>>
-) -> Vec<SubtitleEntry> {
-    // Capture log information
-    let capture_log = |level: &str, message: &str| {
-        let mut logs = log_capture.lock().unwrap();
-        logs.push(LogEntry {
-            level: level.to_string(),
-            message: message.to_string()
-        });
-    };
-    
-    if translated_lines.len() > batch.len() {
-        // We'll use a smarter matching algorithm here that tries to preserve
-        // approximately the right amount of text per subtitle entry
-        
-        // First calculate the average characters per original entry
-        let original_chars: usize = batch.iter().map(|entry| entry.text.len()).sum();
-        let translated_chars: usize = translated_lines.iter().map(|line| line.len()).sum();
-        
-        // Scale factor to account for language differences (target might be longer/shorter than source)
-        let scale_factor = if original_chars > 0 {
-            translated_chars as f64 / original_chars as f64
-        } else {
-            1.0
-        };
-        
-        let mut line_index = 0;
-        let mut entries = Vec::with_capacity(batch.len());
-        
-        for entry in batch {
-            // How many characters we expect in the translation, scaled
-            let expected_chars = (entry.text.len() as f64 * scale_factor).round() as usize;
-            let mut accumulated_text = String::new();
-            let mut chars_so_far = 0;
-            
-            // Continue adding lines until we get close to the expected character count
-            // or run out of translated lines
-            while line_index < translated_lines.len() && chars_so_far < expected_chars {
-                if !accumulated_text.is_empty() {
-                    accumulated_text.push('\n');
-                }
-                accumulated_text.push_str(translated_lines[line_index]);
-                chars_so_far += translated_lines[line_index].len();
-                line_index += 1;
-                
-                // If we're at 80% of expected chars and there are more entries coming,
-                // leave the rest for later entries
-                if chars_so_far >= expected_chars * 8 / 10 && 
-                   entries.len() < batch.len() - 1 {
-                    break;
-                }
-            }
-            
-            // Create a new subtitle entry with the translated text
-            let mut translated_entry = entry.clone();
-            
-            // If we couldn't get any lines (ran out), retranslate this entry specifically
-            if accumulated_text.is_empty() {
-                // We'll generate a more specific message but still use the source
-                // The full retranslation logic would be added in a real implementation
-                capture_log("ERROR", &format!("Missing translation for subtitle {}", entry.seq_num));
-                
-                // For now, preserve the original text but mark it clearly
-                let fallback_text = format!("[TRANSLATION NEEDED] {}", entry.text);
-                translated_entry.text = fallback_text;
-            } else {
-                // Preserve formatting in the original text
-                translated_entry.text = preserve_formatting(&entry.text, &accumulated_text);
-            }
-            
-            // Add the translated entry to the results
-            entries.push(translated_entry);
-        }
-        
-        entries
-    } else {
-        // Original matching algorithm for when lines match exactly or we have fewer translated lines
-        let mut entries = Vec::with_capacity(batch.len());
-        let mut translated_line_idx = 0;
-        
-        for (i, entry) in batch.iter().enumerate() {
-            // If we've used all translated lines, but still have entries, that's an error
-            if translated_line_idx >= translated_lines.len() {
-                // Log a warning that we're missing translations
-                capture_log("ERROR", &format!("Translation API did not return enough translated lines. Got {} but needed {}. Adding missing translation markers.", 
-                      translated_lines.len(), batch.len()));
-                
-                // For remaining entries, attempt to translate them individually
-                // This is a fallback mechanism for the case where batch translation fails
-                capture_log("WARN", &format!("Will try to translate remaining {} subtitles individually", batch.len() - i));
-                
-                // Add the remaining entries with missing translation markers for now
-                for j in i..batch.len() {
-                    let mut new_entry = batch[j].clone();
-                    
-                    // Log the issue
-                    capture_log("ERROR", &format!("Missing translation for entry {}. Using original text with warning marker.", new_entry.seq_num));
-                    
-                    // Mark the entry as needing translation but keep original text
-                    new_entry.text = format!("[NEEDS TRANSLATION] {}", new_entry.text);
-                    entries.push(new_entry);
-                }
-                
-                break;
-            }
-            
-            // Get the current translated line
-            let translated_line = translated_lines[translated_line_idx];
-            translated_line_idx += 1;
-            
-            // Create a new subtitle entry with the translated text
-            let mut translated_entry = entry.clone();
-            
-            // Preserve formatting from the original
-            translated_entry.text = preserve_formatting(&entry.text, translated_line);
-            
-            // Add the translated entry to the results
-            entries.push(translated_entry);
-        }
-        
-        entries
-    }
-}
-
-// Function to attempt individual translation of an entry
-async fn translate_single_entry(
-    service: &TranslationService,
-    entry: &SubtitleEntry,
-    source_lang: &str,
-    target_lang: &str,
-    log_capture: &Arc<StdMutex<Vec<LogEntry>>>
-) -> String {
-    // Capture log for this specific translation
-    let capture_log = |level: &str, message: &str| {
-        let mut logs = log_capture.lock().unwrap();
-        logs.push(LogEntry {
-            level: level.to_string(),
-            message: message.to_string()
-        });
-    };
-    
-    // Try to translate the individual entry
-    capture_log("INFO", &format!("Attempting individual translation for entry {}", entry.seq_num));
-    
-    // Format with entry marker to maintain consistency
-    let entry_text = format!("ENTRY_{}:\n{}", entry.seq_num, entry.text);
-    
-    // Maximum 3 retry attempts for individual entries
-    for attempt in 1..=3 {
-        match service.translate_text_with_usage(
-            &entry_text,
-            source_lang,
-            target_lang,
-            Some(Arc::clone(log_capture))
-        ).await {
-            Ok((translated_text, _)) => {
-                // Try to extract the translated text without the marker
-                if let Some(content) = translated_text.lines()
-                    .skip_while(|&line| !line.starts_with("ENTRY_") && line.trim().is_empty())
-                    .skip(1) // Skip the marker line
-                    .collect::<Vec<&str>>()
-                    .join("\n")
-                    .trim()
-                    .to_string()
-                    .into() {
-                    capture_log("INFO", &format!("Successfully translated entry {} individually", entry.seq_num));
-                    return content;
-                }
-                
-                // If marker extraction failed, just use the whole response
-                return translated_text;
-            },
-            Err(e) => {
-                capture_log("WARN", &format!("Individual translation attempt {} for entry {} failed: {}", 
-                         attempt, entry.seq_num, e));
-                
-                // Wait briefly before retrying
-                tokio::time::sleep(std::time::Duration::from_millis(1000 * attempt)).await;
-            }
-        }
-    }
-    
-    // If all retries failed, return marked original
-    capture_log("ERROR", &format!("All individual translation attempts for entry {} failed", entry.seq_num));
-    format!("[NEEDS TRANSLATION] {}", entry.text)
 }
 
 #[cfg(test)]

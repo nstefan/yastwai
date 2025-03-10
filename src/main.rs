@@ -1,12 +1,11 @@
 use anyhow::{Result, anyhow, Context};
-use log::{debug, error, warn, info, LevelFilter, Log, Metadata, Record, Level, SetLoggerError};
+use log::{error, warn, LevelFilter, Log, Metadata, Record, Level, SetLoggerError};
 use std::process;
 use std::path::{Path, PathBuf};
-use std::io::{self, Write};
+use std::io::Write;
 use std::env;
 use std::fs::File;
 use std::io::BufReader;
-use serde_json;
 
 use crate::app_config::{Config, TranslationProvider};
 use app_controller::Controller;
@@ -230,7 +229,6 @@ async fn main() -> Result<()> {
         ).await?;
     } else if options.input_path.is_dir() {
         // Process a directory
-        warn!("Processing directory: {:?}", options.input_path.canonicalize()?);
         controller.run_folder(
             options.input_path.clone(),
             options.force_overwrite

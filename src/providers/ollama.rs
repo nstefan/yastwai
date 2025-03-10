@@ -1,8 +1,8 @@
+use anyhow::{Result, anyhow, Context};
+use reqwest::{Client, StatusCode};
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use serde::{Serialize, Deserialize};
-use anyhow::{Result, anyhow};
-use reqwest::Client;
-use log::{debug, error};
+use log::{error, debug};
 
 /// Ollama client for interacting with Ollama API
 pub struct Ollama {

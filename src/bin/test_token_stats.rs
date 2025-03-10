@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use yastwai::translation_service::TokenUsageStats;
 
 fn main() {

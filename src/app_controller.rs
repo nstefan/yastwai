@@ -1,7 +1,6 @@
 use anyhow::{Result, Context};
 use log::{error, warn, info, debug};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 use crate::app_config::{Config, SubtitleInfo};
 use crate::subtitle_processor::SubtitleCollection;
 use crate::translation_service::TranslationService;
@@ -9,7 +8,6 @@ use crate::language_utils;
 use crate::file_utils;
 use std::sync::Once;
 use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
-use tempfile::tempdir;
 use std::sync::Arc;
 use std::sync::Mutex;
 use crate::translation_service::LogEntry;

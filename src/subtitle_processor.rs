@@ -6,14 +6,12 @@ use once_cell::sync::Lazy;
 use anyhow::{Result, Context, anyhow};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use log::{error, warn, info, debug};
+use log::{error, warn, debug};
 use std::process::Command;
 use serde_json::{Value, from_str};
 use crate::app_config::SubtitleInfo;
 use crate::language_utils;
-use serde::{Deserialize, Serialize};
-use tempfile::NamedTempFile;
-use std::collections::HashMap;
+use std::cmp::Ordering;
 
 // @module: Subtitle processing and manipulation
 
