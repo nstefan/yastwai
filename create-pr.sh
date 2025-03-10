@@ -14,9 +14,11 @@ show_usage() {
     echo "  --base BRANCH       - Base branch to merge into (default: main)"
     echo "  --draft             - Create PR as draft (default: false)"
     echo "  --no-generate       - Skip auto-generation of PR body (default: false)"
+    echo "  --no-template       - Skip using PR template (default: false)"
     echo "  --help              - Display this help message"
     echo ""
     echo "If neither --body nor --body-text is provided, a PR body will be generated from commit messages."
+    echo "By default, the PR template from .github/pull_request_template.md will be used if available."
     exit 1
 }
 
@@ -24,9 +26,11 @@ show_usage() {
 BASE_BRANCH="main"
 DRAFT=false
 AUTO_GENERATE=true
+USE_TEMPLATE=true
 PR_TITLE=""
 PR_BODY=""
 PR_BODY_FILE=""
+PR_TEMPLATE_PATH=".github/pull_request_template.md"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -53,6 +57,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-generate)
             AUTO_GENERATE=false
+            shift
+            ;;
+        --no-template)
+            USE_TEMPLATE=false
             shift
             ;;
         --help|-h)
@@ -88,9 +96,17 @@ fi
 if [ -z "$PR_BODY" ] && [ -z "$PR_BODY_FILE" ] && [ "$AUTO_GENERATE" = true ]; then
     TEMP_BODY=$(mktemp)
     
-    # Add summary header
-    echo "# Changes in this PR" > "$TEMP_BODY"
-    echo "" >> "$TEMP_BODY"
+    # Start with PR template if available and requested
+    if [ "$USE_TEMPLATE" = true ] && [ -f "$PR_TEMPLATE_PATH" ]; then
+        cat "$PR_TEMPLATE_PATH" > "$TEMP_BODY"
+        echo "" >> "$TEMP_BODY"
+        echo "---" >> "$TEMP_BODY"
+        echo "" >> "$TEMP_BODY"
+    else
+        # Add summary header
+        echo "# Changes in this PR" > "$TEMP_BODY"
+        echo "" >> "$TEMP_BODY"
+    fi
     
     # List all commits with their messages and details
     echo "## Commit Details" >> "$TEMP_BODY"
@@ -177,6 +193,9 @@ echo "Title: $PR_TITLE"
 echo "Base branch: $BASE_BRANCH"
 echo "Current branch: $CURRENT_BRANCH"
 echo "Repository: $REPO_URL"
+if [ "$USE_TEMPLATE" = true ] && [ -f "$PR_TEMPLATE_PATH" ]; then
+    echo "Using PR template: $PR_TEMPLATE_PATH"
+fi
 
 # Construct the PR URL
 PR_URL=$(construct_pr_url "$REPO_URL" "$BASE_BRANCH" "$CURRENT_BRANCH" "$PR_TITLE" "$PR_BODY" "$DRAFT")

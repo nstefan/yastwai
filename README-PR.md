@@ -34,15 +34,18 @@ This will:
 - `--base BRANCH`: Set the base branch to merge into (default: main)
 - `--draft`: Create as draft PR
 - `--no-generate`: Skip auto-generation of PR body
+- `--no-template`: Skip using the GitHub PR template
 - `--help`: Display help message
 
-### PR Body Auto-Generation
+### PR Body Generation
 
-When auto-generating the PR body, the script:
+When generating the PR body, the script will:
 
-1. Creates a "Changes in this PR" header
-2. Lists all commits with their full details (including Prompt, Description, and Discussion sections)
-3. Includes a summary of all changed files
+1. Start with the PR template from `.github/pull_request_template.md` (unless `--no-template` is specified)
+2. Add a "Commit Details" section with all commits, including their full details (Prompt, Description, and Discussion)
+3. Include a summary of all changed files
+
+By using the standard GitHub PR template location, your PRs will maintain a consistent format while still including the commit history details.
 
 ### Requirements
 
