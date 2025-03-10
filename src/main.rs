@@ -508,9 +508,18 @@ fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: O
     let track_info = tracks.iter().find(|t| t.index as usize == track_id)
         .expect("Track should exist");
     
+    // Determine the language code to use in the output filename
+    let output_lang_code = if let Some(requested_lang) = language_code {
+        // Use the user's requested language code format
+        requested_lang.to_lowercase()
+    } else {
+        // If no language specified, use the track's language code
+        track_info.language.as_deref().unwrap_or("unknown").to_lowercase()
+    };
+    
     let output_filename = format!("{}.{}.srt", 
         input_file.file_stem().unwrap().to_string_lossy(),
-        track_info.language.as_deref().unwrap_or("unknown").to_lowercase());
+        output_lang_code);
     
     let output_file = output_dir.join(output_filename);
     
