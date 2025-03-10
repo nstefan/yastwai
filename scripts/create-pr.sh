@@ -9,9 +9,11 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --title TITLE       - PR title (optional, will be auto-generated if not provided)"
-    echo "  --body FILE         - File containing PR body (optional)"
+    echo "  --body-text TEXT    - PR body text (optional, will be auto-generated if not provided)"
+    echo "  --body-file FILE    - File containing PR body (optional, overrides --body-text)"
     echo "  --base BRANCH       - Base branch to merge into (default: main)"
     echo "  --draft             - Create PR as draft (default: false)"
+    echo "  --template          - Use PR template from scripts/pr-template.md (default: false)"
     echo "  --help              - Display this help message"
     exit 1
 }
@@ -20,7 +22,9 @@ show_usage() {
 BASE_BRANCH="main"
 DRAFT=false
 PR_TITLE=""
+PR_BODY_TEXT=""
 PR_BODY_FILE=""
+USE_TEMPLATE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -29,7 +33,11 @@ while [[ $# -gt 0 ]]; do
             PR_TITLE="$2"
             shift 2
             ;;
-        --body)
+        --body-text)
+            PR_BODY_TEXT="$2"
+            shift 2
+            ;;
+        --body-file)
             PR_BODY_FILE="$2"
             shift 2
             ;;
@@ -39,6 +47,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --draft)
             DRAFT=true
+            shift
+            ;;
+        --template)
+            USE_TEMPLATE=true
             shift
             ;;
         --help|-h)
@@ -170,37 +182,60 @@ if [ -z "$PR_TITLE" ]; then
 fi
 
 # Generate a PR body that actually summarizes changes
-if [ -z "$PR_BODY_FILE" ]; then
+if [ -z "$PR_BODY_FILE" ] && [ -z "$PR_BODY_TEXT" ]; then
     # Create a temporary file for the PR body
     PR_BODY_FILE=$(mktemp)
     
-    # Get the first commit message for context
-    FIRST_COMMIT_MSG=$(git log --reverse --pretty=format:"%s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -1)
-    
-    # Generate a useful summary
-    {
-        echo "## Summary"
-        echo ""
-        echo "This PR includes changes to:"
+    if [ "$USE_TEMPLATE" = true ] && [ -f "scripts/pr-template.md" ]; then
+        # Start with the template
+        cp scripts/pr-template.md "$PR_BODY_FILE"
         
-        # List files changed grouped by type
-        echo "### Files Changed:"
-        git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
-            if [[ -f "$file" ]]; then
-                # Get file extension for categorization
-                EXT="${file##*.}"
-                echo "- \`$file\`"
+        # Replace the title placeholder with actual title
+        sed -i '' "s/\[PR Title\]/$PR_TITLE/" "$PR_BODY_FILE"
+        
+        # Add auto-generated content after the template
+        {
+            echo ""
+            echo "## Auto-generated Content"
+            echo ""
+            echo "### Files Changed"
+            git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
+                if [[ -f "$file" ]]; then
+                    echo "- \`$file\`"
+                fi
+            done
+            echo ""
+            echo "### Commits"
+            git log --reverse --pretty=format:"- %s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -10
+            if [ "$COMMIT_COUNT" -gt 10 ]; then
+                echo "- ... and $((COMMIT_COUNT - 10)) more commits"
             fi
-        done
-        echo ""
-        
-        # List commit messages as bullet points
-        echo "### Commits:"
-        git log --reverse --pretty=format:"- %s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -10
-        if [ "$COMMIT_COUNT" -gt 10 ]; then
-            echo "- ... and $((COMMIT_COUNT - 10)) more commits"
-        fi
-    } > "$PR_BODY_FILE"
+        } >> "$PR_BODY_FILE"
+    else
+        # Generate a useful summary without template
+        {
+            echo "## Summary"
+            echo ""
+            echo "This PR includes changes to:"
+            echo ""
+            echo "### Files Changed"
+            git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
+                if [[ -f "$file" ]]; then
+                    echo "- \`$file\`"
+                fi
+            done
+            echo ""
+            echo "### Commits"
+            git log --reverse --pretty=format:"- %s" "$BASE_BRANCH..$CURRENT_BRANCH" | head -10
+            if [ "$COMMIT_COUNT" -gt 10 ]; then
+                echo "- ... and $((COMMIT_COUNT - 10)) more commits"
+            fi
+        } > "$PR_BODY_FILE"
+    fi
+elif [ -n "$PR_BODY_TEXT" ] && [ -z "$PR_BODY_FILE" ]; then
+    # Create a temporary file with the provided body text
+    PR_BODY_FILE=$(mktemp)
+    echo "$PR_BODY_TEXT" > "$PR_BODY_FILE"
 fi
 
 # URL encode a string for use in a URL
