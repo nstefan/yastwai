@@ -1,94 +1,40 @@
 # Contributing to YASTwAI
 
-Thank you for your interest in contributing to YASTwAI (Yet Another Subtitles Translation with AI)! This document provides guidelines and workflows to help you contribute effectively.
+Thank you for considering contributing to YASTwAI (Yet Another Subtitle Translator with AI)! This document provides guidelines for code contributions, pull requests, and other development processes.
 
 ## Table of Contents
+- [Code Style](#code-style)
+- [Branch Organization](#branch-organization)
+- [Commits](#commits)
+- [Pull Requests](#pull-requests)
+- [Automated Tools](#automated-tools)
 
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Workflow](#development-workflow)
-- [Pull Request Process](#pull-request-process)
-- [Commit Guidelines](#commit-guidelines)
-- [Coding Standards](#coding-standards)
-- [Testing](#testing)
-- [Documentation](#documentation)
+## Code Style
 
-## Code of Conduct
+- All code should follow Rust's official style guidelines
+- Use functional programming approaches where appropriate
+- Maintain immutability where possible
+- Document all public functions and types
+- Write clear error messages and proper error handling
+- All code, comments, and documentation must be in English
 
-Contributors are expected to maintain a respectful and inclusive environment. Be considerate of different perspectives and experiences, and focus on constructive collaboration.
+## Branch Organization
 
-## Getting Started
+- `main` - The primary branch containing stable code
+- `feature/<feature-name>` - For new features
+- `fix/<bug-description>` - For bug fixes
+- `refactor/<component>` - For code refactoring
+- `docs/<documentation-change>` - For documentation-only changes
 
-1. Fork the repository
-2. Clone your fork locally
-3. Set up the development environment
-4. Create a feature branch from `main`
+## Commits
 
-```bash
-git clone https://github.com/YOUR-USERNAME/yastwai.git
-cd yastwai
-git checkout -b feature/your-feature-name
+Use the `scripts/create-commit.sh` script to generate properly formatted commits:
+
+```
+./scripts/create-commit.sh <title> <prompt> <description> <discussion>
 ```
 
-## Development Workflow
-
-1. Make your changes, following the project's coding standards
-2. Add tests for new functionality
-3. Ensure all tests pass
-4. Update documentation as needed
-5. Commit your changes using the project's commit guidelines
-6. Push your branch to your fork
-7. Create a pull request
-
-## Pull Request Process
-
-### Using the Automated PR Script
-
-YASTwAI provides a `create-pr.sh` script to automate PR creation with smart defaults:
-
-#### Basic Usage
-
-```bash
-./scripts/create-pr.sh
-```
-
-This will:
-- Use the first commit message as the PR title
-- Generate a PR body from all commit details and file changes
-- Target the `main` branch
-- Open your browser with the PR creation page pre-filled
-
-#### Advanced Options
-
-```bash
-./scripts/create-pr.sh --title "Custom PR Title" --body FILE --base main --draft
-```
-
-Available options:
-- `--title TITLE`: Set a custom PR title
-- `--body FILE`: Use contents of FILE as PR body 
-- `--base BRANCH`: Set the base branch to merge into (default: main)
-- `--draft`: Create as draft PR
-- `--help`: Display help message
-
-### PR Requirements
-
-All pull requests should:
-- Have a clear and descriptive title
-- Include a comprehensive description of changes
-- Reference any related issues
-- Pass all CI checks
-- Be reviewed by at least one maintainer
-- Follow the PR template provided
-
-## Commit Guidelines
-
-YASTwAI follows the standards defined in the `yastwai.mdc` ruleset for commit messages. Each commit should provide clear information about what changes were made, why they were made, and any challenges encountered.
-
-### Commit Message Structure
-
-Each commit message should follow this structure:
-
+Commit structure:
 ```
 <Concise summary as title>
 
@@ -99,86 +45,55 @@ Description: <Detailed description of changes>
 Discussion: <Challenges faced and how they were resolved>
 ```
 
-#### Components
+## Pull Requests
 
-1. **Title**: A concise, one-line summary of the changes (50 characters or less)
-   - Use imperative mood (e.g., "Add feature" not "Added feature")
-   - Capitalize the first word
-   - No period at the end
+### Bot-Friendly PR Creation
 
-2. **Prompt**: The original user request that led to these changes
-   - Include the complete text of the prompt
-   - For non-prompted changes, briefly describe the reason for the change
-
-3. **Description**: A detailed explanation of what was changed and why
-   - List specific modifications made
-   - Explain the rationale behind implementation choices
-   - Use bullet points for clarity when appropriate
-   - Keep each line under 72 characters
-
-4. **Discussion**: A summary of challenges encountered and their solutions
-   - Include any technical difficulties faced
-   - Mention alternate approaches considered
-   - Document any lessons learned
-   - Note any future improvements or follow-up tasks
-
-### Example Commit Message
-
-```
-Add selective Clippy lint configuration
-
-Prompt: Read forum thread and provide guidance on how to update my project to follow this recommendation.
-
-Description: Added configuration to selectively suppress Clippy auto-fixes for specific lints:
-1. Created a clippy.toml file with proper configurations
-2. Added global lint configurations in lib.rs and main.rs to prevent unwanted auto-fixes
-3. Created a run-clippy.sh script to run Clippy with specific flags
-4. Updated README.md with instructions for using the new Clippy configuration
-
-Discussion: Faced issues with the correct syntax for clippy.toml (using hyphens instead of underscores) and the proper command for cargo fix. The solution follows the forum recommendation by explicitly allowing certain lints in the codebase to prevent automatic fixing while still showing the warnings.
-```
-
-### Using the Commit Script
-
-A helper script `./scripts/create-commit.sh` is provided to streamline the commit message creation process:
+For automated PR creation, especially for AI assistants or bots, use the `create-pr.sh` script with the following syntax:
 
 ```bash
-./scripts/create-commit.sh "Commit title" "Original prompt"
+./scripts/create-pr.sh --body "Your PR description with \n for newlines" --template
 ```
 
-The script will:
-1. Create a template commit message
-2. Open your default editor to complete the message
-3. Show a preview of the final message
-4. Stage changes and create the commit
+Key parameters:
+- `--title "PR Title"` - Optional, will auto-generate if omitted
+- `--body "Description with \n for newlines"` - PR body with escaped newlines
+- `--body-file path/to/file.md` - Alternative to --body, use a file instead
+- `--template` - Use the template from scripts/pr-template.md
+- `--compact` - Generate a more compact PR description
+- `--summary-only` - Only include a brief summary of changes
+- `--draft` - Create as draft PR
 
-### Branching Guidelines
+For AI assistants, the recommended approach is:
 
-When working on a new feature or fix:
+```bash
+./scripts/create-pr.sh --body "## 📋 PR Overview\n\nThis PR implements feature X by...\n\n## 🔍 Implementation Details\n\n- Added new component\n- Fixed error handling" --template
+```
 
-1. Check if you're already on a feature branch (other than "main")
-2. If working on a new feature, create a new branch from main
-3. Ensure the branch name reflects the purpose of the changes
-4. When ready, commit your changes following the message format outlined above
+### PR Structure Best Practices
 
-### Final Steps
+Well-structured PRs should include:
 
-After committing changes:
+1. **Overview**: Brief summary of what the PR accomplishes (2-3 sentences)
+2. **Key Changes**: Bullet points of the most significant changes
+3. **Implementation Details**: Technical approach and design decisions
+4. **Testing**: How changes were tested
+5. **Related Issues**: References to related issues or tickets
 
-1. Build the application in release mode
-2. Run unit tests to ensure everything works correctly
-3. Fix any issues identified during testing
-4. Create a new commit for any fixes needed
+Use emojis for better readability:
+- 📌 For overview sections
+- 🔍 For key changes
+- 🧩 For implementation details
+- 🔄 For migration notes
+- ⚠️ For areas needing special attention
+- 📝 For commit details
+- 📁 For file changes
 
-## Coding Standards
+## Automated Tools
 
-- Keep all code, comments, and documentation in English
-- Never use `#[allow(dead_code)]` directives except for test-related code
-- When a test breaks, first check if the code change is problematic before modifying the test
-- Follow Rust's official style guidelines
-- Use functional programming patterns where appropriate
-- Maintain immutability when possible
+The repository includes several scripts to help with development:
+- `scripts/create-commit.sh` - For creating properly formatted commits
+- `scripts/create-pr.sh` - For creating pull requests with proper descriptions
+- `scripts/run-clippy.sh` - For running the Rust linter
 
-## Testing
-
-## Documentation
+Use these tools to ensure consistency across contributions.
