@@ -6,6 +6,7 @@ Thank you for considering contributing to YASTwAI (Yet Another Subtitle Translat
 - [Code Style](#code-style)
 - [Branch Organization](#branch-organization)
 - [Commits](#commits)
+- [Development Workflow](#development-workflow)
 - [Pull Requests](#pull-requests)
 - [Automated Tools](#automated-tools)
 
@@ -34,7 +35,8 @@ Use the `scripts/create-commit.sh` script to generate properly formatted commits
 ./scripts/create-commit.sh <title> <prompt> <description> <discussion>
 ```
 
-Commit structure:
+Each commit message should follow this structure:
+
 ```
 <Concise summary as title>
 
@@ -44,6 +46,62 @@ Description: <Detailed description of changes>
 
 Discussion: <Challenges faced and how they were resolved>
 ```
+
+## Development Workflow
+
+YASTwAI follows a branch-based workflow with specific requirements and helper scripts to ensure consistency.
+
+### Branch Management
+
+1. Development happens on feature branches, not directly on `main`
+2. Each feature or fix gets its own branch
+3. Use the `branch-check.sh` script to manage branches:
+
+```bash
+./scripts/branch-check.sh
+```
+
+The script will:
+- Check if you're on the `main` branch
+- Prompt you to create a new branch if needed
+- Check if your new work is related to the current branch
+- Guide you through switching to a new branch when appropriate
+
+### Making Changes
+
+1. Make your changes, following the project's coding standards
+2. Add tests for new functionality
+3. Ensure all tests pass
+4. Update documentation as needed
+5. Create commits using the project's commit script
+6. Push your branch to your fork
+7. Create a pull request
+
+### Standard Workflow Example
+
+```bash
+# 1. Check branch status and create a new branch if needed
+./scripts/branch-check.sh
+# Follow the prompts to create or use an appropriate branch
+
+# 2. Make your code changes
+# ...
+
+# 3. Create a properly formatted commit
+./scripts/create-commit.sh "Add new feature X" "Add support for feature X that does Y"
+# Complete the description and discussion sections in your editor
+
+# 4. Build and test
+cargo build --release
+cargo test
+```
+
+### Special Considerations
+
+- All work must be done in English (code, comments, documentation)
+- Follow Rust best practices and coding standards
+- When fixing tests, always check if the code is the problem before modifying the test
+- Never use `#[allow(dead_code)]` directives except for test-related code
 
 ## Pull Requests
 
