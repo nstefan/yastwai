@@ -102,6 +102,13 @@ cp conf.example.json conf.json
 
 # For direct subtitle translation (without needing a video file)
 ./target/release/yastwai subtitles.srt
+
+# Force overwrite of existing translations
+./target/release/yastwai -f video.mkv
+./target/release/yastwai --force /path/to/videos
+
+# With environment variable RUST_LOG for logging
+RUST_LOG=debug ./target/release/yastwai video.mkv
 ```
 
 3. The application will automatically detect if the input is a subtitle file (SRT) or a video file:
