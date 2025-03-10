@@ -122,7 +122,21 @@ Key parameters:
 - `--summary-only` - Only include a brief summary of changes
 - `--draft` - Create as draft PR
 
-For AI assistants, the recommended approach is:
+For AI assistants, we provide a specialized helper script that avoids multiline string issues:
+
+```bash
+./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2"
+```
+
+Key parameters for AI PR helper:
+- `--title` - PR title (required)
+- `--overview` - Brief overview of the PR (required)
+- `--key-changes` - Comma-separated list of key changes
+- `--implementation` - Comma-separated list of implementation details
+- `--files` - Comma-separated list of files changed (optional, will auto-detect if omitted)
+- `--commits` - Comma-separated list of commit descriptions (optional, will auto-detect if omitted)
+
+The alternative approach using the standard script:
 
 ```bash
 ./scripts/create-pr.sh --body "## 📋 PR Overview\n\nThis PR implements feature X by...\n\n## 🔍 Implementation Details\n\n- Added new component\n- Fixed error handling" --template
