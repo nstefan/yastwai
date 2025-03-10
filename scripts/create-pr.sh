@@ -247,12 +247,17 @@ url_encode() {
 # Format PR body with proper newlines
 format_pr_body() {
     local body="$1"
-    # Replace pipe characters with actual newlines
-    echo "$body" | sed 's/ | /\n\n/g'
+    # First, replace escaped newlines with actual newlines
+    echo -e "$body" | sed 's/ | /\n\n/g'
 }
 
 # Read the PR body
 if [ -n "$PR_BODY_FILE" ]; then
+    PR_BODY=$(cat "$PR_BODY_FILE")
+elif [ -n "$PR_BODY_TEXT" ]; then
+    # Create a temporary file with the provided body text, preserving newlines
+    PR_BODY_FILE=$(mktemp)
+    echo -e "$PR_BODY_TEXT" > "$PR_BODY_FILE"
     PR_BODY=$(cat "$PR_BODY_FILE")
 else
     PR_BODY=$(format_pr_body "$PR_BODY")
@@ -285,7 +290,7 @@ if [ -z "$REPO_URL" ]; then
     exit 1
 fi
 
-# Create the PR URL
+# Create the PR URL with properly encoded body
 ENCODED_TITLE=$(url_encode "$PR_TITLE")
 ENCODED_BODY=$(url_encode "$PR_BODY")
 PR_URL="$REPO_URL/compare/$BASE_BRANCH...$CURRENT_BRANCH?quick_pull=1"
@@ -303,7 +308,7 @@ echo "Current branch: $CURRENT_BRANCH"
 echo ""
 echo "PR Description (you can copy this manually if needed):"
 echo "------------------------------------------------------"
-echo "$PR_BODY"
+echo -e "$PR_BODY"
 echo "------------------------------------------------------"
 echo ""
 
