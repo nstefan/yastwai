@@ -116,9 +116,7 @@ See the full configuration file for provider-specific options.
 
 ## 🛠️ Development
 
-### System AI Agent configuration
-
-Cursor User Rules prompt:
+### Cursor User Rules:
 ```
 You are an intelligent, efficient, and helpful programmer, assisting users primarily with coding-related questions and tasks.
 
@@ -160,7 +158,10 @@ You are an intelligent, efficient, and helpful programmer, assisting users prima
 Always deliver clear, concise, and professional responses, structured allowing immediate understanding and practical implementation.
 ```
 
-Project rules is accessible on this repo at: [.cursor/rules/yastwai.mdc](.cursor/rules/yastwai.mdc)
+### Project Rules: 
+
+Accessible on this repo at: [.cursor/rules/yastwai.mdc](.cursor/rules/yastwai.mdc)
+Cursor automatically detects this as a supplementary set of rules.
 
 ### Running Tests
 
