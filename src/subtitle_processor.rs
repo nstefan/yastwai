@@ -321,12 +321,19 @@ impl SubtitleCollection {
             // For Claude-3-Haiku, keep chunks especially small to avoid max_tokens errors
             (effective_max_chars / 3).min(2500)
         } else {
-            effective_max_chars
+            // For other providers, use a more conservative limit to reduce the chances of missing entries
+            // This helps ensure more entries are translated in batches rather than individually
+            (effective_max_chars * 2 / 3).min(4000)
         };
         
+        // Calculate a target entries per chunk (not more than 40 entries per chunk to avoid missing entries)
+        // This helps prevent the LLM from dropping entries in large batches
+        let target_max_entries_per_chunk = 40;
+        
         let mut chunks = Vec::new();
-        let mut current_chunk = Vec::with_capacity(20); // Pre-allocate with reasonable capacity
+        let mut current_chunk = Vec::with_capacity(target_max_entries_per_chunk);
         let mut current_size = 0;
+        let mut current_entries = 0;
         
         for entry in &self.entries {
             let entry_size = entry.text.len();
@@ -338,6 +345,7 @@ impl SubtitleCollection {
                     chunks.push(current_chunk);
                     current_chunk = Vec::with_capacity(1);
                     current_size = 0;
+                    current_entries = 0;
                 }
                 
                 // Add the oversized entry as its own chunk
@@ -347,16 +355,18 @@ impl SubtitleCollection {
                 continue;
             }
             
-            // If adding this entry would exceed the limit, finalize the current chunk
-            if current_size + entry_size > actual_max_chars && !current_chunk.is_empty() {
+            // If adding this entry would exceed the limit by characters or entry count, finalize the current chunk
+            if (current_size + entry_size > actual_max_chars || current_entries >= target_max_entries_per_chunk) && !current_chunk.is_empty() {
                 chunks.push(current_chunk);
-                current_chunk = Vec::with_capacity(20);
+                current_chunk = Vec::with_capacity(target_max_entries_per_chunk);
                 current_size = 0;
+                current_entries = 0;
             }
             
             // Add the entry to the current chunk
             current_chunk.push(entry.clone());
             current_size += entry_size;
+            current_entries += 1;
         }
         
         // Add the last chunk if it's not empty

@@ -752,7 +752,7 @@ impl TranslationService {
                 
                 // Enhanced system prompt specifically for subtitles
                 let system_prompt = format!(
-                    "{} You are translating {} subtitles to {}. Each subtitle entry is prefixed with ENTRY_N: where N is the entry number. You MUST preserve these markers and translate EACH entry separately, keeping the exact same format. NEVER merge content between entries. Return each translated entry with its original ENTRY_N: prefix.",
+                    "{} You are translating {} subtitles to {}. Each subtitle entry is prefixed with ENTRY_N: where N is the entry number. You MUST preserve these markers and translate EACH entry separately, keeping the exact same format. NEVER merge content between entries. Return each translated entry with its original ENTRY_N: prefix. It is CRITICAL that you process ALL entry numbers and don't skip any.",
                     self.config.common.system_prompt
                         .replace("{source_language}", source_language)
                         .replace("{target_language}", target_language),
@@ -762,9 +762,10 @@ impl TranslationService {
                 
                 // Enhanced user prompt that clearly formats the request
                 let user_prompt = format!(
-                    "Translate the following {} subtitle entries to {}. Each entry is prefixed with ENTRY_N: where N is the entry number.\n\nIMPORTANT RULES:\n- Keep each entry separate with its ENTRY_N: prefix\n- NEVER merge content between entries\n- Translate each entry individually\n- Preserve all formatting\n\nHere are the subtitle entries to translate:\n\n{}",
+                    "Translate the following {} subtitle entries to {}. Each entry is prefixed with ENTRY_N: where N is the entry number.\n\nIMPORTANT RULES:\n- Keep each entry separate with its ENTRY_N: prefix\n- NEVER merge content between entries\n- Translate each entry individually\n- Preserve all formatting\n- Process ALL entries (total: {} entries) - do not skip any\n\nHere are the subtitle entries to translate:\n\n{}",
                     source_language,
                     target_language,
+                    text.lines().filter(|line| line.starts_with("ENTRY_")).count(),
                     text
                 );
                 
@@ -916,7 +917,7 @@ impl TranslationService {
                 // Build the OpenAI request
                 let request = OpenAIRequest::new(self.config.get_model())
                     .add_message("system", format!("{} Each subtitle entry is prefixed with ENTRY_N: where N is the entry number. You MUST preserve these markers and translate EACH entry separately, keeping the exact same format.", system_prompt))
-                    .add_message("user", format!("Translate the following subtitle entries from {} to {}. Each entry is prefixed with ENTRY_N: where N is the entry number.\n\nIMPORTANT RULES:\n- Keep each entry separate with its ENTRY_N: prefix\n- NEVER merge content between entries\n- Translate each entry individually\n- Preserve all formatting\n\nHere are the subtitle entries to translate:\n\n{}", source_language, target_language, text))
+                    .add_message("user", format!("Translate the following subtitle entries from {} to {}. Each entry is prefixed with ENTRY_N: where N is the entry number.\n\nIMPORTANT RULES:\n- Keep each entry separate with its ENTRY_N: prefix\n- NEVER merge content between entries\n- Translate each entry individually\n- Preserve all formatting\n- Process ALL entries (total: {} entries) - do not skip any\n\nHere are the subtitle entries to translate:\n\n{}", source_language, target_language, text.lines().filter(|line| line.starts_with("ENTRY_")).count(), text))
                     .temperature(0.3)
                     .max_tokens(4096);
                 
@@ -969,29 +970,28 @@ impl TranslationService {
                         }
                     };
                     logs.push(LogEntry {
-                        level: "INFO".to_string(),
-                        message: format!("Anthropic request: {} chars input, {} subtitle lines, {} max tokens", 
-                                        text_length, input_lines_count, max_tokens)
+                        level: "DEBUG".to_string(),
+                        message: format!("Anthropic model: {}, Input size: {} chars, {} entries, {} lines, max tokens: {}", 
+                                    self.config.get_model(), text_length, text.lines().filter(|line| line.starts_with("ENTRY_")).count(), input_lines_count, max_tokens)
                     });
-                } else {
-                    // Fallback to direct logging if no capture is provided
-                    info!("Anthropic request: {} chars input, {} subtitle lines, {} max tokens", 
-                         text_length, input_lines_count, max_tokens);
                 }
                 
-                // Enhanced system prompt with explicit instructions about line preservation
+                // Add specific instructions to enhance the system prompt for subtitle translation
                 let enhanced_system_prompt = format!(
-                    "{} Each subtitle entry is prefixed with ENTRY_N: where N is the entry number. You MUST preserve these markers and translate EACH entry separately, keeping the exact same format. NEVER merge content between entries.",
-                    system_prompt
+                    "{} You are a professional subtitle translator specializing in {}-to-{} translation. CRITICAL: You MUST process EVERY ENTRY_N: marker in the input and never skip any entries. Always maintain the ENTRY_N: prefix format for each entry.",
+                    system_prompt,
+                    source_language,
+                    target_language
                 );
                 
                 // Build the Anthropic request with enhanced instructions
                 let request = AnthropicRequest::new(self.config.get_model(), max_tokens)
                     .system(enhanced_system_prompt)
                     .add_message("user", format!(
-                        "Translate the following subtitle entries from {} to {}.\n\nIMPORTANT RULES:\n- Each entry is prefixed with ENTRY_N: where N is the entry number\n- Keep each entry separate with its ENTRY_N: prefix\n- NEVER merge content between entries\n- Translate each entry individually\n- Preserve all formatting\n\nHere are the subtitle entries to translate:\n\n{}", 
+                        "Translate the following subtitle entries from {} to {}.\n\nIMPORTANT RULES:\n- Each entry is prefixed with ENTRY_N: where N is the entry number\n- Keep each entry separate with its ENTRY_N: prefix\n- NEVER merge content between entries\n- Translate each entry individually\n- Preserve all formatting\n- Process ALL entries (total: {} entries) - do not skip any\n\nHere are the subtitle entries to translate:\n\n{}", 
                         source_language, 
                         target_language,
+                        text.lines().filter(|line| line.starts_with("ENTRY_")).count(),
                         text
                     ))
                     .temperature(0.3);
