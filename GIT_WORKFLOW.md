@@ -20,7 +20,7 @@ Two scripts are provided to help with this workflow:
 This script helps you manage branches according to the yastai.mdc requirements.
 
 ```bash
-./branch-check.sh
+./scripts/branch-check.sh
 ```
 
 The script will:
@@ -36,7 +36,7 @@ The script will:
 This script helps you create commits with the proper format.
 
 ```bash
-./create-commit.sh "Commit title" "Original prompt"
+./scripts/create-commit.sh "Commit title" "Original prompt"
 ```
 
 The script will:
@@ -53,14 +53,14 @@ Here's an example of a standard workflow:
 
 ```bash
 # 1. Check branch status and create a new branch if needed
-./branch-check.sh
+./scripts/branch-check.sh
 # Follow the prompts to create or use an appropriate branch
 
 # 2. Make your code changes
 # ...
 
 # 3. Create a properly formatted commit
-./create-commit.sh "Add new feature X" "Add support for feature X that does Y"
+./scripts/create-commit.sh "Add new feature X" "Add support for feature X that does Y"
 # Complete the description and discussion sections in your editor
 
 # 4. Build and test

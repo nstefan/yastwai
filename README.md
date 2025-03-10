@@ -242,7 +242,7 @@ cargo test test_translation_service
 cargo clippy
 
 # Run Clippy with specific lint suppressions
-./run-clippy.sh
+./scripts/run-clippy.sh
 
 # To manually run Clippy with specific lint suppressions
 cargo clippy -- -A clippy::uninlined_format_args -A clippy::redundant_closure_for_method_calls
@@ -274,7 +274,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 <!-- AI-COMMANDS
 build: cargo build --release
 test: cargo test
-lint: ./run-clippy.sh
+lint: ./scripts/run-clippy.sh
 run_single_file: ./target/release/yastwai [VIDEO_FILE]
 run_directory: ./target/release/yastwai [DIRECTORY]
 force_overwrite: ./target/release/yastwai -f [TARGET]

@@ -57,10 +57,10 @@ Discussion: Faced issues with the correct syntax for clippy.toml (using hyphens 
 
 ## Using the Commit Script
 
-A helper script `create-commit.sh` is provided to streamline the commit message creation process:
+A helper script `./scripts/create-commit.sh` is provided to streamline the commit message creation process:
 
 ```bash
-./create-commit.sh "Commit title" "Original prompt"
+./scripts/create-commit.sh "Commit title" "Original prompt"
 ```
 
 The script will:
