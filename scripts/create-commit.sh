@@ -1,10 +1,11 @@
 #!/bin/bash
 # Script to help create commit messages following the yastai.mdc guidelines
+# Uses multi-line format by default to improve readability and comply with guidelines
 # Non-interactive version for automated use by bots
 
 # Function to show usage
 show_usage() {
-    echo "Usage: ./scripts/create-commit.sh \"Commit title\" \"Prompt\" \"Description\" \"Discussion\" [--no-stage] [--multi-line]"
+    echo "Usage: ./scripts/create-commit.sh \"Commit title\" \"Prompt\" \"Description\" \"Discussion\" [--no-stage] [--single-line]"
     echo ""
     echo "Parameters:"
     echo "  Commit title  - The title of the commit (required)"
@@ -12,7 +13,7 @@ show_usage() {
     echo "  Description   - Detailed description of changes (required)"
     echo "  Discussion    - Challenges or difficulties faced (required)"
     echo "  --no-stage    - Optional flag to skip automatic git add ."
-    echo "  --multi-line  - Use multi-line commit message format (default is single-line)"
+    echo "  --single-line - Use single-line commit message format (default is multi-line)"
     echo "  --help        - Display this help message"
     echo ""
     echo "Note: For multi-line text in any parameter, use escaped newlines (\\n)"
@@ -35,15 +36,15 @@ PROMPT=$(echo -e "$2")
 DESCRIPTION=$(echo -e "$3")
 DISCUSSION=$(echo -e "$4")
 STAGE_ALL=true
-MULTI_LINE=false
+MULTI_LINE=true
 
 # Check for optional flags
 for arg in "$@"; do
     if [ "$arg" = "--no-stage" ]; then
         STAGE_ALL=false
     fi
-    if [ "$arg" = "--multi-line" ]; then
-        MULTI_LINE=true
+    if [ "$arg" = "--single-line" ]; then
+        MULTI_LINE=false
     fi
 done
 

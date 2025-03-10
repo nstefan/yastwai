@@ -18,6 +18,19 @@ YASTwAI is a command-line tool designed to extract subtitles from video files an
 The application tries to maintain the format integrity of subtitles while providing a seamless translation experience.
 <!-- END_SECTION: overview -->
 
+## CI/CD Status
+
+<!-- SECTION: ci-cd -->
+YASTwAI uses GitHub Actions for continuous integration and deployment. The following status checks are enabled for all pull requests:
+
+- **Tests**: Runs the full test suite
+- **Clippy**: Runs Rust's linting tool to ensure code quality
+- **Build**: Verifies the project builds successfully on multiple platforms (Ubuntu, macOS, Windows)
+- **PR Validation**: Ensures PR title and description meet project standards
+
+These checks help maintain code quality and ensure that all contributions meet project standards.
+<!-- END_SECTION: ci-cd -->
+
 ## Features
 
 <!-- SECTION: features -->
