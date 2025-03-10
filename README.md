@@ -21,14 +21,14 @@ The application tries to maintain the format integrity of subtitles while provid
 ## CI/CD Status
 
 <!-- SECTION: ci-cd -->
-YASTwAI uses GitHub Actions for continuous integration and deployment. The following status checks are enabled for all pull requests:
+GitHub Actions workflows have been temporarily removed and will be reintroduced in the future with an improved CI/CD pipeline. The planned checks will include:
 
-- **Tests**: Runs the full test suite
-- **Clippy**: Runs Rust's linting tool to ensure code quality
-- **Build**: Verifies the project builds successfully on multiple platforms (Ubuntu, macOS, Windows)
-- **PR Validation**: Ensures PR title and description meet project standards
+- **Tests**: Running the full test suite
+- **Clippy**: Running Rust's linting tool to ensure code quality
+- **Build**: Verifying the project builds successfully on multiple platforms (Ubuntu, macOS, Windows)
+- **PR Validation**: Ensuring PR title and description meet project standards
 
-These checks help maintain code quality and ensure that all contributions meet project standards.
+These checks will help maintain code quality and ensure that all contributions meet project standards.
 <!-- END_SECTION: ci-cd -->
 
 ## Features
@@ -230,6 +230,7 @@ YASTwAI uses a direct translation approach that:
 - Currently only supports SRT subtitle format
 - Extraction from video files requires external FFmpeg dependency
 - No support for multiple languages in a single run
+- GitHub Actions workflows temporarily removed, to be added back with improved CI/CD pipeline
 <!-- END_SECTION: limitations -->
 
 ## Development
