@@ -1,0 +1,7 @@
+# Clippy configuration
+# List of allowed lints that should not be automatically fixed
+disallowed-methods = []
+
+# Optional: Configure specific lint settings
+# Example: Setting threshold for too_many_arguments lint
+too-many-arguments-threshold = 10 
