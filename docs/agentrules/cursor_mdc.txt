@@ -14,6 +14,12 @@ alwaysApply: false
 - Use: `git checkout -b new-branch-name` to create and switch to a new branch
 - VERIFY your current branch with `git branch` before committing
 
+## ⚠️ PULL REQUEST CREATION RULES
+- NEVER create a PR automatically or proactively
+- ONLY create PRs when the user EXPLICITLY requests it with words like "create PR", "make PR", or "PR"
+- When in doubt, DO NOT create a PR - wait for explicit instructions
+- After making commits, stop and wait for the user's next instructions
+
 1. Everything must be produced in english.
     - code
     - comments
