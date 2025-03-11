@@ -31,6 +31,8 @@ alwaysApply: false
         ```
 
     - THEN ask the user if they want to proceed with the commit.
+    - IMPORTANT: When preparing the commit preview, you MUST copy your internal reasoning VERBATIM from your thought process. Do not summarize or rewrite it.
+    - Your thought process should explain your reasoning about the problem, approach and solution - not just list the files you changed.
     - Only execute the commit after explicit user confirmation using:
 
         ```
