@@ -51,12 +51,11 @@ Always deliver clear, concise, and professional responses, structured allowing i
 
 The project uses dedicated rules that are stored in [cursor.mdc](./cursor.mdc). These rules include:
 
-1. **English-Only Content** - All code, comments, and documentation must be in English
-2. **Non-Interactive Commands** - Special handling for commands in bot environments
-3. **Automated Commits** - Guidelines for commit structure and branch management
-4. **Code Quality** - Building, testing, and linting procedures
-5. **PR Creation** - Procedures for creating well-structured pull requests
-6. **User Shorthand Commands** - How to interpret simple user commands like "pr" or "commit"
+1. **Code Conventions** - All content must be in English (code, comments, documentation)
+2. **Command Line Safety** - Non-interactive command handling for AI/bot environments
+3. **Commit Handling** - Preparing commits for user validation and branch management 
+4. **Quality Assurance** - Building, testing, and linting procedures
+5. **PR Creation** - Creating well-structured PRs with proper formatting
 
 For more detailed information, see the [full project rules](./cursor.mdc).
 
@@ -64,9 +63,24 @@ For more detailed information, see the [full project rules](./cursor.mdc).
 
 YASTwAI provides several AI-optimized scripts to help with development tasks:
 
-1. `ai-branch.sh` - Non-interactive branch management
-2. `ai-commit.sh` - Non-interactive commit creation with positional arguments
-3. `ai-clippy.sh` - Non-interactive Rust linting
-4. `ai-pr.sh` - Non-interactive PR creation
+1. `ai-branch.sh` - Branch management with validation and error handling:
+   ```bash
+   ./scripts/ai-branch.sh --new-branch "feature-name" --is-related "false"
+   ```
 
-These scripts are designed for AI agent use with simplified interfaces and improved error handling. 
+2. `ai-commit.sh` - Commit preparation with user validation:
+   ```bash
+   ./scripts/ai-commit.sh "Commit title" "Short description" "Original prompt" "Reasoning" "Challenges"
+   ```
+
+3. `ai-clippy.sh` - Rust linting with check and fix modes:
+   ```bash
+   ./scripts/ai-clippy.sh --check-only  # or --fix to apply fixes
+   ```
+
+4. `ai-pr.sh` - Structured PR creation with proper formatting:
+   ```bash
+   ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2"
+   ```
+
+These scripts are designed for AI agent use with parameter validation, error handling, and non-interactive operation. 
