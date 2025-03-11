@@ -1,15 +1,20 @@
+---
+description: project
+globs: 
+alwaysApply: false
+---
 1. Everything must be produced in english.
     - code
     - comments
     - documentation (README and other file headers)
 
 2. Every command must not be interactive.
-    - use proper arguments to prevent user interaction with commands like "| cat".
+    - use proper arguments to prevent user interaction with commands. Example "git diff | cat".
 
 3. Everytime the user sends a prompt, automatically commit changes at the end when you're confident everything is ok.
     - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
     - Never commit on the main branch.
-    - Use the ./scripts/create-commit.sh script to generate commits in the correct format.
+    - Use the ./scripts/ai-commit-helper.sh script to generate commits in the correct format.
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
 
     Commit Message Structure Reference:
