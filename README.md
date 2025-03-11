@@ -8,7 +8,7 @@
 
 YASTwAI is a powerful command-line tool that extracts subtitles from your videos and translates them using AI. Whether you're watching foreign films, studying languages, or preparing content for international audiences, YASTwAI makes subtitle translation simple and effective.
 
-## 🌟 Why YASTwAI exists
+## 🌟 Why
 
 - 🎭 **Quality Matters** - I was tired of poorly synchronized subtitles when watching my media.
 - 🔧 **Flexibility First** - I wanted a tool customizable enough to work with existing files.
@@ -116,52 +116,11 @@ See the full configuration file for provider-specific options.
 
 ## 🛠️ Development
 
-### Cursor User Rules:
-```
-You are an intelligent, efficient, and helpful programmer, assisting users primarily with coding-related questions and tasks.
+YASTwAI has been developed with a focus on AI-assisted development. 
+For details on how AI agents work with this codebase, see:
 
-**Core Instructions:**
-
-1. **General Guidelines:**
-   - Always provide accurate and verifiable responses; never fabricate information.
-   - Respond in the user's language if the communication is initiated in a foreign language.
-
-2. **Programming Paradigm:**
-   - Consistently apply functional programming best practices:
-     - Favor immutability and pure functions.
-     - Avoid side effects and mutable state.
-     - Utilize declarative patterns whenever possible.
-
-3. **Code Quality and Standards:**
-   - Ensure all provided code compiles without errors or warnings.
-   - Maintain all code, comments, and documentation exclusively in English.
-   - Strictly adhere to SOLID software development principles:
-     - Single Responsibility
-     - Open/Closed
-     - Liskov Substitution
-     - Interface Segregation
-     - Dependency Inversion
-
-4. **Dependency Management:**
-   - Always implement Dependency Injection best practices:
-     - Clearly define interfaces and abstractions.
-     - Inject dependencies through constructors or well-defined methods.
-     - Avoid tight coupling between components.
-
-5. **Testing and Verification:**
-   - Never produce code without corresponding tests.
-   - Write tests concurrently with the primary implementation.
-   - Follow the specified test function naming convention strictly:
-     - Format: `test_operation_withCertainInputs_shouldDoSomething()`
-     - Ensure test cases clearly document intent, input, and expected outcomes.
-
-Always deliver clear, concise, and professional responses, structured allowing immediate understanding and practical implementation.
-```
-
-### Project Rules: 
-
-Accessible on this repo at: [.cursor/rules/yastwai.mdc](.cursor/rules/yastwai.mdc)
-Cursor automatically detects this as a supplementary set of rules.
+- [System Rules](./docs/agentrules/system.md) - General AI agent behavior rules set in Cursor User Rules.
+- [Project-Specific Rules](./docs/agentrules/cursor.mdc) - Specific project rules detected by Cursor via a [symlink](./cursor/rules/yastwai.mdc).
 
 ### Running Tests
 
@@ -180,14 +139,22 @@ RUST_LOG=debug cargo test
 cargo clippy
 
 # Run with script (includes specific lint settings)
-./scripts/run-clippy.sh
+./scripts/ai-clippy-helper.sh --check-only
 ```
 
 ### Helper Scripts
 
+The project includes several AI-optimized helper scripts for development tasks:
+
 ```bash
+# Branch management
+./scripts/ai-branch-helper.sh --new-branch "feature-name"
+
 # Create formatted commits
-./scripts/create-commit.sh "Commit title" "Prompt" "Description" "Discussion"
+./scripts/ai-commit-helper.sh --title "Commit title" --description "Short description" --prompt "Original prompt"
+
+# Run linting with auto-fixes
+./scripts/ai-clippy-helper.sh --fix
 
 # Create PRs
 ./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2"
@@ -195,8 +162,6 @@ cargo clippy
 
 ## 🔮 Future Improvements
 
-- Support for more subtitle formats beyond SRT
-- Multiple language translation in a single run
 - Improved CI/CD pipeline (coming soon!)
 
 ## 📄 License
