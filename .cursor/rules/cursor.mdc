@@ -1,6 +1,0 @@
----
-description: YASTwAI
-globs: *.*
-alwaysApply: true
----
-Read [project.md](mdc:docs/agentrules/project.md).

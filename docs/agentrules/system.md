@@ -49,24 +49,42 @@ Always deliver clear, concise, and professional responses, structured allowing i
 
 ## Project-Specific Rules
 
-The project uses dedicated rules that are stored in [cursor.mdc](./cursor.mdc). These rules include:
+The project uses dedicated rules that are stored in [cursor_mdc.txt](./cursor_mdc.txt). These rules include:
 
-1. **English-Only Content** - All code, comments, and documentation must be in English
-2. **Non-Interactive Commands** - Special handling for commands in bot environments
-3. **Automated Commits** - Guidelines for commit structure and branch management
-4. **Code Quality** - Building, testing, and linting procedures
-5. **PR Creation** - Procedures for creating well-structured pull requests
-6. **User Shorthand Commands** - How to interpret simple user commands like "pr" or "commit"
+1. **Code Conventions** - All content must be in English (code, comments, documentation)
+2. **Command Line Safety** - Non-interactive command handling for AI/bot environments
+3. **Commit Handling** - Two-step commit workflow with preview and execute modes
+4. **Quality Assurance** - Building, testing, and linting procedures
+5. **PR Creation** - Creating well-structured PRs with proper formatting
 
-For more detailed information, see the [full project rules](./cursor.mdc).
+For more detailed information, see the [full project rules](./cursor_mdc.txt).
 
 ## Working with Helper Scripts
 
 YASTwAI provides several AI-optimized scripts to help with development tasks:
 
-1. `ai-branch-helper.sh` - Non-interactive branch management
-2. `ai-commit-helper.sh` - Non-interactive commit creation
-3. `ai-clippy-helper.sh` - Non-interactive Rust linting
-4. `ai-pr-helper.sh` - Non-interactive PR creation
+1. `ai-branch.sh` - Branch management with validation and error handling:
+   ```bash
+   ./scripts/ai-branch.sh --new-branch "feature-name" --is-related "false"
+   ```
 
-These scripts are designed for AI agent use with named parameters and improved error handling. 
+2. `ai-commit.sh` - Two-step commit workflow:
+   ```bash
+   # Step 1: Preview changes (for user review)
+   ./scripts/ai-commit.sh --mode=preview "Commit title" "Description" "Prompt" "Reasoning" "Challenges"
+   
+   # Step 2: Execute commit (after user approval)
+   ./scripts/ai-commit.sh --mode=execute "Commit title" "Description" "Prompt" "Reasoning" "Challenges"
+   ```
+
+3. `ai-clippy.sh` - Rust linting with check and fix modes:
+   ```bash
+   ./scripts/ai-clippy.sh --check-only  # or --fix to apply fixes
+   ```
+
+4. `ai-pr.sh` - Structured PR creation with proper formatting:
+   ```bash
+   ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2"
+   ```
+
+These scripts are designed for AI agent use with parameter validation, error handling, and non-interactive operation. 

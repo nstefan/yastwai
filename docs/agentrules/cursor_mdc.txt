@@ -1,25 +1,61 @@
+---
+description: project
+globs: 
+alwaysApply: false
+---
 1. Everything must be produced in english.
     - code
     - comments
     - documentation (README and other file headers)
 
 2. Every command must not be interactive.
-    - use proper arguments to prevent user interaction with commands like "| cat".
+    - use proper arguments to prevent user interaction with commands. Example "git diff | cat".
 
-3. Everytime the user sends a prompt, automatically commit changes at the end when you're confident everything is ok.
+3. Everytime the user sends a prompt, ALWAYS automatically prepare and display a commit preview:
     - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
     - Never commit on the main branch.
-    - Use the ./scripts/create-commit.sh script to generate commits in the correct format.
+    - DO NOT use the commit script for previews. Instead, directly generate a beautiful preview for the user by creating a markdown code block containing:
+
+        ```
+        {commit title}
+
+        Short description: {short description}
+        
+        Model: {AI model name}
+
+        Prompt: {original prompt}
+
+        Thought Process: 
+        {reasoning process}
+
+        Discussion: 
+        {challenges faced}
+        ```
+
+    - THEN ask the user if they want to proceed with the commit.
+    - IMPORTANT: When preparing the commit preview, you MUST copy your internal reasoning VERBATIM from your thought process. Do not summarize or rewrite it.
+    - Your thought process should explain your reasoning about the problem, approach and solution - not just list the files you changed.
+    - The Model section should contain the technical name of the AI model being used (e.g., "claude-3.7-sonnet-thinking").
+    - Only execute the commit after explicit user confirmation using:
+
+        ```
+        ./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
+        ```
+        
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
 
     Commit Message Structure Reference:
     ```
     <Concise summary as title>
 
+    Short description: <Brief description>
+    
+    Model: <Technical AI model name>
+
     Prompt: 
     <Original prompt or request>
 
-    Chain of thoughts: 
+    Thought Process: 
     <Reasoning process used by the agent>
 
     Discussion: 
@@ -35,13 +71,13 @@
 
 6. PR creation instructions, ONLY create PRs when EXPLICITLY requested by the user.
     - NEVER create a PR automatically or as part of another task unless directly requested.
-    - ALWAYS use the scripts/ai-pr-helper.sh script as the preferred method for PR creation.
+    - ALWAYS use the scripts/ai-pr.sh script as the preferred method for PR creation.
     - The helper script avoids multiline command issues and creates well-structured PRs:
         ```bash
-        ./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
+        ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
         ```
     - Use this syntax with comma-separated lists instead of trying to create multiline strings directly.
-    - Only fall back to scripts/create-pr.sh if the ai-pr-helper.sh is not available.
+    - Only fall back to direct git commands if the ai-pr.sh is not available.
     - When a PR is explicitly requested with words like "pr" or "create pr", leverage AI capabilities for intelligent summarization:
         - Analyzing all commits on the branch to understand the complete change set
         - Generating a well-structured PR body with emoji-enhanced sections
@@ -53,7 +89,7 @@
             ```
             <Original prompt or request as plain text>
             ```
-          Chain of thoughts: 
+          Thought Process: 
             ```
             <Reasoning process used by the agent as plain text>
             ```
@@ -62,9 +98,27 @@
         - 🧩 **Implementation Details**: Technical approach and design decisions
         - 🔄 **Migration Notes**: Any changes requiring updates to existing code
         - ⚠️ **Areas of Attention**: Parts of the PR that need special review focus
+        - 🤖 **AI Model**: <Technical AI model name (e.g., claude-3.7-sonnet-thinking)>
     - Format PR descriptions with emojis according to this convention:
         - 📝 Commit Details: Historical record of all commits
         - 📅 Date: For timestamps
         - 📎 Commit titles: For each commit (with commit hash)
         - 📁 Files Changed: For listing modified files
     - For large PRs, use appropriate markdown (headers, lists, code blocks and line breaks) to enhance readability.
+
+7. Model Detection Instructions for AI Agents
+    - Use scripts/ai-cursor-model.sh to retrieve the current AI model information:
+        ```bash
+        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
+        ```
+    - The script will detect the model from the Cursor SQLite database
+    - If the model cannot be detected, the script will return "N/A"
+    - The model parameter is REQUIRED for all commit and PR scripts:
+        - For commits: `./scripts/ai-commit.sh --model "$MODEL" ...`
+        - For PRs: `./scripts/ai-pr.sh --model "$MODEL" ...`
+    - When creating commit previews directly, always include the Model section
+    - It is recommended to detect the model first, then pass it to the scripts:
+        ```bash
+        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
+        ./scripts/ai-commit.sh --model "$MODEL" "Title" "Description" "Prompt" "Thought" "Discussion"
+        ```

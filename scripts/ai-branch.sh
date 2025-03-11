@@ -1,13 +1,13 @@
 #!/bin/bash
 # AI Assistant Helper Script for Branch Management
 # This script helps AI assistants manage git branches without requiring interactive input
-# Follows the naming pattern of ai-*-helper.sh for consistency
+# Follows the naming pattern of ai-*.sh for consistency
 
 set -e  # Exit on error
 
 # Function to show usage
 show_usage() {
-    echo "Usage: ./scripts/ai-branch-helper.sh [options]"
+    echo "Usage: ./scripts/ai-branch.sh [options]"
     echo ""
     echo "Options:"
     echo "  --check-only         - Only check current branch status without creating a new branch"
@@ -37,10 +37,18 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --new-branch)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --new-branch requires a name parameter"
+                show_usage
+            fi
             NEW_BRANCH="$2"
             shift 2
             ;;
         --is-related)
+            if [[ "$2" != "true" && "$2" != "false" ]]; then
+                log_message "Error: --is-related requires 'true' or 'false'"
+                show_usage
+            fi
             IS_RELATED="$2"
             shift 2
             ;;
@@ -52,13 +60,13 @@ while [[ $# -gt 0 ]]; do
             show_usage
             ;;
         *)
-            echo "Unknown option: $1"
+            log_message "Unknown option: $1"
             show_usage
             ;;
     esac
 done
 
-# Get the current branch and main branch
+# Get the current branch and main branch (always use cat to prevent pager)
 CURRENT_BRANCH=$(git branch --show-current | cat)
 MAIN_BRANCH="main"
 
@@ -80,7 +88,7 @@ if [ "$CURRENT_BRANCH" = "$MAIN_BRANCH" ]; then
     fi
     
     # Create new branch from main
-    git checkout -b "$NEW_BRANCH"
+    git checkout -b "$NEW_BRANCH" 2>/dev/null || { log_message "Error: Failed to create branch '$NEW_BRANCH'"; exit 1; }
     log_message "Created and switched to new branch: $NEW_BRANCH"
 else
     log_message "Currently on branch: $CURRENT_BRANCH"
@@ -96,7 +104,7 @@ else
         log_message "Work not related to current branch. Need to create a new branch from main."
         
         # Check if there are uncommitted changes
-        if [ -n "$(git status --porcelain)" ] && [ "$FORCE" = false ]; then
+        if [ -n "$(git status --porcelain | cat)" ] && [ "$FORCE" = false ]; then
             log_message "Error: You have uncommitted changes. Use --force to override or commit/stash changes first."
             exit 1
         fi
@@ -107,16 +115,16 @@ else
         fi
         
         # Switch to main and pull latest changes
-        git checkout "$MAIN_BRANCH"
-        git pull
+        git checkout "$MAIN_BRANCH" 2>/dev/null || { log_message "Error: Failed to switch to branch '$MAIN_BRANCH'"; exit 1; }
+        git pull | cat # Use cat to prevent pager
         
         # Create new branch
-        git checkout -b "$NEW_BRANCH"
+        git checkout -b "$NEW_BRANCH" 2>/dev/null || { log_message "Error: Failed to create branch '$NEW_BRANCH'"; exit 1; }
         log_message "Created and switched to new branch: $NEW_BRANCH"
     fi
 fi
 
 log_message "Current git status:"
-git status | cat
+git status | cat # Use cat to prevent pager
 
 exit 0 
