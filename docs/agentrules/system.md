@@ -64,9 +64,9 @@ For more detailed information, see the [full project rules](./cursor.mdc).
 
 YASTwAI provides several AI-optimized scripts to help with development tasks:
 
-1. `ai-branch-helper.sh` - Non-interactive branch management
-2. `ai-commit-helper.sh` - Non-interactive commit creation
-3. `ai-clippy-helper.sh` - Non-interactive Rust linting
-4. `ai-pr-helper.sh` - Non-interactive PR creation
+1. `ai-branch.sh` - Non-interactive branch management
+2. `ai-commit.sh` - Non-interactive commit creation with positional arguments
+3. `ai-clippy.sh` - Non-interactive Rust linting
+4. `ai-pr.sh` - Non-interactive PR creation
 
-These scripts are designed for AI agent use with named parameters and improved error handling. 
+These scripts are designed for AI agent use with simplified interfaces and improved error handling. 

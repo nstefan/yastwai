@@ -213,7 +213,7 @@ RUST_LOG=debug cargo test
 cargo clippy
 
 # Run with script (includes specific lint settings)
-./scripts/ai-clippy-helper.sh --check-only
+./scripts/ai-clippy.sh --check-only
 ```
 
 ### Helper Scripts
@@ -222,16 +222,16 @@ The project includes several AI-optimized helper scripts for development tasks:
 
 ```bash
 # Branch management
-./scripts/ai-branch-helper.sh --new-branch "feature-name"
+./scripts/ai-branch.sh --new-branch "feature-name"
 
 # Create formatted commits
-./scripts/ai-commit-helper.sh --title "Commit title" --description "Short description" --prompt "Original prompt"
+./scripts/ai-commit.sh "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
 
 # Run linting with auto-fixes
-./scripts/ai-clippy-helper.sh --fix
+./scripts/ai-clippy.sh --fix
 
 # Create PRs
-./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2"
+./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2"
 ```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
