@@ -194,7 +194,7 @@ YASTwAI has been developed with a focus on AI-assisted development.
 For details on how AI agents work with this codebase, see:
 
 - [System Rules](./docs/agentrules/system.md) - General AI agent behavior rules set in Cursor User Rules.
-- [Project Rules](./docs/agentrules/cursor.mdc) - Specific project rules detected by Cursor via a [symlink](.cursor/rules/project.mdc).
+- [Project Rules](./docs/agentrules/cursor_mdc.txt) - Specific project rules detected by Cursor via a [symlink](.cursor/rules/project.mdc).
 
 ### Running Tests
 

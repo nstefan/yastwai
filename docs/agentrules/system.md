@@ -49,7 +49,7 @@ Always deliver clear, concise, and professional responses, structured allowing i
 
 ## Project-Specific Rules
 
-The project uses dedicated rules that are stored in [cursor.mdc](./cursor.mdc). These rules include:
+The project uses dedicated rules that are stored in [cursor_mdc.txt](./cursor_mdc.txt). These rules include:
 
 1. **Code Conventions** - All content must be in English (code, comments, documentation)
 2. **Command Line Safety** - Non-interactive command handling for AI/bot environments
@@ -57,7 +57,7 @@ The project uses dedicated rules that are stored in [cursor.mdc](./cursor.mdc). 
 4. **Quality Assurance** - Building, testing, and linting procedures
 5. **PR Creation** - Creating well-structured PRs with proper formatting
 
-For more detailed information, see the [full project rules](./cursor.mdc).
+For more detailed information, see the [full project rules](./cursor_mdc.txt).
 
 ## Working with Helper Scripts
 

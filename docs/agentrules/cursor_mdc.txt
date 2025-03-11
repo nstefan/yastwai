@@ -9,12 +9,12 @@ alwaysApply: false
     - documentation (README and other file headers)
 
 2. Every command must not be interactive.
-    - use proper arguments to prevent user interaction with commands like "| cat".
+    - use proper arguments to prevent user interaction with commands. Example "git diff | cat".
 
 3. Everytime the user sends a prompt, automatically commit changes at the end when you're confident everything is ok.
     - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
     - Never commit on the main branch.
-    - Use the ./scripts/create-commit.sh script to generate commits in the correct format.
+    - Use the ./scripts/ai-commit.sh script to generate commits in the correct format.
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
 
     Commit Message Structure Reference:
@@ -40,13 +40,13 @@ alwaysApply: false
 
 6. PR creation instructions, ONLY create PRs when EXPLICITLY requested by the user.
     - NEVER create a PR automatically or as part of another task unless directly requested.
-    - ALWAYS use the scripts/ai-pr-helper.sh script as the preferred method for PR creation.
+    - ALWAYS use the scripts/ai-pr.sh script as the preferred method for PR creation.
     - The helper script avoids multiline command issues and creates well-structured PRs:
         ```bash
-        ./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
+        ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
         ```
     - Use this syntax with comma-separated lists instead of trying to create multiline strings directly.
-    - Only fall back to scripts/create-pr.sh if the ai-pr-helper.sh is not available.
+    - Only fall back to direct git commands if the ai-pr.sh is not available.
     - When a PR is explicitly requested with words like "pr" or "create pr", leverage AI capabilities for intelligent summarization:
         - Analyzing all commits on the branch to understand the complete change set
         - Generating a well-structured PR body with emoji-enhanced sections
