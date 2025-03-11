@@ -1292,6 +1292,11 @@ impl TranslationService {
                         }
                     }
                 } else if let Some(_entry_num) = current_entry_num {
+                    // Skip the special formatting marker
+                    if line == "# SPECIAL_FORMATTING #" {
+                        continue;
+                    }
+                    
                     // Add content to the current entry
                     if !current_entry_text.is_empty() {
                         current_entry_text.push('\n');
@@ -1433,6 +1438,7 @@ impl TranslationService {
                             let content = individual_result.lines()
                                 .skip_while(|line| !line.starts_with("ENTRY_"))
                                 .skip(1) // Skip the marker line
+                                .filter(|line| *line != "# SPECIAL_FORMATTING #") // Filter out the special formatting marker
                                 .collect::<Vec<&str>>()
                                 .join("\n");
                                 
@@ -1515,6 +1521,7 @@ impl TranslationService {
                             let content = individual_result.lines()
                                 .skip_while(|line| !line.starts_with("ENTRY_"))
                                 .skip(1) // Skip the marker line
+                                .filter(|line| *line != "# SPECIAL_FORMATTING #") // Filter out the special formatting marker
                                 .collect::<Vec<&str>>()
                                 .join("\n");
                                 
@@ -1625,6 +1632,7 @@ impl TranslationService {
                     let content = individual_result.lines()
                         .skip_while(|line| !line.starts_with("ENTRY_"))
                         .skip(1) // Skip the marker line
+                        .filter(|line| *line != "# SPECIAL_FORMATTING #") // Filter out the special formatting marker
                         .collect::<Vec<&str>>()
                         .join("\n");
                         
