@@ -11,56 +11,95 @@ These rules provide guidance for the AI agent working with the YASTwAI codebase.
 
 2. Every command must not be interactive since we are dealing with a bot.
    - use proper arguments to prevent user interaction with commands.
+   - use AI-optimized helper scripts with the naming pattern `ai-*-helper.sh` for non-interactive operations.
 
 3. Everytime the user sends a prompt, automatically commit changes at the end when you're confident everything is ok.
-   - Check if we already are on a different branch than the "main" one. If not create a new branch.
-   - Check if the prompt is still related to the current branch, if not create a new branch from the main one.
-   - Use " | cat" to not stay stuck when checking status and branch names.
-   - Use a concise summary as commit title
-   - Use the full prompt made by the user as the commit description header as the "Prompt:" part.
-   - Use the final summary as the rest of the commit description body as the "Description:" part.
-   - Analyse all the faced difficulties and add a summary as the "Discussion:" part.
-   - Use the ./scripts/create-commit.sh script to generate commits in the correct format.
+   - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
+   - Use the `ai-branch-helper.sh` script for non-interactive branch management:
+   ```bash
+   ./scripts/ai-branch-helper.sh --check-only                          # Check branch status only
+   ./scripts/ai-branch-helper.sh --new-branch "feature-name" --is-related false  # Create new branch from main
+   ```
+   - Never commit on the main branch.
+   - Use the `ai-commit-helper.sh` script to generate commits in the correct format:
+   ```bash
+   ./scripts/ai-commit-helper.sh --title "Commit title" --description "Short description" --prompt "Original prompt" --thought-process "Reasoning process line 1,Reasoning process line 2" --discussion "Challenge faced,Solution implemented"
+   ```
    - Follow the detailed guidelines in CONTRIBUTING.md for reference.
 
-4. Always finish by building the app and run unit tests in release mode.
-   - Don't address warnings in test files as long as they run properly.
+4. Whenever a code source file have been modified, always finish by building the app and run unit tests in release mode.
+   - Don't adress warnings in test files as long as they run properly.
+   - Use the `ai-clippy-helper.sh` script for non-interactive linting:
+   ```bash
+   ./scripts/ai-clippy-helper.sh --check-only    # Only check for linting issues
+   ./scripts/ai-clippy-helper.sh --fix           # Try to fix linting issues
+   ```
    - #[allow(dead_code)] directive is forbidden to fix warnings except to silence warnings related to tests in production code.
 
-5. When a test breaks, be careful.
-   - You must check first if it's the modification the problem before adapting the test to the new change.
+5. When a test breaks, BE CAREFUL!
+   - You must check first if it's the modification the problem before tryin to adapt the test to the new changes.
 
-6. For PR creation, ONLY create PRs when EXPLICITLY requested by the user.
+6. PR creation instructions, ONLY create PRs when EXPLICITLY requested by the user.
    - NEVER create a PR automatically or as part of another task unless directly requested.
-   - Use the scripts/create-pr.sh script ONLY when the user has asked to "create a PR" or similar explicit instructions.
-   - Use the new bot-friendly format with the --body parameter to provide the complete PR description:
-     ```bash
-     ./scripts/create-pr.sh --body "## 📋 PR Overview\n\nThis PR implements feature X by...\n\n## 🔍 Implementation Details\n\n- Added new component\n- Fixed error handling" --template
-     ```
-   - Always use escaped newlines (\n) in the PR body for proper formatting
-   - Include the --template flag for better PR structure
-   - For larger PRs with complex changes, consider using the PR template
+   - ALWAYS use the `ai-pr-helper.sh` script as the preferred method for PR creation:
+   ```bash
+   ./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
+   ```
+   - This helper avoids multiline command issues and creates well-structured PRs with proper section formatting.
+   - When a PR is explicitly requested, leverage AI capabilities for intelligent summarization:
+      - Analyzing all commits on the branch to understand the complete change set
+      - Generating a well-structured PR body with emoji-enhanced sections
+      - At the end, create a PR title that accurately reflects a summary of the changes
 
-7. When a PR is explicitly requested, structure the PR body with emoji-enhanced sections:
+7. When creating PRs, structure the PR body with emoji-enhanced sections:
+   - 🧠 **Instructions**
+     Prompt: 
+       ```
+       <Original prompt or request as plain text>
+       ```
+     Chain of thoughts: 
+       ```
+       <Reasoning process used by the agent as plain text>
+       ```
    - 📌 **Overview**: Brief summary of what the PR accomplishes (2-3 sentences)
    - 🔍 **Key Changes**: Bullet points of the most significant changes
    - 🧩 **Implementation Details**: Technical approach and design decisions
    - 🔄 **Migration Notes**: Any changes requiring updates to existing code
    - ⚠️ **Areas of Attention**: Parts of the PR that need special review focus
+   - 📝 **Commit Details**: Historical record of all commits
+   - 📁 **Files Changed**: For listing modified files
 
-8. Add appropriate emojis to PR sections for better readability:
-   - 📝 Commit Details: Historical record of all commits
-   - 📅 Date: For timestamps
-   - ✅ Commit titles: For each commit
-   - 📁 Files Changed: For listing modified files
-
-9. Commit Message Structure Reference:
+8. Commit Message Structure Reference (generated by ai-commit-helper.sh):
    ```
    <Concise summary as title>
 
+   Short description: <Brief description of the changes>
+
    Prompt: <Original prompt or request>
 
-   Description: <Detailed description of changes>
+   Chain of thoughts: <Reasoning process used by the agent>
 
    Discussion: <Challenges faced and how they were resolved>
-   ``` 
+   ```
+
+## Available AI Helper Scripts
+
+The repository includes several optimized scripts specifically designed for AI agent use:
+
+1. `ai-branch-helper.sh` - Non-interactive branch management
+   - Checks branch status and creates new branches as needed
+   - Uses named parameters rather than interactive prompts
+
+2. `ai-commit-helper.sh` - Non-interactive commit creation
+   - Creates properly formatted commits with structured information
+   - Supports comma-separated lists for multiline sections
+
+3. `ai-clippy-helper.sh` - Non-interactive Rust linting
+   - Runs Clippy checks and auto-fixes as needed
+   - Provides clear error messaging and exit codes
+
+4. `ai-pr-helper.sh` - Non-interactive PR creation
+   - Creates well-structured PRs with proper formatting
+   - Automatically detects files and commits where possible
+
+These scripts are optimized for AI agent use and should be preferred over their interactive counterparts. 

@@ -29,10 +29,20 @@ Thank you for considering contributing to YASTwAI (Yet Another Subtitle Translat
 
 ## Commits
 
+### Human Contributors
+
 Use the `scripts/create-commit.sh` script to generate properly formatted commits:
 
 ```
-./scripts/create-commit.sh <title> <prompt> <description> <discussion>
+./scripts/create-commit.sh <title> <short-description> <prompt> <chain-of-thoughts> <discussion>
+```
+
+### AI Assistants
+
+AI assistants should use the optimized non-interactive script:
+
+```
+./scripts/ai-commit-helper.sh --title "Commit title" --description "Short description" --prompt "Original prompt" --thought-process "Line 1,Line 2" --discussion "Challenge faced,Solution implemented"
 ```
 
 Each commit message should follow this structure:
@@ -40,9 +50,11 @@ Each commit message should follow this structure:
 ```
 <Concise summary as title>
 
+Short description: <Brief description of the changes>
+
 Prompt: <Original prompt or request>
 
-Description: <Detailed description of changes>
+Chain of thoughts: <Reasoning process used by the agent>
 
 Discussion: <Challenges faced and how they were resolved>
 ```
@@ -55,15 +67,22 @@ YASTwAI follows a branch-based workflow with specific requirements and helper sc
 
 1. Development happens on feature branches, not directly on `main`
 2. Each feature or fix gets its own branch
-3. Use the `branch-check.sh` script to manage branches:
+3. Human contributors use the `branch-check.sh` script to manage branches:
 
 ```bash
 ./scripts/branch-check.sh
 ```
 
-The script will:
+4. AI assistants should use the optimized non-interactive script:
+
+```bash
+./scripts/ai-branch-helper.sh --check-only                          # Check branch status only
+./scripts/ai-branch-helper.sh --new-branch "feature-name" --is-related false  # Create new branch from main
+```
+
+These scripts help:
 - Check if you're on the `main` branch
-- Prompt you to create a new branch if needed
+- Create a new branch when needed
 - Check if your new work is related to the current branch
 - Guide you through switching to a new branch when appropriate
 
@@ -73,11 +92,28 @@ The script will:
 2. Add tests for new functionality
 3. Ensure all tests pass
 4. Update documentation as needed
-5. Create commits using the project's commit script
+5. Create commits using the appropriate commit script
 6. Push your branch to your fork
 7. Create a pull request
 
+### Code Quality Checks
+
+For running Rust's linting tools:
+
+1. Human contributors:
+```bash
+./scripts/run-clippy.sh
+```
+
+2. AI assistants:
+```bash
+./scripts/ai-clippy-helper.sh --check-only    # Check for issues
+./scripts/ai-clippy-helper.sh --fix           # Auto-fix issues
+```
+
 ### Standard Workflow Example
+
+#### For Human Contributors
 
 ```bash
 # 1. Check branch status and create a new branch if needed
@@ -96,6 +132,26 @@ cargo build --release
 cargo test
 ```
 
+#### For AI Assistants
+
+```bash
+# 1. Check branch status and create a new branch if needed 
+./scripts/ai-branch-helper.sh --new-branch "feature-x" --is-related false
+
+# 2. Make code changes
+# ...
+
+# 3. Run linting checks
+./scripts/ai-clippy-helper.sh --fix
+
+# 4. Create a properly formatted commit
+./scripts/ai-commit-helper.sh --title "Add feature X" --description "Add support for feature X that does Y" --prompt "Original request" --thought-process "First I did this,Then I did that" --discussion "Had to overcome this issue,Resolved by using this approach"
+
+# 5. Build and test
+cargo build --release
+cargo test
+```
+
 ### Special Considerations
 
 - All work must be done in English (code, comments, documentation)
@@ -107,25 +163,10 @@ cargo test
 
 ### Bot-Friendly PR Creation
 
-For automated PR creation, especially for AI assistants or bots, use the `create-pr.sh` script with the following syntax:
+For automated PR creation, especially for AI assistants, use the `ai-pr-helper.sh` script with the following syntax:
 
 ```bash
-./scripts/create-pr.sh --body "Your PR description with \n for newlines" --template
-```
-
-Key parameters:
-- `--title "PR Title"` - Optional, will auto-generate if omitted
-- `--body "Description with \n for newlines"` - PR body with escaped newlines
-- `--body-file path/to/file.md` - Alternative to --body, use a file instead
-- `--template` - Use the template from scripts/pr-template.md
-- `--compact` - Generate a more compact PR description
-- `--summary-only` - Only include a brief summary of changes
-- `--draft` - Create as draft PR
-
-For AI assistants, we provide a specialized helper script that avoids multiline string issues:
-
-```bash
-./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2"
+./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
 ```
 
 Key parameters for AI PR helper:
@@ -135,24 +176,30 @@ Key parameters for AI PR helper:
 - `--implementation` - Comma-separated list of implementation details
 - `--files` - Comma-separated list of files changed (optional, will auto-detect if omitted)
 - `--commits` - Comma-separated list of commit descriptions (optional, will auto-detect if omitted)
+- `--draft` - Create as draft PR
 
-The alternative approach using the standard script:
-
-```bash
-./scripts/create-pr.sh --body "## 📋 PR Overview\n\nThis PR implements feature X by...\n\n## 🔍 Implementation Details\n\n- Added new component\n- Fixed error handling" --template
-```
+This script avoids multiline command issues and creates well-structured PRs. It automatically handles creating the PR using either GitHub CLI if available, or directly through the GitHub API.
 
 ### PR Structure Best Practices
 
 Well-structured PRs should include:
 
-1. **Overview**: Brief summary of what the PR accomplishes (2-3 sentences)
-2. **Key Changes**: Bullet points of the most significant changes
-3. **Implementation Details**: Technical approach and design decisions
-4. **Testing**: How changes were tested
-5. **Related Issues**: References to related issues or tickets
+1. **Instructions** (AI-generated PRs only)
+   - Prompt: Original request
+   - Chain of thoughts: Reasoning process
+
+2. **Overview**: Brief summary of what the PR accomplishes (2-3 sentences)
+
+3. **Key Changes**: Bullet points of the most significant changes
+
+4. **Implementation Details**: Technical approach and design decisions
+
+5. **Testing**: How changes were tested
+
+6. **Related Issues**: References to related issues or tickets
 
 Use emojis for better readability:
+- 🧠 For instructions section (AI PRs)
 - 📌 For overview sections
 - 🔍 For key changes
 - 🧩 For implementation details
@@ -164,8 +211,16 @@ Use emojis for better readability:
 ## Automated Tools
 
 The repository includes several scripts to help with development:
-- `scripts/create-commit.sh` - For creating properly formatted commits
-- `scripts/create-pr.sh` - For creating pull requests with proper descriptions
-- `scripts/run-clippy.sh` - For running the Rust linter
 
-Use these tools to ensure consistency across contributions.
+### Standard Scripts (Interactive)
+- `scripts/create-commit.sh` - For creating properly formatted commits (interactive)
+- `scripts/branch-check.sh` - For managing branches (interactive)
+- `scripts/run-clippy.sh` - For running the Rust linter (basic)
+
+### AI-Optimized Scripts (Non-Interactive)
+- `scripts/ai-commit-helper.sh` - For creating commits with named parameters
+- `scripts/ai-branch-helper.sh` - For branch management with named parameters
+- `scripts/ai-clippy-helper.sh` - For running Clippy with more options and better output
+- `scripts/ai-pr-helper.sh` - For creating pull requests with proper descriptions
+
+These tools ensure consistency across contributions and make it easier for both human developers and AI assistants to follow project conventions.
