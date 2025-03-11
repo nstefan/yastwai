@@ -14,9 +14,27 @@ alwaysApply: false
 3. Everytime the user sends a prompt, ALWAYS automatically prepare and display a commit preview at the end when you're confident everything is ok:
     - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
     - Never commit on the main branch.
-    - ALWAYS run ./scripts/ai-commit.sh with --mode=preview first and show the output to the user without asking.
+    - DO NOT use the commit script for previews. Instead, directly generate a beautiful preview for the user in this format:
+      ```
+      ## Commit Preview
+
+      {commit title}
+
+      Short description: {short description}
+
+      Prompt: {original prompt}
+
+      Chain of thoughts: 
+      {reasoning process}
+
+      Discussion: 
+      {challenges faced}
+      ```
     - THEN ask the user if they want to proceed with the commit.
-    - Only execute the commit (--mode=execute) after explicit user confirmation.
+    - Only execute the commit after explicit user confirmation using:
+      ```
+      ./scripts/ai-commit.sh "Title" "Description" "Prompt" "Reasoning" "Challenges"
+      ```
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
 
     Commit Message Structure Reference:
