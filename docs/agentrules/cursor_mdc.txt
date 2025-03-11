@@ -11,10 +11,12 @@ alwaysApply: false
 2. Every command must not be interactive.
     - use proper arguments to prevent user interaction with commands. Example "git diff | cat".
 
-3. Everytime the user sends a prompt, automatically commit changes at the end when you're confident everything is ok.
+3. Everytime the user sends a prompt, ALWAYS automatically prepare and display a commit preview at the end when you're confident everything is ok:
     - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
     - Never commit on the main branch.
-    - Use the ./scripts/ai-commit.sh script to generate commits in the correct format.
+    - ALWAYS run ./scripts/ai-commit.sh with --mode=preview first and show the output to the user without asking.
+    - THEN ask the user if they want to proceed with the commit.
+    - Only execute the commit (--mode=execute) after explicit user confirmation.
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
 
     Commit Message Structure Reference:
