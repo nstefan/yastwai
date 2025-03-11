@@ -3,140 +3,139 @@ description: project
 globs: 
 alwaysApply: false
 ---
-## ⚠️ FILE STRUCTURE NOTICE
+# AI Agent Instructions for Project Yastwai
+
+## ⚠️ CRITICAL SAFEGUARDS
+
+### FILE STRUCTURE
 - This file (docs/agentrules/cursor_mdc.txt) is the SOURCE OF TRUTH
 - The file .cursor/rules/project.mdc is ONLY A SYMLINK pointing to this file
-- Always edit THIS file, never edit the symlink directly
+- ALWAYS edit THIS file, never edit the symlink directly
 
-## ⚠️ MAIN BRANCH PROTECTION
-- NEVER EVER commit changes to the main branch under any circumstances
-- If you are on the main branch, FIRST create a new branch before making any changes
-- Use: `git checkout -b new-branch-name` to create and switch to a new branch
-- VERIFY your current branch with `git branch` before committing
+### MAIN BRANCH PROTECTION
+- NEVER commit changes to the main branch under ANY circumstances
+- If on main branch, ALWAYS create a new branch first: `git checkout -b new-branch-name`
+- ALWAYS verify your current branch with `git branch` before committing
 
-## ⚠️ PULL REQUEST CREATION RULES
+### PULL REQUEST CREATION
 - NEVER create a PR automatically or proactively
 - ONLY create PRs when the user EXPLICITLY requests it with words like "create PR", "make PR", or "PR"
 - When in doubt, DO NOT create a PR - wait for explicit instructions
-- After making commits, stop and wait for the user's next instructions
 
-1. Everything must be produced in english.
-    - code
-    - comments
-    - documentation (README and other file headers)
+## GENERAL PRINCIPLES
 
-2. Every command must not be interactive.
-    - use proper arguments to prevent user interaction with commands. Example "git diff | cat".
+### 1. CODE STANDARDS
+- ALWAYS produce ALL content in English:
+  - Code
+  - Comments
+  - Documentation
+  - Logs and messages
 
-3. Everytime the user sends a prompt, ALWAYS automatically prepare and display a commit preview:
-    - ALWAYS automatically stage modified files at the end of each prompt process with `git add` for any files you have created or modified
-    - ALWAYS check if you are on the main branch. If you are, DO NOT PROCEED and warn the user immediately
-    - Check if the prompt is still related to the current branch, if not create a new branch from the main branch
-    - DO NOT use the commit script for previews. Instead, directly generate a beautiful preview for the user by creating a markdown code block containing:
+### 2. COMMAND EXECUTION SAFETY
+- NEVER use interactive commands
+- ALWAYS pipe commands that might trigger pagers through `cat` (e.g., `git diff | cat`)
+- ALWAYS redirect stderr to prevent interactive prompts (e.g., `command 2>/dev/null`)
 
-        ```
-        {commit title}
+## WORKFLOW PROCEDURES
 
-        Short description: {short description}
-        
-        Model: {AI model name}
+### 3. STANDARD PROMPT WORKFLOW
+When a user sends a prompt:
 
-        Prompt: {original prompt}
+1. **Branch Management**:
+   - ALWAYS check if you're on the main branch - if so, warn the user immediately
+   - Assess if the prompt relates to the current branch - if not, create a new branch from main
 
-        Thought Process: 
-        {reasoning process}
+2. **File Changes**:
+   - ALWAYS automatically stage modified files at the end with `git add` for any files created or modified
 
-        Discussion: 
-        {challenges faced}
-        ```
+3. **Commit Preview**:
+   - ALWAYS generate a commit preview using the following format:
+     ```
+     {commit title}
 
-    - THEN ask the user if they want to proceed with the commit.
-    - IMPORTANT: When preparing the commit preview, you MUST copy your internal reasoning VERBATIM from your thought process. Do not summarize or rewrite it.
-    - Your thought process should explain your reasoning about the problem, approach and solution - not just list the files you changed.
-    - The Model section should contain the technical name of the AI model being used (e.g., "claude-3.7-sonnet-thinking").
-    - Only execute the commit after explicit user confirmation using:
+     Short description: {short description}
+     
+     Model: {AI model name}
 
-        ```
-        ./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
-        ```
-        
-    - Follow the detailed guidelines in CONTRIBUTING.md for reference.
+     Prompt: {original prompt}
 
-    Commit Message Structure Reference:
-    ```
-    <Concise summary as title>
+     Thought Process: 
+     {reasoning process}
 
-    Short description: <Brief description>
-    
-    Model: <Technical AI model name>
+     Discussion: 
+     {challenges faced}
+     ```
+   - The Model section MUST contain the technical AI model name (e.g., "claude-3.7-sonnet-thinking")
+   - ALWAYS copy your internal reasoning VERBATIM in the Thought Process section
+   - Your thought process MUST explain your reasoning about the problem, approach, and solution - not just list files changed
 
-    Prompt: 
-    <Original prompt or request>
+4. **User Confirmation**:
+   - ALWAYS ask the user if they want to proceed with the commit
+   - NEVER execute the commit without explicit confirmation
+   - After user confirmation, use:
+     ```bash
+     ./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
+     ```
+   - After committing, ALWAYS wait for the user's next instructions
 
-    Thought Process: 
-    <Reasoning process used by the agent>
+### 4. QUALITY ASSURANCE
+When modifying source files:
 
-    Discussion: 
-    <Challenges faced and how they were resolved>
-    ```
+1. **Testing**:
+   - ALWAYS build and test after code changes:
+     ```bash
+     cargo build --release && cargo test --release
+     ```
+   - When tests fail, FIRST check if code changes caused the failure
+   - ONLY modify tests if requirements have legitimately changed
 
-4. Whenever a code source file have been modified, always finish by building the app and run unit tests in release mode.
-    - Don't adress warnings in test files as long as they run properly.
-    - #[allow(dead_code)] directive is forbidden to fix warnings except to silence warnings related to tests in production code.
+2. **Code Standards**:
+   - DO address warnings in production code
+   - DO NOT address warnings in test files if they run properly
+   - NEVER use `#[allow(dead_code)]` except for test-related code in production files
 
-5. When a test breaks, BE CAREFUL!
-    - You must check first if it's the modification the problem before tryin to adapt the test to the new changes.
+3. **Linting**:
+   - For checking: `./scripts/ai-clippy.sh --check-only`
+   - For fixing: `./scripts/ai-clippy.sh --fix`
 
-6. PR creation instructions, ONLY create PRs when EXPLICITLY requested by the user.
-    - NEVER create a PR automatically or as part of another task unless directly requested.
-    - ALWAYS use the scripts/ai-pr.sh script as the preferred method for PR creation.
-    - The helper script avoids multiline command issues and creates well-structured PRs:
-        ```bash
-        ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
-        ```
-    - Use this syntax with comma-separated lists instead of trying to create multiline strings directly.
-    - Only fall back to direct git commands if the ai-pr.sh is not available.
-    - When a PR is explicitly requested with words like "pr" or "create pr", leverage AI capabilities for intelligent summarization:
-        - Analyzing all commits on the branch to understand the complete change set
-        - Generating a well-structured PR body with emoji-enhanced sections
-        - At the end, create a PR title that accurately reflects a summary of the changes
-        - Keep prompt and chain of thoughts in memory
-    - Structure the summary as follows for every branches:
-        - 🧠 **Instructions**
-          Prompt: 
-            ```
-            <Original prompt or request as plain text>
-            ```
-          Thought Process: 
-            ```
-            <Reasoning process used by the agent as plain text>
-            ```
-        - 📌 **Overview**: Brief summary of what the PR accomplishes (2-3 sentences)
-        - 🔍 **Key Changes**: Bullet points of the most significant changes
-        - 🧩 **Implementation Details**: Technical approach and design decisions
-        - 🔄 **Migration Notes**: Any changes requiring updates to existing code
-        - ⚠️ **Areas of Attention**: Parts of the PR that need special review focus
-        - 🤖 **AI Model**: <Technical AI model name (e.g., claude-3.7-sonnet-thinking)>
-    - Format PR descriptions with emojis according to this convention:
-        - 📝 Commit Details: Historical record of all commits
-        - 📅 Date: For timestamps
-        - 📎 Commit titles: For each commit (with commit hash)
-        - 📁 Files Changed: For listing modified files
-    - For large PRs, use appropriate markdown (headers, lists, code blocks and line breaks) to enhance readability.
+### 5. PULL REQUEST CREATION
+ONLY when explicitly requested:
 
-7. Model Detection Instructions for AI Agents
-    - Use scripts/ai-cursor-model.sh to retrieve the current AI model information:
-        ```bash
-        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
-        ```
-    - The script will detect the model from the Cursor SQLite database
-    - If the model cannot be detected, the script will return "N/A"
-    - The model parameter is REQUIRED for all commit and PR scripts:
-        - For commits: `./scripts/ai-commit.sh --model "$MODEL" ...`
-        - For PRs: `./scripts/ai-pr.sh --model "$MODEL" ...`
-    - When creating commit previews directly, always include the Model section
-    - It is recommended to detect the model first, then pass it to the scripts:
-        ```bash
-        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
-        ./scripts/ai-commit.sh --model "$MODEL" "Title" "Description" "Prompt" "Thought" "Discussion"
-        ```
+1. **Using the Script**:
+   - ALWAYS use the AI-PR script:
+     ```bash
+     ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
+     ```
+   - ALWAYS use comma-separated lists, NOT multiline strings
+
+2. **PR Structure**:
+   - 🧠 **Instructions**:
+     - Prompt and Thought Process (original text)
+   - 📌 **Overview**: Brief summary (2-3 sentences)
+   - 🔍 **Key Changes**: Bullet points of significant changes
+   - 🧩 **Implementation Details**: Technical approach
+   - 🔄 **Migration Notes**: Update requirements for existing code
+   - ⚠️ **Areas of Attention**: Parts needing special review
+   - 🤖 **AI Model**: Technical AI model name
+
+3. **PR Formatting**:
+   - 📝 Commit Details: Historical record
+   - 📅 Date: For timestamps
+   - 📎 Commit titles: With commit hash
+   - 📁 Files Changed: Modified files list
+   - Use appropriate markdown formatting for readability
+
+### 6. MODEL DETECTION
+For AI model information:
+
+1. **Getting Model Info**:
+   ```bash
+   MODEL=$(./scripts/ai-cursor-model.sh --quiet)
+   ```
+
+2. **Using with Scripts**:
+   - ALWAYS include model parameter for commits and PRs:
+     ```bash
+     ./scripts/ai-commit.sh --model "$MODEL" "Title" "Description" "Prompt" "Thought" "Discussion"
+     ./scripts/ai-pr.sh --model "$MODEL" ...
+     ```
