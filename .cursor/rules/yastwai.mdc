@@ -8,29 +8,37 @@ alwaysApply: true
     - comments
     - documentation (README and other file headers)
 
-2. Every command must not be interactive since we are dealing with a bot.
-    - use proper arguments to prevent user interaction with commands.
+2. Every command must not be interactive.
+    - use proper arguments to prevent user interaction with commands like "| cat".
 
 3. Everytime the user sends a prompt, automatically commit changes at the end when you're confident everything is ok.
-    - Check if we already are on a different branch than the "main" one. If not create a new branch.
-    - Check if the prompt is still related to the current branch, if not create a new branch from the main one.
-    - Use " | cat" to not stay stuck when checking status and branch names.
-    - Use a consise summary as commit title
-    - Use the full prompt made by the user as the commit description header as the "Prompt:" part.
-    - Use the final summary as the rest of the commit description body as the "Description:" part.
-    - Analyse all the faced difficulties and add a summary as the "Discussion:" part.
+    - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
+    - Never commit on the main branch.
     - Use the ./scripts/create-commit.sh script to generate commits in the correct format.
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
-    - Use the ./scripts/create-commit.sh script.
 
-4. Always finish by building the app and run unit tests in release mode.
+    Commit Message Structure Reference:
+    ```
+    <Concise summary as title>
+
+    Prompt: 
+    <Original prompt or request>
+
+    Chain of thoughts: 
+    <Reasoning process used by the agent>
+
+    Discussion: 
+    <Challenges faced and how they were resolved>
+    ```
+
+4. Whenever a code source file have been modified, always finish by building the app and run unit tests in release mode.
     - Don't adress warnings in test files as long as they run properly.
     - #[allow(dead_code)] directive is forbidden to fix warnings except to silence warnings related to tests in production code.
 
-5. When a test breaks, be careful.
-    - You must check first if it's the modification the problem before adapting the test to the new change.
+5. When a test breaks, BE CAREFUL!
+    - You must check first if it's the modification the problem before tryin to adapt the test to the new changes.
 
-6. For PR creation, ONLY create PRs when EXPLICITLY requested by the user.
+6. PR creation instructions, ONLY create PRs when EXPLICITLY requested by the user.
     - NEVER create a PR automatically or as part of another task unless directly requested.
     - ALWAYS use the scripts/ai-pr-helper.sh script as the preferred method for PR creation.
     - The helper script avoids multiline command issues and creates well-structured PRs:
@@ -39,11 +47,21 @@ alwaysApply: true
         ```
     - Use this syntax with comma-separated lists instead of trying to create multiline strings directly.
     - Only fall back to scripts/create-pr.sh if the ai-pr-helper.sh is not available.
-    - When a PR is explicitly requested, leverage AI capabilities for intelligent summarization:
+    - When a PR is explicitly requested with words like "pr" or "create pr", leverage AI capabilities for intelligent summarization:
         - Analyzing all commits on the branch to understand the complete change set
         - Generating a well-structured PR body with emoji-enhanced sections
         - At the end, create a PR title that accurately reflects a summary of the changes
-    - For branches with multiple commits, structure the summary as follows:
+        - Keep prompt and chain of thoughts in memory
+    - Structure the summary as follows for every branches:
+        - 🧠 **Instructions**
+          Prompt: 
+            ```
+            <Original prompt or request as plain text>
+            ```
+          Chain of thoughts: 
+            ```
+            <Reasoning process used by the agent as plain text>
+            ```
         - 📌 **Overview**: Brief summary of what the PR accomplishes (2-3 sentences)
         - 🔍 **Key Changes**: Bullet points of the most significant changes
         - 🧩 **Implementation Details**: Technical approach and design decisions
@@ -52,17 +70,6 @@ alwaysApply: true
     - Format PR descriptions with emojis according to this convention:
         - 📝 Commit Details: Historical record of all commits
         - 📅 Date: For timestamps
-        - ✅ Commit titles: For each commit
+        - 📎 Commit titles: For each commit (with commit hash)
         - 📁 Files Changed: For listing modified files
     - For large PRs, use appropriate markdown (headers, lists, code blocks and line breaks) to enhance readability.
-
-7. Commit Message Structure Reference:
-    ```
-    <Concise summary as title>
-
-    Prompt: <Original prompt or request>
-
-    Description: <Detailed description of changes>
-
-    Discussion: <Challenges faced and how they were resolved>
-    ```
