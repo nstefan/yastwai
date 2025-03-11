@@ -1,8 +1,3 @@
----
-description: YASTwAI
-globs: *.*
-alwaysApply: true
----
 1. Everything must be produced in english.
     - code
     - comments
