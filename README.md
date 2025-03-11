@@ -116,10 +116,11 @@ See the full configuration file for provider-specific options.
 
 ## 🛠️ Development
 
-YASTwAI has been developed with a focus on AI-assisted development. For details on how AI agents work with this codebase, see:
+YASTwAI has been developed with a focus on AI-assisted development. 
+For details on how AI agents work with this codebase, see:
 
-- [Agent Rules Documentation](./docs/agentrules/readme.md) - General AI agent behavior rules
-- [Project-Specific Rules](./docs/agentrules/cursor.mdc) - Detailed guidelines for YASTwAI development
+- [System Rules](./docs/agentrules/system.md) - General AI agent behavior rules set in Cursor User Rules.
+- [Project-Specific Rules](./docs/agentrules/cursor.mdc) - Specific project rules detected by Cursor via a [symlink](./cursor/rules/yastwai.mdc).
 
 ### Running Tests
 
@@ -161,8 +162,6 @@ The project includes several AI-optimized helper scripts for development tasks:
 
 ## 🔮 Future Improvements
 
-- Support for more subtitle formats beyond SRT
-- Multiple language translation in a single run
 - Improved CI/CD pipeline (coming soon!)
 
 ## 📄 License
