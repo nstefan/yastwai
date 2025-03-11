@@ -1292,11 +1292,13 @@ impl TranslationService {
                         }
                     }
                 } else if let Some(_entry_num) = current_entry_num {
-                    // Add content to the current entry
-                    if !current_entry_text.is_empty() {
-                        current_entry_text.push('\n');
+                    // Add content to the current entry, skipping the SPECIAL_FORMATTING marker
+                    if line.trim() != "# SPECIAL_FORMATTING #" {
+                        if !current_entry_text.is_empty() {
+                            current_entry_text.push('\n');
+                        }
+                        current_entry_text.push_str(line);
                     }
-                    current_entry_text.push_str(line);
                 }
             }
             
