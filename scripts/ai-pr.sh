@@ -42,30 +42,58 @@ DRAFT=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --title)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --title requires a value"
+                show_usage
+            fi
             PR_TITLE="$2"
             shift 2
             ;;
         --overview)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --overview requires a value"
+                show_usage
+            fi
             OVERVIEW="$2"
             shift 2
             ;;
         --key-changes)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --key-changes requires a value"
+                show_usage
+            fi
             KEY_CHANGES="$2"
             shift 2
             ;;
         --implementation)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --implementation requires a value"
+                show_usage
+            fi
             IMPLEMENTATION="$2"
             shift 2
             ;;
         --files)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --files requires a value"
+                show_usage
+            fi
             FILES="$2"
             shift 2
             ;;
         --commits)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --commits requires a value"
+                show_usage
+            fi
             COMMITS="$2"
             shift 2
             ;;
         --base)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --base requires a value"
+                show_usage
+            fi
             BASE_BRANCH="$2"
             shift 2
             ;;
@@ -77,7 +105,7 @@ while [[ $# -gt 0 ]]; do
             show_usage
             ;;
         *)
-            echo "Unknown option: $1"
+            log_message "Unknown option: $1"
             show_usage
             ;;
     esac
@@ -131,10 +159,9 @@ if [ -n "$FILES" ]; then
     done
 else
     # Auto-detect changed files
-    BASE_BRANCH="main"
     CURRENT_BRANCH=$(git branch --show-current | cat)
     
-    git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" | sort | uniq | while read -r file; do
+    git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" 2>/dev/null | sort | uniq | while read -r file; do
         if [[ -f "$file" ]]; then
             echo "- $file" >> "$PR_BODY_FILE"
         fi
@@ -152,10 +179,9 @@ if [ -n "$COMMITS" ]; then
     done
 else
     # Auto-detect commits
-    BASE_BRANCH="main"
     CURRENT_BRANCH=$(git branch --show-current | cat)
     
-    git log --reverse --pretty=format:"✅ %s" "$BASE_BRANCH..$CURRENT_BRANCH" >> "$PR_BODY_FILE"
+    git log --reverse --pretty=format:"✅ %s" "$BASE_BRANCH..$CURRENT_BRANCH" 2>/dev/null | cat >> "$PR_BODY_FILE"
 fi
 
 # Display the generated PR description
@@ -172,7 +198,7 @@ if [ -z "$CURRENT_BRANCH" ]; then
 fi
 
 # Check for uncommitted changes
-if [ -n "$(git status --porcelain)" ]; then
+if [ -n "$(git status --porcelain | cat)" ]; then
     log_message "Error: You have uncommitted changes. Please commit or stash them before creating a PR."
     exit 1
 fi
@@ -216,7 +242,7 @@ else
         log_message "Your branch is behind the remote by $BEHIND_COUNT commit(s)."
         log_message "Attempting to rebase automatically..."
         
-        if git pull --rebase origin "$CURRENT_BRANCH"; then
+        if git pull --rebase origin "$CURRENT_BRANCH" | cat; then
             log_message "Successfully rebased against remote branch."
         else
             log_message "Error: Automatic rebase failed. Please resolve conflicts manually."
@@ -235,7 +261,7 @@ else
 fi
 
 # Get commit count
-COMMIT_COUNT=$(git rev-list --count "$BASE_BRANCH..$CURRENT_BRANCH" | cat)
+COMMIT_COUNT=$(git rev-list --count "$BASE_BRANCH..$CURRENT_BRANCH" 2>/dev/null | cat)
 if [ "$COMMIT_COUNT" -eq 0 ]; then
     log_message "Error: No commits found between $BASE_BRANCH and $CURRENT_BRANCH"
     exit 1
@@ -292,19 +318,20 @@ log_message "------------------------------------------------------"
 echo -e "$PR_BODY_CONTENT"
 log_message "------------------------------------------------------"
 log_message ""
+log_message "Pull request URL: $PR_URL"
 
-# Open the PR URL in the default browser
-if command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$PR_URL" >/dev/null 2>&1
-elif command -v open >/dev/null 2>&1; then
-    open "$PR_URL" >/dev/null 2>&1
-else
-    log_message "Pull request URL: $PR_URL"
+# Only attempt to open the URL if we're not in a non-interactive environment
+if [ -n "$DISPLAY" ] || [ "$(uname)" == "Darwin" ]; then
+    # Open the PR URL in the default browser
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$PR_URL" >/dev/null 2>&1 || log_message "Could not open browser automatically"
+    elif command -v open >/dev/null 2>&1; then
+        open "$PR_URL" >/dev/null 2>&1 || log_message "Could not open browser automatically"
+    fi
 fi
 
 # Clean up
 rm -f "$PR_BODY_FILE"
 log_message "Temporary files cleaned up"
-log_message "Pull request URL opened in browser."
 log_message "PR creation process completed successfully."
 exit 0 

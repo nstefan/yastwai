@@ -46,7 +46,7 @@ while [[ $# -gt 0 ]]; do
             show_usage
             ;;
         *)
-            echo "Unknown option: $1"
+            log_message "Unknown option: $1"
             show_usage
             ;;
     esac
@@ -55,7 +55,7 @@ done
 # If neither flag is specified, default to running both check and fix
 if [ "$CHECK_ONLY" = false ] && [ "$FIX" = false ]; then
     CHECK_ONLY=true
-    FIX=true
+    log_message "No specific mode selected, defaulting to check-only mode"
 fi
 
 # Run standard Clippy check
@@ -69,10 +69,10 @@ if [ "$CHECK_ONLY" = true ]; then
         log_message "Using lint exceptions: $LINTS"
     fi
     
-    # Run Clippy with warnings as errors
-    cargo clippy -- -D warnings $LINTS
+    # Run Clippy with warnings as errors and redirect through cat to avoid interactive pager
+    cargo clippy -- -D warnings $LINTS 2>&1 | cat
     
-    clippy_exit_code=$?
+    clippy_exit_code=${PIPESTATUS[0]}
     if [ $clippy_exit_code -ne 0 ]; then
         log_message "Clippy check failed with exit code $clippy_exit_code"
         exit $clippy_exit_code
@@ -86,14 +86,25 @@ if [ "$FIX" = true ]; then
     log_message "Running Clippy auto-fix..."
     
     # Run cargo fix with options that work for non-interactive environments
-    cargo fix --allow-dirty --allow-staged
+    cargo fix --allow-dirty --allow-staged 2>&1 | cat
     
-    fix_exit_code=$?
+    fix_exit_code=${PIPESTATUS[0]}
     if [ $fix_exit_code -ne 0 ]; then
         log_message "Clippy auto-fix failed with exit code $fix_exit_code"
         exit $fix_exit_code
     else
         log_message "Clippy auto-fix completed successfully."
+    fi
+    
+    # Also run cargo clippy --fix for more specific fixes
+    log_message "Running additional clippy fixes..."
+    cargo clippy --fix --allow-dirty --allow-staged 2>&1 | cat
+    
+    clippy_fix_exit_code=${PIPESTATUS[0]}
+    if [ $clippy_fix_exit_code -ne 0 ]; then
+        log_message "Additional clippy fixes completed with warnings, code: $clippy_fix_exit_code"
+    else
+        log_message "Additional clippy fixes completed successfully."
     fi
 fi
 
