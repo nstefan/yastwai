@@ -12,6 +12,7 @@ alwaysApply: false
     - use proper arguments to prevent user interaction with commands. Example "git diff | cat".
 
 3. Everytime the user sends a prompt, ALWAYS automatically prepare and display a commit preview:
+    - ALWAYS automatically stage modified files at the end of each prompt process with `git add` for any files you have created or modified
     - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
     - Never commit on the main branch.
     - DO NOT use the commit script for previews. Instead, directly generate a beautiful preview for the user by creating a markdown code block containing:
