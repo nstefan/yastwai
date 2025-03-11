@@ -3,6 +3,17 @@ description: project
 globs: 
 alwaysApply: false
 ---
+## ⚠️ FILE STRUCTURE NOTICE
+- This file (docs/agentrules/cursor_mdc.txt) is the SOURCE OF TRUTH
+- The file .cursor/rules/project.mdc is ONLY A SYMLINK pointing to this file
+- Always edit THIS file, never edit the symlink directly
+
+## ⚠️ MAIN BRANCH PROTECTION
+- NEVER EVER commit changes to the main branch under any circumstances
+- If you are on the main branch, FIRST create a new branch before making any changes
+- Use: `git checkout -b new-branch-name` to create and switch to a new branch
+- VERIFY your current branch with `git branch` before committing
+
 1. Everything must be produced in english.
     - code
     - comments
@@ -13,8 +24,8 @@ alwaysApply: false
 
 3. Everytime the user sends a prompt, ALWAYS automatically prepare and display a commit preview:
     - ALWAYS automatically stage modified files at the end of each prompt process with `git add` for any files you have created or modified
-    - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
-    - Never commit on the main branch.
+    - ALWAYS check if you are on the main branch. If you are, DO NOT PROCEED and warn the user immediately
+    - Check if the prompt is still related to the current branch, if not create a new branch from the main branch
     - DO NOT use the commit script for previews. Instead, directly generate a beautiful preview for the user by creating a markdown code block containing:
 
         ```
