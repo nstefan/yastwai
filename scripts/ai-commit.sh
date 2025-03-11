@@ -1,13 +1,14 @@
 #!/bin/bash
-# Simple AI Assistant Helper Script for Commit Creation
-# This script provides a simpler interface for AI assistants to create commits
+# AI Assistant Helper Script for Commit Creation
+# This script provides a simple interface for AI assistants to create commits
 # Uses positional arguments for ease of use
+# Follows the naming pattern of ai-*.sh for consistency
 
 set -e  # Exit on error
 
 # Function to show usage with clear examples
 show_usage() {
-    echo "Usage: ./scripts/ai-commit-simple.sh TITLE DESCRIPTION PROMPT [THOUGHT_PROCESS] [DISCUSSION]"
+    echo "Usage: ./scripts/ai-commit.sh TITLE DESCRIPTION PROMPT [THOUGHT_PROCESS] [DISCUSSION]"
     echo ""
     echo "Arguments:"
     echo "  TITLE            - Commit title (required)"
@@ -17,7 +18,7 @@ show_usage() {
     echo "  DISCUSSION       - Challenges faced (optional)"
     echo ""
     echo "EXAMPLE FOR AI AGENTS:"
-    echo './scripts/ai-commit-simple.sh "Update documentation" "Reorganized docs" "commit changes" "Analyzed structure and made changes" "Created new branch to avoid main"'
+    echo './scripts/ai-commit.sh "Update documentation" "Reorganized docs" "commit changes" "Analyzed structure and made changes" "Created new branch to avoid main"'
     echo ""
     echo "NOTE: Always use quotes around each argument to handle spaces correctly."
     exit 1

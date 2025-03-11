@@ -1,13 +1,13 @@
 #!/bin/bash
 # AI Assistant Helper Script for Branch Management
 # This script helps AI assistants manage git branches without requiring interactive input
-# Follows the naming pattern of ai-*-helper.sh for consistency
+# Follows the naming pattern of ai-*.sh for consistency
 
 set -e  # Exit on error
 
 # Function to show usage
 show_usage() {
-    echo "Usage: ./scripts/ai-branch-helper.sh [options]"
+    echo "Usage: ./scripts/ai-branch.sh [options]"
     echo ""
     echo "Options:"
     echo "  --check-only         - Only check current branch status without creating a new branch"

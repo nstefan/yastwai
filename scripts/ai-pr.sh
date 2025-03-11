@@ -2,12 +2,13 @@
 # AI Assistant Helper Script for PR Creation
 # This script helps AI assistants create structured PR descriptions
 # without having to deal with multiline command issues
+# Follows the naming pattern of ai-*.sh for consistency
 
 set -e  # Exit on error
 
 # Function to show usage
 show_usage() {
-    echo "Usage: ./scripts/ai-pr-helper.sh [options]"
+    echo "Usage: ./scripts/ai-pr.sh [options]"
     echo ""
     echo "Options:"
     echo "  --title TITLE        - PR title (required)"

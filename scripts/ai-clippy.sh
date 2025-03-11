@@ -1,13 +1,13 @@
 #!/bin/bash
 # AI Assistant Helper Script for Running Clippy
 # This script helps AI assistants run Rust linting checks in a non-interactive way
-# Follows the naming pattern of ai-*-helper.sh for consistency
+# Follows the naming pattern of ai-*.sh for consistency
 
 set -e  # Exit on error
 
 # Function to show usage
 show_usage() {
-    echo "Usage: ./scripts/ai-clippy-helper.sh [options]"
+    echo "Usage: ./scripts/ai-clippy.sh [options]"
     echo ""
     echo "Options:"
     echo "  --check-only         - Only run checks without attempting to fix issues"

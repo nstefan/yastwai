@@ -42,7 +42,7 @@ Use the `scripts/create-commit.sh` script to generate properly formatted commits
 AI assistants should use the optimized non-interactive script:
 
 ```
-./scripts/ai-commit-helper.sh --title "Commit title" --description "Short description" --prompt "Original prompt" --thought-process "Line 1,Line 2" --discussion "Challenge faced,Solution implemented"
+./scripts/ai-commit.sh "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
 ```
 
 Each commit message should follow this structure:
@@ -76,8 +76,8 @@ YASTwAI follows a branch-based workflow with specific requirements and helper sc
 4. AI assistants should use the optimized non-interactive script:
 
 ```bash
-./scripts/ai-branch-helper.sh --check-only                          # Check branch status only
-./scripts/ai-branch-helper.sh --new-branch "feature-name" --is-related false  # Create new branch from main
+./scripts/ai-branch.sh --check-only                          # Check branch status only
+./scripts/ai-branch.sh --new-branch "feature-name" --is-related false  # Create new branch from main
 ```
 
 These scripts help:
@@ -107,8 +107,8 @@ For running Rust's linting tools:
 
 2. AI assistants:
 ```bash
-./scripts/ai-clippy-helper.sh --check-only    # Check for issues
-./scripts/ai-clippy-helper.sh --fix           # Auto-fix issues
+./scripts/ai-clippy.sh --check-only    # Check for issues
+./scripts/ai-clippy.sh --fix           # Auto-fix issues
 ```
 
 ### Standard Workflow Example
@@ -136,16 +136,16 @@ cargo test
 
 ```bash
 # 1. Check branch status and create a new branch if needed 
-./scripts/ai-branch-helper.sh --new-branch "feature-x" --is-related false
+./scripts/ai-branch.sh --new-branch "feature-x" --is-related false
 
 # 2. Make code changes
 # ...
 
 # 3. Run linting checks
-./scripts/ai-clippy-helper.sh --fix
+./scripts/ai-clippy.sh --fix
 
 # 4. Create a properly formatted commit
-./scripts/ai-commit-helper.sh --title "Add feature X" --description "Add support for feature X that does Y" --prompt "Original request" --thought-process "First I did this,Then I did that" --discussion "Had to overcome this issue,Resolved by using this approach"
+./scripts/ai-commit.sh "Add feature X" "Add support for feature X that does Y" "Original request" "First I did this, then I did that" "Had to overcome this issue, resolved by using this approach"
 
 # 5. Build and test
 cargo build --release
@@ -163,10 +163,10 @@ cargo test
 
 ### Bot-Friendly PR Creation
 
-For automated PR creation, especially for AI assistants, use the `ai-pr-helper.sh` script with the following syntax:
+For automated PR creation, especially for AI assistants, use the `ai-pr.sh` script with the following syntax:
 
 ```bash
-./scripts/ai-pr-helper.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
+./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
 ```
 
 Key parameters for AI PR helper:
@@ -218,9 +218,9 @@ The repository includes several scripts to help with development:
 - `scripts/run-clippy.sh` - For running the Rust linter (basic)
 
 ### AI-Optimized Scripts (Non-Interactive)
-- `scripts/ai-commit-helper.sh` - For creating commits with named parameters
-- `scripts/ai-branch-helper.sh` - For branch management with named parameters
-- `scripts/ai-clippy-helper.sh` - For running Clippy with more options and better output
-- `scripts/ai-pr-helper.sh` - For creating pull requests with proper descriptions
+- `scripts/ai-commit.sh` - For creating commits with positional arguments
+- `scripts/ai-branch.sh` - For branch management with named parameters
+- `scripts/ai-clippy.sh` - For running Clippy with more options and better output
+- `scripts/ai-pr.sh` - For creating pull requests with proper descriptions
 
 These tools ensure consistency across contributions and make it easier for both human developers and AI assistants to follow project conventions.
