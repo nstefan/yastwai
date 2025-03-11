@@ -33,16 +33,22 @@ Thank you for considering contributing to YASTwAI (Yet Another Subtitle Translat
 
 Use the `scripts/create-commit.sh` script to generate properly formatted commits:
 
-```
+```bash
 ./scripts/create-commit.sh <title> <short-description> <prompt> <chain-of-thoughts> <discussion>
 ```
 
 ### AI Assistants
 
-AI assistants should use the optimized non-interactive script:
+AI assistants should use the optimized non-interactive two-step workflow:
 
+1. Preview mode (to show the user what would be committed):
+```bash
+./scripts/ai-commit.sh --mode=preview "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
 ```
-./scripts/ai-commit.sh "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
+
+2. Execute mode (after user approval):
+```bash
+./scripts/ai-commit.sh --mode=execute "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
 ```
 
 Each commit message should follow this structure:
@@ -144,10 +150,13 @@ cargo test
 # 3. Run linting checks
 ./scripts/ai-clippy.sh --fix
 
-# 4. Create a properly formatted commit
-./scripts/ai-commit.sh "Add feature X" "Add support for feature X that does Y" "Original request" "First I did this, then I did that" "Had to overcome this issue, resolved by using this approach"
+# 4. Preview the commit (for user review)
+./scripts/ai-commit.sh --mode=preview "Add feature X" "Add support for feature X that does Y" "Original request" "First I did this, then I did that" "Had to overcome this issue, resolved by using this approach"
 
-# 5. Build and test
+# 5. Execute the commit (after user approval)
+./scripts/ai-commit.sh --mode=execute "Add feature X" "Add support for feature X that does Y" "Original request" "First I did this, then I did that" "Had to overcome this issue, resolved by using this approach"
+
+# 6. Build and test
 cargo build --release
 cargo test
 ```
@@ -218,7 +227,7 @@ The repository includes several scripts to help with development:
 - `scripts/run-clippy.sh` - For running the Rust linter (basic)
 
 ### AI-Optimized Scripts (Non-Interactive)
-- `scripts/ai-commit.sh` - For creating commits with positional arguments
+- `scripts/ai-commit.sh` - For creating commits using a two-step preview/execute workflow
 - `scripts/ai-branch.sh` - For branch management with named parameters
 - `scripts/ai-clippy.sh` - For running Clippy with more options and better output
 - `scripts/ai-pr.sh` - For creating pull requests with proper descriptions

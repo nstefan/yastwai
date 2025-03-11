@@ -224,8 +224,11 @@ The project includes several AI-optimized helper scripts for development tasks:
 # Branch management
 ./scripts/ai-branch.sh --new-branch "feature-name"
 
-# Create formatted commits
-./scripts/ai-commit.sh "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
+# Two-step commit workflow
+# 1. Preview changes (for user review)
+./scripts/ai-commit.sh --mode=preview "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
+# 2. Execute commit (after user approval)
+./scripts/ai-commit.sh --mode=execute "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
 
 # Run linting with auto-fixes
 ./scripts/ai-clippy.sh --fix
