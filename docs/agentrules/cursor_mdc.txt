@@ -23,7 +23,7 @@ alwaysApply: false
 
         Prompt: {original prompt}
 
-        Chain of thoughts: 
+        Thought Process: 
         {reasoning process}
 
         Discussion: 
@@ -34,7 +34,7 @@ alwaysApply: false
     - Only execute the commit after explicit user confirmation using:
 
         ```
-        ./scripts/ai-commit.sh "Title" "Description" "Prompt" "Reasoning" "Challenges"
+        ./scripts/ai-commit.sh "Title" "Description" "Prompt" "Thought Process" "Discussion"
         ```
         
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
@@ -46,7 +46,7 @@ alwaysApply: false
     Prompt: 
     <Original prompt or request>
 
-    Chain of thoughts: 
+    Thought Process: 
     <Reasoning process used by the agent>
 
     Discussion: 
@@ -80,7 +80,7 @@ alwaysApply: false
             ```
             <Original prompt or request as plain text>
             ```
-          Chain of thoughts: 
+          Thought Process: 
             ```
             <Reasoning process used by the agent as plain text>
             ```

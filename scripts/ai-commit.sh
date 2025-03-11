@@ -22,7 +22,7 @@ show_usage() {
     echo "WORKFLOW FOR AI AGENTS:"
     echo "1. AI presents a formatted preview directly to the user (without using this script)"
     echo "2. If user approves, call this script to execute the commit"
-    echo '   ./scripts/ai-commit.sh "Title" "Description" "Prompt" "Reasoning" "Challenges"'
+    echo '   ./scripts/ai-commit.sh "Title" "Description" "Prompt" "Thought Process" "Discussion"'
     echo ""
     echo "NOTE: Always use quotes around each argument to handle spaces correctly."
     exit 1
@@ -75,7 +75,7 @@ echo "Prompt: $PROMPT" >> "$TEMP_FILE"
 echo "" >> "$TEMP_FILE"
 
 if [ -n "$THOUGHT_PROCESS" ]; then
-    echo "Chain of thoughts: " >> "$TEMP_FILE"
+    echo "Thought Process: " >> "$TEMP_FILE"
     echo "$THOUGHT_PROCESS" >> "$TEMP_FILE"
     echo "" >> "$TEMP_FILE"
 fi
