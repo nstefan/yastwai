@@ -1,7 +1,7 @@
 #!/bin/bash
 # AI Assistant Helper Script for Commit Creation
 # This script provides a simple interface for AI assistants to create commits
-# Uses positional arguments for ease of use
+# Uses two modes: preview (default) and execute
 # Follows the naming pattern of ai-*.sh for consistency
 
 set -e  # Exit on error
@@ -18,12 +18,14 @@ show_usage() {
     echo "  DISCUSSION       - Challenges faced (optional)"
     echo ""
     echo "Options:"
-    echo "  --require-user-approval [true|false]  - Whether to require user approval before committing (default: true)"
-    echo "  require_user_approval=[true|false]    - Same as above, alternate syntax for tool integration"
-    echo "  --help, -h                          - Show this help message"
+    echo "  --mode=[preview|execute]  - 'preview' shows what would be committed, 'execute' performs the commit (default: preview)"
+    echo "  --help, -h                - Show this help message"
     echo ""
-    echo "EXAMPLE FOR AI AGENTS:"
-    echo './scripts/ai-commit.sh "Update documentation" "Reorganized docs" "commit changes" "Analyzed structure and made changes" "Created new branch to avoid main"'
+    echo "WORKFLOW FOR AI AGENTS:"
+    echo "1. First call with preview mode to show the user what would be committed"
+    echo '   ./scripts/ai-commit.sh --mode=preview "Title" "Description" "Prompt" "Reasoning" "Challenges"'
+    echo "2. If user approves, call again with execute mode to actually commit"
+    echo '   ./scripts/ai-commit.sh --mode=execute "Title" "Description" "Prompt" "Reasoning" "Challenges"'
     echo ""
     echo "NOTE: Always use quotes around each argument to handle spaces correctly."
     exit 1
@@ -35,31 +37,18 @@ log_message() {
 }
 
 # Default settings
-REQUIRE_USER_APPROVAL=true
+MODE="preview"
 
 # Parse options
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --require-user-approval)
-            if [[ "$2" == "false" ]]; then
-                REQUIRE_USER_APPROVAL=false
-            elif [[ "$2" == "true" || -z "$2" ]]; then
-                REQUIRE_USER_APPROVAL=true
-            else
-                log_message "Error: --require-user-approval must be 'true' or 'false'"
-                show_usage
-            fi
-            shift 2
-            ;;
-        require_user_approval=*)
+        --mode=*)
             VALUE="${1#*=}"
-            if [[ "$VALUE" == "false" ]]; then
-                REQUIRE_USER_APPROVAL=false
-            elif [[ "$VALUE" == "true" || -z "$VALUE" ]]; then
-                REQUIRE_USER_APPROVAL=true
+            if [[ "$VALUE" == "preview" || "$VALUE" == "execute" ]]; then
+                MODE="$VALUE"
             else
-                log_message "Error: require_user_approval must be 'true' or 'false'"
+                log_message "Error: --mode must be 'preview' or 'execute'"
                 show_usage
             fi
             shift
@@ -90,10 +79,6 @@ PROMPT="$3"
 THOUGHT_PROCESS="${4:-}"  # Optional
 DISCUSSION="${5:-}"       # Optional
 
-# Stage all changes
-log_message "Staging all changes..."
-git add .
-
 # Create a temporary file for the commit message
 TEMP_FILE=$(mktemp)
 
@@ -122,24 +107,24 @@ log_message "---------------------------------------------"
 cat "$TEMP_FILE" | sed 's/^/    /'
 log_message "---------------------------------------------"
 
-# Commit with the generated message based on user approval setting
-if [ "$REQUIRE_USER_APPROVAL" = true ]; then
-    # Ask for user confirmation
-    read -p "Do you want to commit these changes? (y/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        git commit -F "$TEMP_FILE"
-        log_message "Commit created successfully!"
-    else
-        log_message "Commit aborted by user."
-        # Clean up
-        rm -f "$TEMP_FILE"
-        exit 0
-    fi
+# Get list of staged and unstaged changes
+if [ "$MODE" = "preview" ]; then
+    log_message "Files that would be committed:"
+    git status --porcelain | cat
+    
+    # Show detailed changes
+    log_message "Detailed changes (git diff):"
+    git diff --staged | cat
+    
+    log_message "PREVIEW MODE: No changes committed. To commit these changes, run the same command with --mode=execute"
 else
-    # Automatic commit without user approval
+    # We're in execute mode, actually perform the commit
+    log_message "Staging all changes..."
+    git add .
+    
+    # Commit with the generated message
     git commit -F "$TEMP_FILE"
-    log_message "Commit created automatically (user approval not required)!"
+    log_message "Commit created successfully!"
 fi
 
 # Clean up

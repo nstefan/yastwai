@@ -53,7 +53,7 @@ The project uses dedicated rules that are stored in [cursor.mdc](./cursor.mdc). 
 
 1. **Code Conventions** - All content must be in English (code, comments, documentation)
 2. **Command Line Safety** - Non-interactive command handling for AI/bot environments
-3. **Commit Handling** - Preparing commits for user validation and branch management 
+3. **Commit Handling** - Two-step commit workflow with preview and execute modes
 4. **Quality Assurance** - Building, testing, and linting procedures
 5. **PR Creation** - Creating well-structured PRs with proper formatting
 
@@ -68,9 +68,13 @@ YASTwAI provides several AI-optimized scripts to help with development tasks:
    ./scripts/ai-branch.sh --new-branch "feature-name" --is-related "false"
    ```
 
-2. `ai-commit.sh` - Commit preparation with user validation:
+2. `ai-commit.sh` - Two-step commit workflow:
    ```bash
-   ./scripts/ai-commit.sh "Commit title" "Short description" "Original prompt" "Reasoning" "Challenges"
+   # Step 1: Preview changes (for user review)
+   ./scripts/ai-commit.sh --mode=preview "Commit title" "Description" "Prompt" "Reasoning" "Challenges"
+   
+   # Step 2: Execute commit (after user approval)
+   ./scripts/ai-commit.sh --mode=execute "Commit title" "Description" "Prompt" "Reasoning" "Challenges"
    ```
 
 3. `ai-clippy.sh` - Rust linting with check and fix modes:
