@@ -18,11 +18,12 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --help, -h                - Show this help message"
+    echo "  --model MODEL             - Specify AI model (required)"
     echo ""
     echo "WORKFLOW FOR AI AGENTS:"
     echo "1. AI presents a formatted preview directly to the user (without using this script)"
     echo "2. If user approves, call this script to execute the commit"
-    echo '   ./scripts/ai-commit.sh "Title" "Description" "Prompt" "Thought Process" "Discussion"'
+    echo '   ./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"'
     echo ""
     echo "NOTE: Always use quotes around each argument to handle spaces correctly."
     exit 1
@@ -35,10 +36,19 @@ log_message() {
 
 # Parse options
 POSITIONAL_ARGS=()
+MODEL=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --help|-h)
             show_usage
+            ;;
+        --model)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --model requires a value"
+                show_usage
+            fi
+            MODEL="$2"
+            shift 2
             ;;
         *)
             POSITIONAL_ARGS+=("$1")
@@ -56,6 +66,12 @@ if [ $# -lt 3 ]; then
     show_usage
 fi
 
+# Check if model parameter is provided
+if [ -z "$MODEL" ]; then
+    log_message "Error: --model parameter is required"
+    show_usage
+fi
+
 # Assign arguments to variables
 COMMIT_TITLE="$1"
 DESCRIPTION="$2"
@@ -70,6 +86,8 @@ TEMP_FILE=$(mktemp)
 echo "$COMMIT_TITLE" > "$TEMP_FILE"
 echo "" >> "$TEMP_FILE"
 echo "Short description: $DESCRIPTION" >> "$TEMP_FILE"
+echo "" >> "$TEMP_FILE"
+echo "Model: $MODEL" >> "$TEMP_FILE"
 echo "" >> "$TEMP_FILE"
 echo "Prompt: $PROMPT" >> "$TEMP_FILE"
 echo "" >> "$TEMP_FILE"

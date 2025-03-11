@@ -19,6 +19,7 @@ show_usage() {
     echo "  --commits TEXT       - Comma-separated list of commit descriptions (optional, will auto-detect if omitted)"
     echo "  --base BRANCH        - Base branch to merge into (default: main)"
     echo "  --draft              - Create PR as draft (default: false)"
+    echo "  --model MODEL        - Specify AI model (required)"
     echo "  --help               - Display this help message"
     exit 1
 }
@@ -37,6 +38,7 @@ FILES=""
 COMMITS=""
 BASE_BRANCH="main"
 DRAFT=false
+MODEL=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -97,6 +99,14 @@ while [[ $# -gt 0 ]]; do
             BASE_BRANCH="$2"
             shift 2
             ;;
+        --model)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --model requires a value"
+                show_usage
+            fi
+            MODEL="$2"
+            shift 2
+            ;;
         --draft)
             DRAFT=true
             shift
@@ -119,6 +129,11 @@ fi
 
 if [ -z "$OVERVIEW" ]; then
     log_message "Error: Overview is required"
+    show_usage
+fi
+
+if [ -z "$MODEL" ]; then
+    log_message "Error: Model parameter is required"
     show_usage
 fi
 
@@ -183,6 +198,10 @@ else
     
     git log --reverse --pretty=format:"✅ %s" "$BASE_BRANCH..$CURRENT_BRANCH" 2>/dev/null | cat >> "$PR_BODY_FILE"
 fi
+
+# Add AI model information at the end
+echo "" >> "$PR_BODY_FILE"
+echo "🤖 **AI Model**: $MODEL" >> "$PR_BODY_FILE"
 
 # Display the generated PR description
 log_message "Generated PR description:"

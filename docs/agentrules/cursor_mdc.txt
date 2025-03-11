@@ -20,6 +20,8 @@ alwaysApply: false
         {commit title}
 
         Short description: {short description}
+        
+        Model: {AI model name}
 
         Prompt: {original prompt}
 
@@ -33,10 +35,11 @@ alwaysApply: false
     - THEN ask the user if they want to proceed with the commit.
     - IMPORTANT: When preparing the commit preview, you MUST copy your internal reasoning VERBATIM from your thought process. Do not summarize or rewrite it.
     - Your thought process should explain your reasoning about the problem, approach and solution - not just list the files you changed.
+    - The Model section should contain the technical name of the AI model being used (e.g., "claude-3.7-sonnet-thinking").
     - Only execute the commit after explicit user confirmation using:
 
         ```
-        ./scripts/ai-commit.sh "Title" "Description" "Prompt" "Thought Process" "Discussion"
+        ./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
         ```
         
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
@@ -44,6 +47,10 @@ alwaysApply: false
     Commit Message Structure Reference:
     ```
     <Concise summary as title>
+
+    Short description: <Brief description>
+    
+    Model: <Technical AI model name>
 
     Prompt: 
     <Original prompt or request>
@@ -91,9 +98,27 @@ alwaysApply: false
         - 🧩 **Implementation Details**: Technical approach and design decisions
         - 🔄 **Migration Notes**: Any changes requiring updates to existing code
         - ⚠️ **Areas of Attention**: Parts of the PR that need special review focus
+        - 🤖 **AI Model**: <Technical AI model name (e.g., claude-3.7-sonnet-thinking)>
     - Format PR descriptions with emojis according to this convention:
         - 📝 Commit Details: Historical record of all commits
         - 📅 Date: For timestamps
         - 📎 Commit titles: For each commit (with commit hash)
         - 📁 Files Changed: For listing modified files
     - For large PRs, use appropriate markdown (headers, lists, code blocks and line breaks) to enhance readability.
+
+7. Model Detection Instructions for AI Agents
+    - Use scripts/ai-cursor-model.sh to retrieve the current AI model information:
+        ```bash
+        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
+        ```
+    - The script will detect the model from the Cursor SQLite database
+    - If the model cannot be detected, the script will return "N/A"
+    - The model parameter is REQUIRED for all commit and PR scripts:
+        - For commits: `./scripts/ai-commit.sh --model "$MODEL" ...`
+        - For PRs: `./scripts/ai-pr.sh --model "$MODEL" ...`
+    - When creating commit previews directly, always include the Model section
+    - It is recommended to detect the model first, then pass it to the scripts:
+        ```bash
+        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
+        ./scripts/ai-commit.sh --model "$MODEL" "Title" "Description" "Prompt" "Thought" "Discussion"
+        ```
