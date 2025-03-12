@@ -2,6 +2,7 @@
 # AI Assistant Helper Script for Cursor Model Detection
 # This script detects the current AI model being used in Cursor
 # Follows the naming pattern of ai-*.sh for consistency
+# By default, outputs only the model name with no additional logging
 
 set -e  # Exit on error
 
@@ -11,31 +12,35 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --help, -h           - Show this help message"
-    echo "  --quiet, -q          - Only output the model name (no additional logging)"
+    echo "  --verbose, -v        - Show detailed logging information"
     echo ""
     echo "WORKFLOW FOR AI AGENTS:"
     echo "1. Use this script to detect the current AI model"
-    echo "   MODEL=\"$(./scripts/ai-cursor-model.sh --quiet)\""
+    echo "   MODEL=\"$(./scripts/ai-cursor-model.sh)\""
     echo ""
     exit 1
 }
 
 # Helper function to log messages with timestamp
 log_message() {
-    if [[ "$QUIET_MODE" != "true" ]]; then
+    if [[ "$VERBOSE_MODE" == "true" ]]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
     fi
 }
 
 # Parse options
-QUIET_MODE="false"
+VERBOSE_MODE="false"
 while [[ $# -gt 0 ]]; do
     case $1 in
         --help|-h)
             show_usage
             ;;
+        --verbose|-v)
+            VERBOSE_MODE="true"
+            shift
+            ;;
         --quiet|-q)
-            QUIET_MODE="true"
+            # Keep quiet flag for backward compatibility
             shift
             ;;
         *)
@@ -98,10 +103,10 @@ MODEL=$(echo "$RESULT" | cut -d'|' -f1)
 SOURCE=$(echo "$RESULT" | cut -d'|' -f2)
 
 # Output the model name
-if [[ "$QUIET_MODE" == "true" ]]; then
+if [[ "$VERBOSE_MODE" == "true" ]]; then
+    log_message "Detected model from $SOURCE: $MODEL"
     echo "$MODEL"
 else
-    log_message "Detected model from $SOURCE: $MODEL"
     echo "$MODEL"
 fi
 
