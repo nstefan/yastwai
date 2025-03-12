@@ -789,7 +789,7 @@ impl TranslationService {
                 // Build the Ollama request
                 let request = GenerationRequest::new(self.config.get_model(), user_prompt)
                     .system(system_prompt)
-                    .temperature(0.3)
+                    .temperature(self.config.get_temperature())
                     .no_stream();
                 
                 // Send request to Ollama
@@ -918,7 +918,7 @@ impl TranslationService {
                 let request = OpenAIRequest::new(self.config.get_model())
                     .add_message("system", format!("{} Each subtitle entry is prefixed with ENTRY_N: where N is the entry number. You MUST preserve these markers and translate EACH entry separately, keeping the exact same format.", system_prompt))
                     .add_message("user", format!("Translate the following subtitle entries from {} to {}. Each entry is prefixed with ENTRY_N: where N is the entry number.\n\nIMPORTANT RULES:\n- Keep each entry separate with its ENTRY_N: prefix\n- NEVER merge content between entries\n- Translate each entry individually\n- Preserve all formatting\n- Process ALL entries (total: {} entries) - do not skip any\n\nHere are the subtitle entries to translate:\n\n{}", source_language, target_language, text.lines().filter(|line| line.starts_with("ENTRY_")).count(), text))
-                    .temperature(0.3)
+                    .temperature(self.config.get_temperature())
                     .max_tokens(4096);
                 
                 // Send request to OpenAI
@@ -994,7 +994,7 @@ impl TranslationService {
                         text.lines().filter(|line| line.starts_with("ENTRY_")).count(),
                         text
                     ))
-                    .temperature(0.3);
+                    .temperature(self.config.get_temperature());
                 
                 // Send request to Anthropic with timing
                 let request_start = std::time::Instant::now();
@@ -2014,6 +2014,7 @@ mod tests {
                 rate_limit_delay_ms: 0,
                 retry_count: 3,
                 retry_backoff_ms: 1000,
+                temperature: 0.3,
             },
             available_providers: vec![
                 ProviderConfig {
