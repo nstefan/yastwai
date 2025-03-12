@@ -3,12 +3,35 @@
 Thank you for considering contributing to YASTwAI (Yet Another Subtitle Translator with AI)! This document provides guidelines for code contributions, pull requests, and other development processes.
 
 ## Table of Contents
+- [Documentation](#documentation)
 - [Code Style](#code-style)
 - [Branch Organization](#branch-organization)
-- [Commits](#commits)
 - [Development Workflow](#development-workflow)
+- [Commits](#commits)
 - [Pull Requests](#pull-requests)
 - [Automated Tools](#automated-tools)
+
+## Documentation
+
+The project maintains several key documentation files:
+
+1. **[AI Agent Guide](./docs/agentrules/ai_agent_guide.md)**
+   - Comprehensive guide for AI agents
+   - Script usage patterns
+   - Rule sets and best practices
+   - Error handling procedures
+
+2. **[System Rules](./docs/agentrules/system.md)**
+   - General AI agent behavior rules
+   - Core development principles
+
+3. **[Project Rules](./docs/agentrules/project_mdc.txt)**
+   - Project-specific development rules
+   - Language and tooling requirements
+
+4. **[Contributing Guidelines](./CONTRIBUTING.md)**
+   - This file - general contribution process
+   - Standards for all contributors
 
 ## Code Style
 
@@ -39,16 +62,10 @@ Use the `scripts/create-commit.sh` script to generate properly formatted commits
 
 ### AI Assistants
 
-AI assistants should use the optimized non-interactive two-step workflow:
+AI assistants should use the non-interactive workflow:
 
-1. Preview mode (to show the user what would be committed):
 ```bash
-./scripts/ai-commit.sh --mode=preview "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
-```
-
-2. Execute mode (after user approval):
-```bash
-./scripts/ai-commit.sh --mode=execute "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
+./scripts/ai-commit.sh "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
 ```
 
 Each commit message should follow this structure:
@@ -150,13 +167,10 @@ cargo test
 # 3. Run linting checks
 ./scripts/ai-clippy.sh --fix
 
-# 4. Preview the commit (for user review)
-./scripts/ai-commit.sh --mode=preview "Add feature X" "Add support for feature X that does Y" "Original request" "First I did this, then I did that" "Had to overcome this issue, resolved by using this approach"
+# 4. Create commit
+./scripts/ai-commit.sh "Add feature X" "Add support for feature X that does Y" "Original request" "First I did this, then I did that" "Had to overcome this issue, resolved by using this approach"
 
-# 5. Execute the commit (after user approval)
-./scripts/ai-commit.sh --mode=execute "Add feature X" "Add support for feature X that does Y" "Original request" "First I did this, then I did that" "Had to overcome this issue, resolved by using this approach"
-
-# 6. Build and test
+# 5. Build and test
 cargo build --release
 cargo test
 ```
@@ -221,15 +235,17 @@ Use emojis for better readability:
 
 The repository includes several scripts to help with development:
 
-### Standard Scripts (Interactive)
+### Standard Scripts
 - `scripts/create-commit.sh` - For creating properly formatted commits (interactive)
 - `scripts/branch-check.sh` - For managing branches (interactive)
 - `scripts/run-clippy.sh` - For running the Rust linter (basic)
 
-### AI-Optimized Scripts (Non-Interactive)
-- `scripts/ai-commit.sh` - For creating commits using a two-step preview/execute workflow
-- `scripts/ai-branch.sh` - For branch management with named parameters
-- `scripts/ai-clippy.sh` - For running Clippy with more options and better output
-- `scripts/ai-pr.sh` - For creating pull requests with proper descriptions
+### AI-Optimized Scripts
+- `scripts/ai-commit.sh` - Non-interactive commit workflow
+- `scripts/ai-branch.sh` - Branch management with named parameters
+- `scripts/ai-clippy.sh` - Enhanced Clippy with more options
+- `scripts/ai-pr.sh` - PR creation with proper descriptions
+
+For detailed usage patterns and examples, see the [AI Agent Guide](./docs/agentrules/ai_agent_guide.md).
 
 These tools ensure consistency across contributions and make it easier for both human developers and AI assistants to follow project conventions.

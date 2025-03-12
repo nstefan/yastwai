@@ -1,0 +1,24 @@
+---
+description: project_rules
+globs: *
+alwaysApply: true
+---
+
+Everything must be produced in english.
+    - code
+    - comments
+    - documentation (README and other file headers)
+
+Every command must not be interactive.
+    - use proper arguments to prevent user interaction with commands
+        - Example: use "| cat" for a "git diff" operation.
+
+Model Detection Instructions for AI Agents
+    - Use scripts/ai-cursor-model.sh to retrieve the current AI model information:
+        ```bash
+        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
+        ```
+    - It is recommended to detect the model first, then pass it to the scripts asking for it:
+        ```bash
+        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
+        ```

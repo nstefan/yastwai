@@ -190,11 +190,33 @@ See the full configuration file for provider-specific options.
 <!-- DEVELOPMENT -->
 ## Development
 
-YASTwAI has been developed with a focus on AI-assisted development. 
-For details on how AI agents work with this codebase, see:
+YASTwAI has been developed with a focus on AI-assisted development. The project includes comprehensive documentation and tools for both human developers and AI agents.
 
-- [System Rules](./docs/agentrules/system.md) - General AI agent behavior rules set in Cursor User Rules.
-- [Project Rules](./docs/agentrules/cursor_mdc.txt) - Specific project rules detected by Cursor via a [symlink](.cursor/rules/project.mdc).
+### Documentation
+
+- [Contributing Guidelines](./CONTRIBUTING.md) - Detailed contribution process and standards
+- [AI Agent Guide](./docs/agentrules/ai_agent_guide.md) - Comprehensive guide for AI agents
+- [System Rules](./docs/agentrules/system.md) - General AI agent behavior rules
+- [Project Rules](./docs/agentrules/project_mdc.txt) - Project-specific development rules
+
+### Helper Scripts
+
+The project includes several optimized scripts for development tasks:
+
+```bash
+# Branch Management
+./scripts/ai-branch.sh --new-branch "feature-name"
+
+# Commit Creation
+./scripts/ai-commit.sh "Title" "Description" "Prompt" "Reasoning" "Discussion"
+
+# Code Quality
+./scripts/ai-clippy.sh --check-only  # Check for issues
+./scripts/ai-clippy.sh --fix         # Auto-fix issues
+
+# Pull Requests
+./scripts/ai-pr.sh --title "PR Title" --overview "Overview" --key-changes "Change 1,Change 2"
+```
 
 ### Running Tests
 
@@ -206,36 +228,20 @@ cargo test
 RUST_LOG=debug cargo test
 ```
 
-### Linting
+### Code Quality
 
 ```bash
 # Run clippy checks
 cargo clippy
 
-# Run with script (includes specific lint settings)
+# Run with project-specific settings
 ./scripts/ai-clippy.sh --check-only
 ```
 
-### Helper Scripts
-
-The project includes several AI-optimized helper scripts for development tasks:
-
-```bash
-# Branch management
-./scripts/ai-branch.sh --new-branch "feature-name"
-
-# Two-step commit workflow
-# 1. Preview changes (for user review)
-./scripts/ai-commit.sh --mode=preview "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
-# 2. Execute commit (after user approval)
-./scripts/ai-commit.sh --mode=execute "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
-
-# Run linting with auto-fixes
-./scripts/ai-clippy.sh --fix
-
-# Create PRs
-./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2"
-```
+For more detailed information about development processes and tools:
+- See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines
+- See [AI Agent Guide](./docs/agentrules/ai_agent_guide.md) for AI-specific documentation
+- Check the [docs/agentrules](./docs/agentrules) directory for all development rules
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 

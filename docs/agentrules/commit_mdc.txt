@@ -1,0 +1,36 @@
+---
+description: commit_rules
+globs: *
+alwaysApply: true
+---
+
+Everytime the user sends a prompt, ALWAYS automatically commit changes.
+    - IMPORTANT: NEVER commit directly on the main branch.
+    - ALWAYS automatically stage modified files at the end of each prompt process with `git add` for any files you have created or modified
+    - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
+    - IMPORTANT: When preparing the commit, you MUST copy your internal reasoning VERBATIM from your thought process. Do not summarize or rewrite it.
+    - Your thought process should explain your reasoning about the problem, approach and solution - not just list the files you changed.
+    - The Model section MUST contain the technical name of the AI model being used use the ai_cursor_model.sh script.
+    - Execute the comment command using:
+        ```
+        ./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
+        ```
+    - Follow the detailed guidelines in CONTRIBUTING.md for reference.
+
+    Commit Message Structure Reference:
+    ```
+    <Concise summary as title>
+
+    Short description: <Brief description>
+    
+    Model: <Technical AI model name>
+
+    Prompt: 
+    <Original prompt or request>
+
+    Thought Process: 
+    <Reasoning process used by the agent>
+
+    Discussion: 
+    <Challenges faced and how they were resolved>
+    ```
