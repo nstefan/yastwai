@@ -1,0 +1,42 @@
+---
+description: pullrequest_rules
+globs: *
+alwaysApply: true
+---
+
+Pull requests creation instructions, ONLY create PRs when EXPLICITLY requested by the user.
+    - NEVER create a PR automatically or as part of another task unless directly requested.
+    - ALWAYS use the scripts/ai-pr.sh script as the preferred method for PR creation.
+    - The helper script avoids multiline command issues and creates well-structured PRs:
+        ```bash
+        ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
+        ```
+    - Use this syntax with comma-separated lists instead of trying to create multiline strings directly.
+    - Only fall back to direct git commands if the ai-pr.sh is not available.
+    - When a PR is explicitly requested with words like "pr" or "create pr", leverage AI capabilities for intelligent summarization:
+        - Analyzing all commits on the branch to understand the complete change set
+        - Generating a well-structured PR body with emoji-enhanced sections
+        - At the end, create a PR title that accurately reflects a summary of the changes
+        - Keep prompt and chain of thoughts in memory
+    - Structure the summary as follows for every branches:
+        - 🧠 **Instructions**
+          Prompt: 
+            ```
+            <Original prompt or request as plain text>
+            ```
+          Thought Process: 
+            ```
+            <Reasoning process used by the agent as plain text>
+            ```
+        - 📌 **Overview**: Brief summary of what the PR accomplishes (2-3 sentences)
+        - 🔍 **Key Changes**: Bullet points of the most significant changes
+        - 🧩 **Implementation Details**: Technical approach and design decisions
+        - 🔄 **Migration Notes**: Any changes requiring updates to existing code
+        - ⚠️ **Areas of Attention**: Parts of the PR that need special review focus
+        - 🤖 **AI Model**: <Technical AI model name (e.g., claude-3.7-sonnet-thinking)>
+    - Format PR descriptions with emojis according to this convention:
+        - 📝 Commit Details: Historical record of all commits
+        - 📅 Date: For timestamps
+        - 📎 Commit titles: For each commit (with commit hash)
+        - 📁 Files Changed: For listing modified files
+    - For large PRs, use appropriate markdown (headers, lists, code blocks and line breaks) to enhance readability.
