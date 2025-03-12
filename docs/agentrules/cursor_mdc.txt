@@ -12,10 +12,10 @@ alwaysApply: false
 2. Every command must not be interactive.
     - use proper arguments to prevent user interaction with commands. Example "git diff | cat".
 
-3. Everytime the user sends a prompt, ALWAYS automatically commit changes:
+3. Everytime the user sends a prompt, ALWAYS automatically commit changes.
+    - IMPORTANT: NEVER commit directly on the main branch.
     - ALWAYS automatically stage modified files at the end of each prompt process with `git add` for any files you have created or modified
     - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
-    - NEVER commit directly on the main branch.
     - IMPORTANT: When preparing the commit, you MUST copy your internal reasoning VERBATIM from your thought process. Do not summarize or rewrite it.
     - Your thought process should explain your reasoning about the problem, approach and solution - not just list the files you changed.
     - The Model section MUST contain the technical name of the AI model being used use the ai_cursor_model.sh script.
