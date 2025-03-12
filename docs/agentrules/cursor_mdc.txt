@@ -13,8 +13,15 @@ alwaysApply: false
 
 3. Everytime the user sends a prompt, ALWAYS automatically prepare and display a commit preview:
     - ALWAYS automatically stage modified files at the end of each prompt process with `git add` for any files you have created or modified
-    - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
-    - Never commit on the main branch.
+    - ⚠️ CRITICAL: BEFORE ANY COMMIT OPERATION, VERIFY THE CURRENT BRANCH:
+        1. ALWAYS run `git branch --show-current` to check the current branch
+        2. If the current branch is "main" or "master":
+           - STOP! DO NOT PROCEED WITH COMMIT
+           - Create a new branch with a descriptive name: `git checkout -b feature-name`
+           - Only after confirming you're on a feature branch, continue with commit preview
+        3. If already on a feature branch, proceed normally
+    - NEVER commit directly to the main/master branch under ANY circumstances
+    - Commits MUST ONLY be made on feature branches
     - DO NOT use the commit script for previews. Instead, directly generate a beautiful preview for the user by creating a markdown code block containing:
 
         ```
