@@ -296,6 +296,11 @@ pub struct TranslationCommonConfig {
     /// Backoff multiplier for retries (in milliseconds)
     #[serde(default = "default_retry_backoff_ms")]
     pub retry_backoff_ms: u64,
+    
+    /// Temperature parameter for text generation (0.0 to 1.0)
+    /// Lower values make output more deterministic, higher values more creative
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
 }
 
 impl Default for TranslationCommonConfig {
@@ -305,6 +310,7 @@ impl Default for TranslationCommonConfig {
             rate_limit_delay_ms: default_rate_limit_delay_ms(),
             retry_count: default_retry_count(),
             retry_backoff_ms: default_retry_backoff_ms(),
+            temperature: default_temperature(),
         }
     }
 }
@@ -385,6 +391,10 @@ fn default_retry_count() -> u32 {
 
 fn default_retry_backoff_ms() -> u64 {
     1000 // 1 second base backoff time, doubled on each retry
+}
+
+fn default_temperature() -> f32 {
+    0.3
 }
 
 fn default_true() -> bool {
@@ -582,6 +592,11 @@ impl TranslationConfig {
         } else {
             default_rate_limit_delay_ms()
         }
+    }
+    
+    /// Get the configured temperature value for text generation
+    pub fn get_temperature(&self) -> f32 {
+        self.common.temperature
     }
 }
 
