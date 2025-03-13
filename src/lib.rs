@@ -28,6 +28,7 @@
  *   - `providers::ollama`: Ollama API client
  *   - `providers::openai`: OpenAI API client
  *   - `providers::anthropic`: Anthropic API client
+ * - `errors`: Custom error types for the application
  * 
  * ## License
  * 
@@ -48,9 +49,11 @@ pub mod translation_service;
 pub mod app_controller;
 pub mod language_utils;
 pub mod providers;
+pub mod errors;
 
 // Re-export main types for easier usage
 pub use app_config::Config;
 pub use subtitle_processor::{SubtitleCollection, SubtitleEntry};
 pub use translation_service::TranslationService;
-pub use language_utils::{language_codes_match, normalize_to_part2t, get_language_name, validate_language_code}; 
+pub use language_utils::{language_codes_match, normalize_to_part2t, get_language_name, validate_language_code};
+pub use errors::{AppError, ProviderError, SubtitleError, TranslationError}; 
