@@ -14,6 +14,9 @@ show_usage() {
     echo "  --title TITLE        - PR title (required)"
     echo "  --overview TEXT      - Brief overview of the PR (required)"
     echo "  --key-changes TEXT   - Comma-separated list of key changes"
+    echo "  --implementation TEXT- Implementation details"
+    echo "  --files TEXT         - Comma-separated list of files changed (optional, will auto-detect if omitted)"
+    echo "  --commits TEXT       - Comma-separated list of commit descriptions (optional, will auto-detect if omitted)"
     echo "  --base BRANCH        - Base branch to merge into (default: main)"
     echo "  --draft              - Create PR as draft (default: false)"
     echo "  --model MODEL        - Specify AI model (required)"
@@ -32,6 +35,8 @@ OVERVIEW=""
 KEY_CHANGES=""
 IMPLEMENTATION=""
 FILES=""
+COMMITS=""
+BASE_BRANCH="main"
 DRAFT=false
 MODEL=""
 
@@ -68,6 +73,22 @@ while [[ $# -gt 0 ]]; do
                 show_usage
             fi
             IMPLEMENTATION="$2"
+            shift 2
+            ;;
+        --files)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --files requires a value"
+                show_usage
+            fi
+            FILES="$2"
+            shift 2
+            ;;
+        --commits)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                log_message "Error: --commits requires a value"
+                show_usage
+            fi
+            COMMITS="$2"
             shift 2
             ;;
         --base)
@@ -142,6 +163,40 @@ if [ -n "$IMPLEMENTATION" ]; then
         echo "- $detail" >> "$PR_BODY_FILE"
     done
     echo "" >> "$PR_BODY_FILE"
+fi
+
+# Add files section
+echo "📁 **Files Changed**:" >> "$PR_BODY_FILE"
+if [ -n "$FILES" ]; then
+    IFS=',' read -ra FILE_LIST <<< "$FILES"
+    for file in "${FILE_LIST[@]}"; do
+        echo "- $file" >> "$PR_BODY_FILE"
+    done
+else
+    # Auto-detect changed files
+    CURRENT_BRANCH=$(git branch --show-current | cat)
+    
+    git diff --name-only "$BASE_BRANCH..$CURRENT_BRANCH" 2>/dev/null | sort | uniq | while read -r file; do
+        if [[ -f "$file" ]]; then
+            echo "- $file" >> "$PR_BODY_FILE"
+        fi
+    done
+fi
+echo "" >> "$PR_BODY_FILE"
+
+# Add commits section
+echo "📝 **Commit Details**:" >> "$PR_BODY_FILE"
+echo "📅 $(date '+%B %Y')" >> "$PR_BODY_FILE"
+if [ -n "$COMMITS" ]; then
+    IFS=',' read -ra COMMIT_LIST <<< "$COMMITS"
+    for commit in "${COMMIT_LIST[@]}"; do
+        echo "✅ $commit" >> "$PR_BODY_FILE"
+    done
+else
+    # Auto-detect commits
+    CURRENT_BRANCH=$(git branch --show-current | cat)
+    
+    git log --reverse --pretty=format:"✅ %s" "$BASE_BRANCH..$CURRENT_BRANCH" 2>/dev/null | cat >> "$PR_BODY_FILE"
 fi
 
 # Add AI model information at the end
