@@ -40,6 +40,16 @@ impl Controller {
         Ok(controller)
     }
     
+    /// Check if the controller is properly initialized with configuration
+    pub fn is_initialized(&self) -> bool {
+        !self.config.source_language.is_empty() && !self.config.target_language.is_empty()
+    }
+    
+    /// Public method to write logs to a file for testing purposes
+    pub fn write_translation_logs(&self, logs: &[LogEntry], file_path: &str, translation_context: &str) -> Result<()> {
+        self.write_logs_to_file(logs, file_path, translation_context)
+    }
+    
     /// Run the main workflow with input video file and output directory
     pub async fn run(&self, input_file: PathBuf, output_dir: PathBuf, force_overwrite: bool) -> Result<()> {
         let multi_progress = MultiProgress::new();
