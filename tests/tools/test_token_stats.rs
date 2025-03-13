@@ -1,5 +1,5 @@
 use std::time::Duration;
-use yastwai::translation_service::TokenUsageStats;
+use yastwai::translation::core::TokenUsageStats;
 
 fn main() {
     // Case 1: Stats with both tokens and API duration

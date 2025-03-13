@@ -16,12 +16,13 @@ use crate::app_config::{Config, TranslationProvider};
 use app_controller::Controller;
 
 mod app_config;
-mod translation_service;
+mod translation;
 mod subtitle_processor;
 mod file_utils;
 mod app_controller;
 mod language_utils;
 mod providers;
+mod errors;
 
 // @struct: CLI options
 struct CommandLineOptions {

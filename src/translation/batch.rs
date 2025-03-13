@@ -58,7 +58,7 @@ impl BatchTranslator {
         // Initialize token usage stats
         let mut token_stats = TokenUsageStats::with_provider_info(
             self.service.config.provider.to_string(),
-            self.service.config.model.clone()
+            self.service.config.get_model()
         );
         
         // Create a semaphore to limit concurrent requests

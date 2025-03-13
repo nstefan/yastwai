@@ -2,15 +2,15 @@ use anyhow::{Result, Context};
 use log::{error, warn, info, debug};
 use std::path::{Path, PathBuf};
 use crate::app_config::{Config, SubtitleInfo};
-use crate::subtitle_processor::SubtitleCollection;
-use crate::translation_service::TranslationService;
+use crate::subtitle_processor::{SubtitleCollection, SubtitleEntry};
+use crate::translation::{TranslationService, BatchTranslator};
+use crate::translation::core::LogEntry;
 use crate::language_utils;
 use crate::file_utils;
 use std::sync::Once;
 use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use std::sync::Arc;
 use std::sync::Mutex;
-use crate::translation_service::LogEntry;
 use crate::file_utils::{FileManager, FileType};
 use chrono;
 use std::time::Duration;
@@ -247,12 +247,13 @@ impl Controller {
         
         // Use the translation service to translate all chunks
         let translation_service = TranslationService::new(self.config.translation.clone())?;
+        let batch_translator = BatchTranslator::new(translation_service);
         
         // Clone the progress_bar for use in the callback
         let pb = progress_bar.clone();
         
         // Pass a callback to update the progress bar for each completed chunk
-        let (mut translated_entries, token_usage) = translation_service.translate_batches(
+        let (mut translated_entries, token_usage) = batch_translator.translate_batches(
             &chunks, 
             &self.config.source_language, 
             &self.config.target_language,

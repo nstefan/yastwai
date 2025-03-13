@@ -24,6 +24,7 @@ use crate::providers::ollama::{Ollama, GenerationRequest};
 use crate::providers::openai::{OpenAI, OpenAIRequest};
 use crate::providers::anthropic::{Anthropic, AnthropicRequest};
 use crate::errors::{TranslationError, ProviderError};
+use crate::providers::Provider;
 
 use super::batch::BatchTranslator;
 use super::cache::TranslationCache;
@@ -208,6 +209,7 @@ impl Default for TranslationOptions {
 }
 
 /// Log entry for capturing translation process logs
+#[derive(Clone)]
 pub struct LogEntry {
     pub level: String,
     pub message: String,
@@ -218,11 +220,11 @@ pub struct TranslationService {
     /// Provider implementation
     provider: TranslationProviderImpl,
     
-    /// Configuration
-    config: TranslationConfig,
+    /// Configuration for the translation service
+    pub config: TranslationConfig,
     
     /// Translation options
-    options: TranslationOptions,
+    pub options: TranslationOptions,
 }
 
 impl TranslationService {
@@ -230,19 +232,19 @@ impl TranslationService {
     pub fn new(config: TranslationConfig) -> Result<Self> {
         let provider = match config.provider {
             ConfigTranslationProvider::Ollama => {
-                let (host, port) = parse_endpoint(&config.endpoint)?;
+                let (host, port) = parse_endpoint(&config.get_endpoint())?;
                 TranslationProviderImpl::Ollama {
                     client: Ollama::new(&host, port),
                 }
             },
             ConfigTranslationProvider::OpenAI => {
                 TranslationProviderImpl::OpenAI {
-                    client: OpenAI::new(config.api_key.clone(), config.endpoint.clone()),
+                    client: OpenAI::new(&config.get_api_key(), &config.get_endpoint()),
                 }
             },
             ConfigTranslationProvider::Anthropic => {
                 TranslationProviderImpl::Anthropic {
-                    client: Anthropic::new(config.api_key.clone(), config.endpoint.clone()),
+                    client: Anthropic::new(&config.get_api_key(), &config.get_endpoint()),
                 }
             },
         };
@@ -272,8 +274,8 @@ impl TranslationService {
         if let Some(log) = &log_capture {
             log.lock().unwrap().push(LogEntry {
                 level: "info".to_string(),
-                message: format!("Testing connection to {} with model {}", 
-                                self.config.provider, self.config.model),
+                message: format!("Testing connection to {:?} with model {}", 
+                                self.config.provider, self.config.get_model()),
             });
         }
         
@@ -285,7 +287,7 @@ impl TranslationService {
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
                                 level: "info".to_string(),
-                                message: format!("Successfully connected to Ollama version: {}", version.version),
+                                message: format!("Successfully connected to Ollama"),
                             });
                         }
                         Ok(())
@@ -365,7 +367,7 @@ impl TranslationService {
     }
     
     /// Translate text with token usage tracking
-    async fn translate_text_with_usage(
+    pub async fn translate_text_with_usage(
         &self, 
         text: &str, 
         source_language: &str, 
@@ -390,9 +392,9 @@ impl TranslationService {
         match &self.provider {
             TranslationProviderImpl::Ollama { client } => {
                 // Create generation request
-                let request = GenerationRequest::new(&self.config.model, text)
+                let request = GenerationRequest::new(&self.config.get_model(), text)
                     .system(&system_prompt)
-                    .temperature(self.config.temperature);
+                    .temperature(self.config.common.temperature);
                 
                 // Send request
                 let result = client.generate(request).await;
@@ -430,11 +432,11 @@ impl TranslationService {
             },
             TranslationProviderImpl::OpenAI { client } => {
                 // Create OpenAI request
-                let request = OpenAIRequest::new(&self.config.model)
+                let request = OpenAIRequest::new(&self.config.get_model())
                     .add_message("system", &system_prompt)
                     .add_message("user", text)
-                    .temperature(self.config.temperature)
-                    .max_tokens(self.max_tokens_for_model(&self.config.model));
+                    .temperature(self.config.common.temperature)
+                    .max_tokens(self.max_tokens_for_model(&self.config.get_model()));
                 
                 // Send request
                 let result = client.complete(request).await;
@@ -458,9 +460,9 @@ impl TranslationService {
                             return Err(anyhow!("OpenAI returned empty response"));
                         };
                         
-                        // Get token usage
-                        let prompt_tokens = response.usage.as_ref().map(|u| u.prompt_tokens as u64);
-                        let completion_tokens = response.usage.as_ref().map(|u| u.completion_tokens as u64);
+                        // Extract token usage
+                        let prompt_tokens = Some(response.usage.prompt_tokens as u64);
+                        let completion_tokens = Some(response.usage.completion_tokens as u64);
                         
                         // Return the translated text and token usage
                         Ok((translated_text, Some((prompt_tokens, completion_tokens, Some(duration)))))
@@ -480,10 +482,10 @@ impl TranslationService {
             },
             TranslationProviderImpl::Anthropic { client } => {
                 // Create Anthropic request
-                let request = AnthropicRequest::new(&self.config.model, self.max_tokens_for_model(&self.config.model))
+                let request = AnthropicRequest::new(&self.config.get_model(), self.max_tokens_for_model(&self.config.get_model()))
                     .system(&system_prompt)
                     .add_message("user", text)
-                    .temperature(self.config.temperature);
+                    .temperature(self.config.common.temperature);
                 
                 // Send request
                 let result = client.complete(request).await;
@@ -500,6 +502,7 @@ impl TranslationService {
                             });
                         }
                         
+                        // Extract the translated text from the response
                         // Extract the translated text
                         let translated_text = Anthropic::extract_text(&response);
                         
@@ -552,32 +555,7 @@ impl TranslationService {
 
 impl Clone for TranslationService {
     fn clone(&self) -> Self {
-        let provider = match &self.provider {
-            TranslationProviderImpl::Ollama { client } => {
-                TranslationProviderImpl::Ollama {
-                    client: Ollama::new(&client.host, client.port),
-                }
-            },
-            TranslationProviderImpl::OpenAI { client } => {
-                TranslationProviderImpl::OpenAI {
-                    client: OpenAI::new(client.api_key.clone(), client.endpoint.clone()),
-                }
-            },
-            TranslationProviderImpl::Anthropic { client } => {
-                TranslationProviderImpl::Anthropic {
-                    client: Anthropic::new(client.api_key.clone(), client.endpoint.clone()),
-                }
-            },
-        };
-        
-        Self {
-            provider,
-            config: self.config.clone(),
-            options: TranslationOptions {
-                preserve_formatting: self.options.preserve_formatting,
-                max_concurrent_requests: self.options.max_concurrent_requests,
-                retry_individual_entries: self.options.retry_individual_entries,
-            },
-        }
+        // Create a new instance with the same config
+        TranslationService::new(self.config.clone()).unwrap()
     }
 } 
