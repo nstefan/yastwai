@@ -34,6 +34,7 @@ IMPLEMENTATION=""
 FILES=""
 DRAFT=false
 MODEL=""
+BASE_BRANCH="main"  # Set default base branch explicitly
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -116,6 +117,9 @@ if [ -z "$MODEL" ]; then
     show_usage
 fi
 
+# Ensure MODEL doesn't have quotes that could break the script
+MODEL=$(echo "$MODEL" | tr -d '"'"'")
+
 # Create temp file for PR description
 PR_BODY_FILE=$(mktemp)
 
@@ -154,18 +158,22 @@ log_message "---------------------------------------------"
 cat "$PR_BODY_FILE"
 log_message "---------------------------------------------"
 
-# Get current branch
-CURRENT_BRANCH=$(git branch --show-current | cat)
+# Get current branch - add | cat to avoid pager
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null | cat)
 if [ -z "$CURRENT_BRANCH" ]; then
     log_message "Error: Not on any branch"
     exit 1
 fi
 
-# Check for uncommitted changes
-if [ -n "$(git status --porcelain | cat)" ]; then
+# Check for uncommitted changes - add | cat to avoid pager
+if [ -n "$(git status --porcelain 2>/dev/null | cat)" ]; then
     log_message "Error: You have uncommitted changes. Please commit or stash them before creating a PR."
     exit 1
 fi
+
+# Log branch information
+log_message "Current branch: $CURRENT_BRANCH"
+log_message "Base branch: $BASE_BRANCH"
 
 # Function to safely push changes
 safe_push() {
@@ -173,7 +181,7 @@ safe_push() {
     local max_attempts=3
     
     while [ $attempts -lt $max_attempts ]; do
-        if git push -u origin "$CURRENT_BRANCH" 2>/dev/null; then
+        if git push -u origin "$CURRENT_BRANCH" 2>/dev/null | cat; then
             log_message "Branch successfully pushed to remote."
             return 0
         else
@@ -206,7 +214,7 @@ else
         log_message "Your branch is behind the remote by $BEHIND_COUNT commit(s)."
         log_message "Attempting to rebase automatically..."
         
-        if git pull --rebase origin "$CURRENT_BRANCH" | cat; then
+        if git pull --rebase origin "$CURRENT_BRANCH" 2>/dev/null | cat; then
             log_message "Successfully rebased against remote branch."
         else
             log_message "Error: Automatic rebase failed. Please resolve conflicts manually."
@@ -224,11 +232,23 @@ else
     fi
 fi
 
-# Get commit count
-COMMIT_COUNT=$(git rev-list --count "$BASE_BRANCH..$CURRENT_BRANCH" 2>/dev/null | cat)
-if [ "$COMMIT_COUNT" -eq 0 ]; then
-    log_message "Error: No commits found between $BASE_BRANCH and $CURRENT_BRANCH"
-    exit 1
+# Get commit count - add | cat to avoid pager
+# Explicitly check for empty base branch and provide fallback
+if [ -z "$BASE_BRANCH" ]; then
+    BASE_BRANCH="main"
+    log_message "Base branch was empty, using default: $BASE_BRANCH"
+fi
+
+COMMIT_COUNT=$(git rev-list --count "${BASE_BRANCH}..${CURRENT_BRANCH}" 2>/dev/null | cat)
+log_message "Found $COMMIT_COUNT commits between $BASE_BRANCH and $CURRENT_BRANCH"
+
+if [ -z "$COMMIT_COUNT" ] || [ "$COMMIT_COUNT" -eq 0 ]; then
+    log_message "Warning: No commits found between $BASE_BRANCH and $CURRENT_BRANCH"
+    log_message "This might be because:"
+    log_message "1. Your branch has no commits"
+    log_message "2. Your branch is not based off $BASE_BRANCH"
+    log_message "3. Some other issue with git history"
+    log_message "Continuing anyway, but the PR may be empty..."
 fi
 
 # URL encode function that preserves newlines
@@ -238,7 +258,7 @@ url_encode() {
 
 # Get the GitHub repo URL
 get_github_url() {
-    REMOTE_URL=$(git config --get remote.origin.url | cat)
+    REMOTE_URL=$(git config --get remote.origin.url 2>/dev/null | cat)
     
     if [[ "$REMOTE_URL" == git@github.com:* ]]; then
         REPO_PATH=${REMOTE_URL#git@github.com:}
