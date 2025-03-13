@@ -28,8 +28,11 @@ Built with Rust for performance and reliability, YASTwAI supports multiple AI tr
 ## Key Features
 
 - 🎯 **Extract & Translate** - Pull subtitles from videos and translate in one step
-- 🌐 **Multiple AI Providers** - Support for Anthropic, Ollama, OpenAI
+- 🌐 **Multiple AI Providers** - Support for Ollama, OpenAI, Anthropic
 - ⚡ **Concurrent Processing** - Efficient batch translation for faster results
+- 🧠 **Smart Processing** - Preserves formatting and timing of your subtitles
+- 🔄 **Direct Translation** - Translate existing SRT files without needing video
+- 📊 **Progress Tracking** - See real-time progress for lengthy translations
 
 ## Installation
 

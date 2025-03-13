@@ -56,26 +56,6 @@ function log {
     fi
 }
 
-# Function to get pretty name for provider
-function get_provider_pretty_name {
-    local provider=$1
-    case "$provider" in
-        "anthropic")
-            echo "Anthropic"
-            ;;
-        "openai")
-            echo "OpenAI"
-            ;;
-        "ollama")
-            echo "Ollama"
-            ;;
-        *)
-            # Capitalize first letter
-            echo "$provider" | awk '{print toupper(substr($0,1,1)) substr($0,2)}'
-            ;;
-    esac
-}
-
 log "${BLUE}Starting README generator...${NC}"
 
 # Get project information from Cargo.toml
@@ -95,34 +75,9 @@ else
     log "${YELLOW}No docs directory found${NC}"
 fi
 
-# Detect AI providers available in the codebase
-PROVIDERS_DIR="$PROJECT_ROOT/src/providers"
-PROVIDERS=""
-PROVIDERS_PRETTY=""
-
-if [ -d "$PROVIDERS_DIR" ]; then
-    log "${GREEN}Found providers directory${NC}"
-    for provider in "$PROVIDERS_DIR"/*.rs; do
-        if [ -f "$provider" ]; then
-            provider_name=$(basename "$provider" .rs)
-            # Skip mod.rs as it's not a provider
-            if [ "$provider_name" != "mod" ]; then
-                provider_pretty=$(get_provider_pretty_name "$provider_name")
-                if [ "$PROVIDERS" == "" ]; then
-                    PROVIDERS="$provider_name"
-                    PROVIDERS_PRETTY="$provider_pretty"
-                else
-                    PROVIDERS="$PROVIDERS, $provider_name"
-                    PROVIDERS_PRETTY="$PROVIDERS_PRETTY, $provider_pretty"
-                fi
-            fi
-        fi
-    done
-    log "${BLUE}Detected providers: $PROVIDERS${NC}"
-    log "${BLUE}Pretty providers: $PROVIDERS_PRETTY${NC}"
-else
-    log "${YELLOW}No providers directory found${NC}"
-fi
+# Use hardcoded provider names since we know what they are
+PROVIDERS_PRETTY="Ollama, OpenAI, Anthropic"
+log "${BLUE}Using provider display names: $PROVIDERS_PRETTY${NC}"
 
 # Check for example config
 EXAMPLE_CONFIG="$PROJECT_ROOT/conf.example.json"
@@ -138,23 +93,16 @@ FEATURES=""
 if grep -q "ffmpeg" "$PROJECT_ROOT/src" -r 2>/dev/null; then
     FEATURES="$FEATURES\n- 🎯 **Extract & Translate** - Pull subtitles from videos and translate in one step"
 fi
-# Check for multiple providers
-if [ "$PROVIDERS_PRETTY" != "" ]; then
-    FEATURES="$FEATURES\n- 🌐 **Multiple AI Providers** - Support for ${PROVIDERS_PRETTY}"
-fi
+# Add providers
+FEATURES="$FEATURES\n- 🌐 **Multiple AI Providers** - Support for ${PROVIDERS_PRETTY}"
 # Check for concurrent processing
 if grep -q "tokio::spawn" "$PROJECT_ROOT/src" -r 2>/dev/null || grep -q "async" "$PROJECT_ROOT/src" -r 2>/dev/null; then
     FEATURES="$FEATURES\n- ⚡ **Concurrent Processing** - Efficient batch translation for faster results"
 fi
-# Add default features if none detected
-if [ "$FEATURES" == "" ]; then
-    FEATURES="- 🎯 **Extract & Translate** - Pull subtitles from videos and translate in one step
-- 🌐 **Multiple AI Providers** - Support for Ollama (local), OpenAI, and Anthropic
-- 🧠 **Smart Processing** - Preserves formatting and timing of your subtitles
-- ⚡ **Concurrent Processing** - Efficient batch translation for faster results
-- 🔄 **Direct Translation** - Translate existing SRT files without needing video
-- 📊 **Progress Tracking** - See real-time progress for lengthy translations"
-fi
+# Add more features
+FEATURES="$FEATURES\n- 🧠 **Smart Processing** - Preserves formatting and timing of your subtitles"
+FEATURES="$FEATURES\n- 🔄 **Direct Translation** - Translate existing SRT files without needing video"
+FEATURES="$FEATURES\n- 📊 **Progress Tracking** - See real-time progress for lengthy translations"
 
 # Generate README content
 README_CONTENT=$(cat <<EOL
