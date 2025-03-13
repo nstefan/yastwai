@@ -4,16 +4,77 @@ globs: *
 alwaysApply: true
 ---
 
-Everytime the user sends a prompt, ALWAYS automatically commit changes.
-    - IMPORTANT: NEVER commit directly on the main branch.
+# YASTWAI Project - Commit Rules & Standards
+
+## CRITICAL COMMIT RULES
+- NEVER commit directly to the main branch
+- ALWAYS verify branch status BEFORE preparing a commit
+- ONLY commit on feature branches
+
+## Mandatory Branch Verification Before Commits
+- Before initiating ANY commit operation, verify the current branch:
+  `./scripts/ai-protect-main.sh --no-auto-branch`
+- If on main branch, STOP and create a feature branch before proceeding:
+  `./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"`
+
+## Commit Preparation
+1. Check for staged changes:
+   `git status --short | cat`
+
+2. Choose ONE of these options based on what needs to be committed:
+   - Stage all changes:
+     `git add -A`
+   - Stage specific files:
+     `git add path/to/file1 path/to/file2`
+   - Stage interactive changes (requires user interaction):
+     `git add -p`
+
+3. Verify what's staged:
+   `git diff --cached --stat | cat`
+
+## Commit Structure
+- Use the ai-commit.sh script for all commits:
+  `./scripts/ai-commit.sh "type(scope): descriptive message"`
+
+- Commit message format must follow:
+  - `type`: fix, feat, docs, style, refactor, test, chore
+  - `scope`: indicates area of code affected (optional)
+  - Message should be clear, concise, and descriptive
+
+## Prohibited Commit Actions
+- NEVER use raw `git commit` commands without the ai-commit.sh script
+- NEVER force-push to any branch without explicit user instruction
+- NEVER amend commits without explicit user instruction
+
+## Commit Verification
+- After completing a commit, verify it was successful:
+  `git log -1 --stat | cat`
+- Confirm the commit hash, message, and changes
+
+Everytime the user sends a prompt, ALWAYS automatically commit changes, BUT ONLY AFTER strict branch validation.
+    - CRITICAL: NEVER commit directly on the main branch under ANY CIRCUMSTANCES.
+    - VALIDATION REQUIRED: Before ANY git operation, run './scripts/ai-branch.sh --check-only' to identify the current branch.
+    - BRANCH CHECK: If current branch is 'main', IMMEDIATELY create a new feature branch before proceeding with ANY changes:
+        ```bash
+        ./scripts/ai-branch.sh --new-branch "feature-name" --is-related false
+        ```
+    - STOP AND ALERT: If working on main branch, use this exact message before taking any action:
+        ```
+        ⚠️ WARNING: Currently on main branch. Direct commits to main are prohibited. 
+        Creating a new feature branch before proceeding...
+        ```
     - ALWAYS automatically stage modified files at the end of each prompt process with `git add` for any files you have created or modified
     - Check if the prompt is still related to the current branch, if not create a new branch from the main branch.
     - IMPORTANT: When preparing the commit, you MUST copy your internal reasoning VERBATIM from your thought process. Do not summarize or rewrite it.
     - Your thought process should explain your reasoning about the problem, approach and solution - not just list the files you changed.
     - The Model section MUST contain the technical name of the AI model being used use the ai_cursor_model.sh script.
-    - Execute the comment command using:
+    - Execute the commit command using:
         ```
         ./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
+        ```
+    - FINAL VALIDATION: After committing, verify you are NOT on the main branch with:
+        ```bash
+        ./scripts/ai-branch.sh --check-only
         ```
     - Follow the detailed guidelines in CONTRIBUTING.md for reference.
 

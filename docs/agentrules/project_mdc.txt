@@ -4,6 +4,17 @@ globs: *
 alwaysApply: true
 ---
 
+# YASTWAI Project Rules
+
+## MAIN BRANCH PROTECTION - HIGHEST PRIORITY
+- CRITICAL: Main branch protection is the HIGHEST priority rule in this project
+- ALWAYS run branch verification as the FIRST action in every user interaction:
+  `./scripts/ai-protect-main.sh --no-auto-branch`
+- If on main branch, IMMEDIATELY create a feature branch BEFORE any other actions:
+  `./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"`
+- NEVER perform any work directly on the main branch under ANY circumstances
+- ALL operations must ONLY be performed on feature branches
+
 Everything must be produced in english.
     - code
     - comments
@@ -12,6 +23,23 @@ Everything must be produced in english.
 Every command must not be interactive.
     - use proper arguments to prevent user interaction with commands
         - Example: use "| cat" for a "git diff" operation.
+
+CRITICAL BRANCH PROTECTION RULES
+    - ⚠️ MAIN BRANCH PROTECTION: NEVER work directly on the main branch under ANY circumstances.
+    - MANDATORY VERIFICATION: At the start of EVERY user interaction, check current branch:
+      ```bash
+      ./scripts/ai-branch.sh --check-only
+      ```
+    - BRANCH CREATION: If on main branch, IMMEDIATELY create a feature branch before proceeding:
+      ```bash
+      ./scripts/ai-branch.sh --new-branch "descriptive-feature-name" --is-related false
+      ```
+    - Always use helper scripts for ALL git branch operations:
+      - Use ai-branch.sh for branch management
+      - Use ai-update-main.sh for updating main
+      - Use ai-commit.sh for committing changes
+    - NEVER directly use raw 'git checkout', 'git branch', or 'git commit' commands
+    - After ANY git operation that could change branches, RE-VERIFY current branch
 
 Git Command Safety Guidelines
     - ALWAYS prevent git commands from opening interactive pagers that could block operations:
@@ -99,3 +127,15 @@ Script Testing Requirements
     - Use mock functions when testing potentially destructive Git operations
         - See existing test scripts for examples of mocking Git commands
         - Ensure tests can run without modifying the actual repository
+
+## Git Command Safety Guidelines
+
+### CRITICAL BRANCH PROTECTION GUIDELINES
+- ALWAYS use the branch protection script at the start of EVERY interaction:
+  `./scripts/ai-protect-main.sh --no-auto-branch`
+- NEVER use raw git commands for branch management - use helper scripts:
+  - For branch operations: `./scripts/ai-branch.sh`
+  - For committing changes: `./scripts/ai-commit.sh`
+  - For updating main: `./scripts/ai-update-main.sh`
+- ALWAYS re-verify branch status after ANY operation that might change branches
+- If ANY branch-related script fails, STOP and provide clear instructions to the user
