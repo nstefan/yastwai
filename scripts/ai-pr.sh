@@ -171,137 +171,42 @@ if [ -n "$PR_TEMPLATE" ]; then
     CHECKLIST_MARKER="## 🔎 Checklist"
     AI_MODEL_MARKER="## 🤖 AI Model"
     
-    # Process template file and update all relevant sections at once
-    cat "$PR_BODY_FILE" > "${PR_BODY_FILE}.original"
+    # Create a simplified PR description based on the template
+    # Start with a clean description
+    PR_DESCRIPTION=""
     
-    # Build the updated PR content from scratch
-    PR_CONTENT=""
+    # Add overview (always included)
+    PR_DESCRIPTION+="$OVERVIEW_MARKER\n"
+    PR_DESCRIPTION+="$OVERVIEW\n\n"
     
-    # Check if implementation section should be included
-    INCLUDE_IMPLEMENTATION=false
-    if [ -n "$IMPLEMENTATION" ]; then
-        INCLUDE_IMPLEMENTATION=true
+    # Add key changes (always included)
+    PR_DESCRIPTION+="$KEY_CHANGES_MARKER\n"
+    if [ -n "$KEY_CHANGES" ]; then
+        IFS=',' read -ra CHANGES <<< "$KEY_CHANGES"
+        for change in "${CHANGES[@]}"; do
+            PR_DESCRIPTION+="- $change\n"
+        done
+        PR_DESCRIPTION+="\n"
+    else
+        PR_DESCRIPTION+="<!-- No key changes specified -->\n\n"
     fi
     
-    # Read template line by line and replace sections
-    CURRENT_SECTION=""
-    SKIP_SECTION=false
-    while IFS= read -r line; do
-        if [[ "$line" == "$OVERVIEW_MARKER"* ]]; then
-            # Overview section
-            PR_CONTENT+="$OVERVIEW_MARKER\n"
-            if [ -n "$OVERVIEW" ]; then
-                PR_CONTENT+="$OVERVIEW\n\n"
-                # Skip original content in this section
-                CURRENT_SECTION="skip_overview"
-            else
-                # Keep original content
-                CURRENT_SECTION="overview"
-            fi
-        elif [[ "$line" == "$KEY_CHANGES_MARKER"* ]]; then
-            # Key Changes section
-            PR_CONTENT+="$KEY_CHANGES_MARKER\n"
-            if [ -n "$KEY_CHANGES" ]; then
-                # Format key changes
-                IFS=',' read -ra CHANGES <<< "$KEY_CHANGES"
-                for change in "${CHANGES[@]}"; do
-                    PR_CONTENT+="- $change\n"
-                done
-                PR_CONTENT+="\n"
-                # Skip original content in this section
-                CURRENT_SECTION="skip_key_changes"
-            else
-                # Keep original content
-                CURRENT_SECTION="key_changes"
-            fi
-        elif [[ "$line" == "$IMPLEMENTATION_MARKER"* ]]; then
-            # Implementation Details section
-            if [ "$INCLUDE_IMPLEMENTATION" = true ]; then
-                PR_CONTENT+="$IMPLEMENTATION_MARKER\n"
-                # Format implementation details
-                IFS=',' read -ra DETAILS <<< "$IMPLEMENTATION"
-                for detail in "${DETAILS[@]}"; do
-                    PR_CONTENT+="- $detail\n"
-                done
-                PR_CONTENT+="\n"
-            fi
-            # Skip this section entirely if not included
-            CURRENT_SECTION="skip_implementation"
-        elif [[ "$line" == "$TESTING_MARKER"* ]]; then
-            # Testing section - only include if testing is provided or if there's meaningful content
-            TESTING_CONTENT=$(sed -n "/$TESTING_MARKER/,/$CHECKLIST_MARKER/p" "${PR_BODY_FILE}.original" | grep -v "^$TESTING_MARKER" | grep -v "^$CHECKLIST_MARKER" | grep -v "<!--" | grep -v "^\s*-\s*\[\s*\]\s*" | grep -v "^$")
-            
-            if [ -n "$TESTING_CONTENT" ]; then
-                # Include testing section with existing meaningful content
-                PR_CONTENT+="$TESTING_MARKER\n"
-                CURRENT_SECTION="testing"
-            else
-                # Skip this section
-                CURRENT_SECTION="skip_testing"
-            fi
-        elif [[ "$line" == "$CHECKLIST_MARKER"* ]]; then
-            # Checklist section - only include if there's meaningful content
-            CHECKLIST_CONTENT=$(sed -n "/$CHECKLIST_MARKER/,/$AI_MODEL_MARKER/p" "${PR_BODY_FILE}.original" | grep -v "^$CHECKLIST_MARKER" | grep -v "^$AI_MODEL_MARKER" | grep -v "<!--" | grep -v "^\s*-\s*\[\s*\]\s*" | grep -v "^$")
-            
-            if [ -n "$CHECKLIST_CONTENT" ]; then
-                # Include checklist section with existing meaningful content
-                PR_CONTENT+="$CHECKLIST_MARKER\n"
-                CURRENT_SECTION="checklist"
-            else
-                # Skip this section
-                CURRENT_SECTION="skip_checklist"
-            fi
-        elif [[ "$line" == "$AI_MODEL_MARKER"* ]]; then
-            # AI Model section
-            PR_CONTENT+="$AI_MODEL_MARKER\n"
-            if [ -n "$MODEL" ]; then
-                PR_CONTENT+="$MODEL\n"
-                # Skip original content in this section
-                CURRENT_SECTION="skip_ai_model"
-            else
-                # Keep original content
-                CURRENT_SECTION="ai_model"
-            fi
-        elif [[ "$line" =~ ^##[[:space:]] ]]; then
-            # Other section headers
-            PR_CONTENT+="$line\n"
-            CURRENT_SECTION="other"
-        elif [[ "$CURRENT_SECTION" =~ ^skip_ ]]; then
-            # Skip content for replaced sections
-            if [[ "$line" =~ ^##[[:space:]] ]]; then
-                # We've reached the next section header
-                CURRENT_SECTION=""
-                PR_CONTENT+="$line\n"
-            fi
-        elif [[ "$CURRENT_SECTION" == "overview" && "$line" == "$KEY_CHANGES_MARKER"* ]]; then
-            # End of overview section
-            CURRENT_SECTION=""
-        elif [[ "$CURRENT_SECTION" == "key_changes" && "$line" == "$IMPLEMENTATION_MARKER"* ]]; then
-            # End of key changes section
-            CURRENT_SECTION=""
-        elif [[ "$CURRENT_SECTION" == "implementation" && "$line" == "$TESTING_MARKER"* ]]; then
-            # End of implementation section
-            CURRENT_SECTION=""
-        elif [[ "$CURRENT_SECTION" == "testing" && "$line" == "$CHECKLIST_MARKER"* ]]; then
-            # End of testing section
-            CURRENT_SECTION=""
-        elif [[ "$CURRENT_SECTION" == "checklist" && "$line" == "$AI_MODEL_MARKER"* ]]; then
-            # End of checklist section
-            CURRENT_SECTION=""
-        elif [[ -n "$CURRENT_SECTION" && ! "$CURRENT_SECTION" =~ ^skip_ ]]; then
-            # Content within a section we're keeping
-            PR_CONTENT+="$line\n"
-        else
-            # Other content (headers, etc.)
-            PR_CONTENT+="$line\n"
-        fi
-    done < "${PR_BODY_FILE}.original"
+    # Add implementation details (only if provided)
+    if [ -n "$IMPLEMENTATION" ]; then
+        PR_DESCRIPTION+="$IMPLEMENTATION_MARKER\n"
+        IFS=',' read -ra DETAILS <<< "$IMPLEMENTATION"
+        for detail in "${DETAILS[@]}"; do
+            PR_DESCRIPTION+="- $detail\n"
+        done
+        PR_DESCRIPTION+="\n"
+    fi
     
-    # Write the updated content back to the PR file
-    echo -e "$PR_CONTENT" > "$PR_BODY_FILE"
+    # Always include AI Model section (last)
+    PR_DESCRIPTION+="$AI_MODEL_MARKER\n"
+    PR_DESCRIPTION+="$MODEL\n"
     
-    # Clean up
-    rm -f "${PR_BODY_FILE}.original"
+    # Write the final PR description to the file
+    echo -e "$PR_DESCRIPTION" > "$PR_BODY_FILE"
     
     # Clean up backup file
     rm -f "${PR_BODY_FILE}.bak"
