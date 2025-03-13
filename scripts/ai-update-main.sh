@@ -2,6 +2,10 @@
 # AI Assistant Helper Script for Updating Main Branch
 # This script helps AI assistants fetch and update the main branch without requiring interactive input
 # Follows the naming pattern of ai-*.sh for consistency
+#
+# IMPORTANT: All git commands that might output to a pager (like log, diff, show, etc.) 
+# should be piped through 'cat' to prevent interactive sessions, e.g.: git log | cat
+# This ensures the script doesn't hang waiting for user input.
 
 set -e  # Exit on error
 

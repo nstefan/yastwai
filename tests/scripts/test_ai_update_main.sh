@@ -7,6 +7,11 @@
 # It should NEVER execute actual git commands against the real repository.
 # If you modify this test, ensure the mocking approach remains intact to prevent
 # accidental repository modifications.
+#
+# INTERACTIVE COMMAND WARNING:
+# Always pipe git commands that might trigger a pager (log, diff, show, etc.)
+# through 'cat' to prevent hanging on interactive prompts, e.g.: git log | cat
+# This is critical for automated scripts and tests to run without interruption.
 
 # Colors for test output
 GREEN="\033[0;32m"
