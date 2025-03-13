@@ -45,22 +45,3 @@ parking_lot = "0.12.3"
 [dev-dependencies]
 tokio-test = "0.4.3"
 env_logger = "0.10"
-
-# Test tools as examples instead of binary targets
-# They will only be built when explicitly requested with:
-# cargo build --example progress_bar_test
-[[example]]
-name = "progress_bar_test"
-path = "tests/tools/progress_bar_test.rs"
-
-[[example]]
-name = "test_config"
-path = "tests/tools/test_config.rs"
-
-[[example]]
-name = "test_token_stats"
-path = "tests/tools/test_token_stats.rs"
-
-[[example]]
-name = "test_translation"
-path = "tests/tools/test_translation.rs"
