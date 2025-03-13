@@ -171,72 +171,102 @@ if [ -n "$PR_TEMPLATE" ]; then
     CHECKLIST_MARKER="## 🔎 Checklist"
     AI_MODEL_MARKER="## 🤖 AI Model"
     
-    # Replace content in Overview section
-    if [ -n "$OVERVIEW" ]; then
-        # Create temporary file with modified content
-        awk -v overview="$OVERVIEW" -v start="$OVERVIEW_MARKER" -v end="$KEY_CHANGES_MARKER" '
-        $0 ~ start {print; print overview; print ""; in_section=1; next}
-        $0 ~ end {in_section=0; print}
-        !in_section {print}
-        ' "$PR_BODY_FILE" > "${PR_BODY_FILE}.new"
-        mv "${PR_BODY_FILE}.new" "$PR_BODY_FILE"
-    fi
+    # Process template file and update all relevant sections at once
+    cat "$PR_BODY_FILE" > "${PR_BODY_FILE}.original"
     
-    # Replace content in Key Changes section
-    if [ -n "$KEY_CHANGES" ]; then
-        # Create formatted list of changes
-        CHANGES_LIST=""
-        IFS=',' read -ra CHANGES <<< "$KEY_CHANGES"
-        for change in "${CHANGES[@]}"; do
-            CHANGES_LIST="${CHANGES_LIST}- $change\n"
-        done
-        
-        # Create temporary file with modified content
-        awk -v changes="$CHANGES_LIST" -v start="$KEY_CHANGES_MARKER" -v end="$IMPLEMENTATION_MARKER" '
-        $0 ~ start {print; printf "%s", changes; in_section=1; next}
-        $0 ~ end {in_section=0; print}
-        !in_section {print}
-        ' "$PR_BODY_FILE" > "${PR_BODY_FILE}.new"
-        mv "${PR_BODY_FILE}.new" "$PR_BODY_FILE"
-    fi
+    # Build the updated PR content from scratch
+    PR_CONTENT=""
     
-    # Replace content in Implementation Details section
-    if [ -n "$IMPLEMENTATION" ]; then
-        # Create formatted list of implementation details
-        DETAILS_LIST=""
-        IFS=',' read -ra DETAILS <<< "$IMPLEMENTATION"
-        for detail in "${DETAILS[@]}"; do
-            DETAILS_LIST="${DETAILS_LIST}- $detail\n"
-        done
-        
-        # Create temporary file with modified content
-        awk -v details="$DETAILS_LIST" -v start="$IMPLEMENTATION_MARKER" -v end="$TESTING_MARKER" '
-        $0 ~ start {print; printf "%s", details; in_section=1; next}
-        $0 ~ end {in_section=0; print}
-        !in_section {print}
-        ' "$PR_BODY_FILE" > "${PR_BODY_FILE}.new"
-        mv "${PR_BODY_FILE}.new" "$PR_BODY_FILE"
-    fi
+    # Read template line by line and replace sections
+    CURRENT_SECTION=""
+    while IFS= read -r line; do
+        if [[ "$line" == "$OVERVIEW_MARKER"* ]]; then
+            # Overview section
+            PR_CONTENT+="$OVERVIEW_MARKER\n"
+            if [ -n "$OVERVIEW" ]; then
+                PR_CONTENT+="$OVERVIEW\n\n"
+            else
+                # Keep original content
+                CURRENT_SECTION="overview"
+            fi
+        elif [[ "$line" == "$KEY_CHANGES_MARKER"* ]]; then
+            # Key Changes section
+            PR_CONTENT+="$KEY_CHANGES_MARKER\n"
+            if [ -n "$KEY_CHANGES" ]; then
+                # Format key changes
+                IFS=',' read -ra CHANGES <<< "$KEY_CHANGES"
+                for change in "${CHANGES[@]}"; do
+                    PR_CONTENT+="- $change\n"
+                done
+                PR_CONTENT+="\n"
+            else
+                # Keep original content
+                CURRENT_SECTION="key_changes"
+            fi
+        elif [[ "$line" == "$IMPLEMENTATION_MARKER"* ]]; then
+            # Implementation Details section
+            PR_CONTENT+="$IMPLEMENTATION_MARKER\n"
+            if [ -n "$IMPLEMENTATION" ]; then
+                # Format implementation details
+                IFS=',' read -ra DETAILS <<< "$IMPLEMENTATION"
+                for detail in "${DETAILS[@]}"; do
+                    PR_CONTENT+="- $detail\n"
+                done
+                PR_CONTENT+="\n"
+            else
+                # Keep original content
+                CURRENT_SECTION="implementation"
+            fi
+        elif [[ "$line" == "$TESTING_MARKER"* ]]; then
+            # Testing section
+            PR_CONTENT+="$TESTING_MARKER\n"
+            CURRENT_SECTION="testing"
+        elif [[ "$line" == "$CHECKLIST_MARKER"* ]]; then
+            # Checklist section
+            PR_CONTENT+="$CHECKLIST_MARKER\n"
+            CURRENT_SECTION="checklist"
+        elif [[ "$line" == "$AI_MODEL_MARKER"* ]]; then
+            # AI Model section
+            PR_CONTENT+="$AI_MODEL_MARKER\n"
+            if [ -n "$MODEL" ]; then
+                PR_CONTENT+="$MODEL\n"
+            else
+                # Keep original content
+                CURRENT_SECTION="ai_model"
+            fi
+        elif [[ "$line" =~ ^##[[:space:]] ]]; then
+            # Other section headers
+            PR_CONTENT+="$line\n"
+            CURRENT_SECTION="other"
+        elif [[ "$CURRENT_SECTION" == "overview" && "$line" == "$KEY_CHANGES_MARKER"* ]]; then
+            # End of overview section
+            CURRENT_SECTION=""
+        elif [[ "$CURRENT_SECTION" == "key_changes" && "$line" == "$IMPLEMENTATION_MARKER"* ]]; then
+            # End of key changes section
+            CURRENT_SECTION=""
+        elif [[ "$CURRENT_SECTION" == "implementation" && "$line" == "$TESTING_MARKER"* ]]; then
+            # End of implementation section
+            CURRENT_SECTION=""
+        elif [[ "$CURRENT_SECTION" == "testing" && "$line" == "$CHECKLIST_MARKER"* ]]; then
+            # End of testing section
+            CURRENT_SECTION=""
+        elif [[ "$CURRENT_SECTION" == "checklist" && "$line" == "$AI_MODEL_MARKER"* ]]; then
+            # End of checklist section
+            CURRENT_SECTION=""
+        elif [[ -n "$CURRENT_SECTION" ]]; then
+            # Content within a section we're keeping
+            PR_CONTENT+="$line\n"
+        else
+            # Other content (headers, etc.)
+            PR_CONTENT+="$line\n"
+        fi
+    done < "${PR_BODY_FILE}.original"
     
-    # Update AI Model section
-    if [ -n "$MODEL" ]; then
-        # Create temporary file with modified content
-        awk -v model="$MODEL" -v marker="$AI_MODEL_MARKER" '
-        {
-            if ($0 ~ marker) {
-                print marker;
-                print model;
-                in_section = 1;
-            } else if (!in_section) {
-                print;
-            } else if ($0 ~ /^##/) {
-                in_section = 0;
-                print;
-            }
-        }
-        ' "$PR_BODY_FILE" > "${PR_BODY_FILE}.new"
-        mv "${PR_BODY_FILE}.new" "$PR_BODY_FILE"
-    fi
+    # Write the updated content back to the PR file
+    echo -e "$PR_CONTENT" > "$PR_BODY_FILE"
+    
+    # Clean up
+    rm -f "${PR_BODY_FILE}.original"
     
     # Clean up backup file
     rm -f "${PR_BODY_FILE}.bak"
