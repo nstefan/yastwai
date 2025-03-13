@@ -73,16 +73,24 @@ else
 fi
 EOF
     
-    # Create mock python script
-    cat > "$TEST_TEMP_DIR/python3" << EOF
+    # Create mock gh script
+    cat > "$TEST_TEMP_DIR/gh" << EOF
 #!/bin/bash
-echo "imported:sys,urllib.parse"
-echo "input"
+if [[ "\$*" == *"auth status"* ]]; then
+    # Mock successful auth status
+    exit 0
+elif [[ "\$*" == *"pr create"* ]]; then
+    echo "https://github.com/user/repo/pull/123"
+    exit 0
+else
+    echo "Mock gh called with: \$@"
+    exit 0
+fi
 EOF
     
     # Make them executable
     chmod +x "$TEST_TEMP_DIR/git"
-    chmod +x "$TEST_TEMP_DIR/python3"
+    chmod +x "$TEST_TEMP_DIR/gh"
     
     # Add to path
     export PATH="$TEST_TEMP_DIR:$PATH"
@@ -126,10 +134,10 @@ run_test "Missing required parameters (title only)" "$PR_SCRIPT --title \"Test P
 run_test "Missing model parameter" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\"" 1
 
 # Test 5: Basic valid command
-run_test "Basic valid command" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\" --model \"test-model\" --no-browser"
+run_test "Basic valid command" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\" --model \"test-model\""
 
 # Test 6: Valid command with all parameters
-run_test "Valid command with all parameters" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\" --key-changes \"Change 1,Change 2\" --implementation \"Detail 1,Detail 2\" --model \"test-model\" --base \"main\" --draft --no-browser"
+run_test "Valid command with all parameters" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\" --key-changes \"Change 1,Change 2\" --implementation \"Detail 1,Detail 2\" --model \"test-model\" --base \"main\" --draft"
 
 # Test 7: Invalid parameter usage
 run_test "Invalid parameter usage (missing value)" "$PR_SCRIPT --title" 1

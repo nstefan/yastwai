@@ -259,6 +259,17 @@ ${FEATURES}
   # On Windows with Chocolatey
   choco install ffmpeg
   \`\`\`
+* GitHub CLI (gh) for pull request operations
+  \`\`\`sh
+  # On Ubuntu/Debian
+  sudo apt install gh
+  
+  # On macOS with Homebrew
+  brew install gh
+  
+  # On Windows with Chocolatey
+  choco install gh
+  \`\`\`
 
 ### Build from Source
 
