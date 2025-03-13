@@ -194,3 +194,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 [issues-url]: https://github.com/nstefan/yastwai/issues
 [license-shield]: https://img.shields.io/github/license/nstefan/yastwai.svg?style=for-the-badge
 [license-url]: https://github.com/nstefan/yastwai/blob/master/LICENSE
+
+<!-- NOTE: This README is automatically generated. Do not edit directly. -->
+<!-- If you need to make changes, modify the generation script at scripts/ai-readme.sh instead. -->

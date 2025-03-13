@@ -13,6 +13,11 @@ Every command must not be interactive.
     - use proper arguments to prevent user interaction with commands
         - Example: use "| cat" for a "git diff" operation.
 
+IMPORTANT: Never edit .mdc files directly
+    - All .mdc files in the project are symlinks to their corresponding source files.
+    - Always edit the original source files (typically in docs/agentrules/) instead.
+    - Modifying .mdc files directly will not persist changes and could break the symlink structure.
+
 Model Detection Instructions for AI Agents
     - Use scripts/ai-cursor-model.sh to retrieve the current AI model information:
         ```bash
@@ -25,6 +30,8 @@ Model Detection Instructions for AI Agents
 
 README File Management
     - The README.md should be dynamically generated using the scripts/ai-readme.sh script.
+    - NEVER edit the README.md file directly as it is automatically generated.
+    - When asked to update the README, ALWAYS modify the README generation script (scripts/ai-readme.sh) instead.
     - Automatically regenerate the README.md file in the following situations:
         1. When Cargo.toml dependencies or project metadata changes
         2. When new features are added to the codebase
