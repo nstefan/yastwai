@@ -20,7 +20,11 @@
  * The library is organized in these main modules:
  * - `app_config`: Configuration management
  * - `subtitle_processor`: Subtitle file handling and processing
- * - `translation_service`: AI-powered translation services
+ * - `translation`: AI-powered translation services:
+ *   - `translation::core`: Core translation functionality
+ *   - `translation::batch`: Batch processing of translations
+ *   - `translation::cache`: Caching mechanisms for translations
+ *   - `translation::formatting`: Format preservation and processing
  * - `file_utils`: File system operations
  * - `app_controller`: Main application controller
  * - `language_utils`: ISO language code utilities
@@ -45,7 +49,7 @@
 pub mod app_config;
 pub mod file_utils;
 pub mod subtitle_processor;
-pub mod translation_service;
+pub mod translation;
 pub mod app_controller;
 pub mod language_utils;
 pub mod providers;
@@ -54,6 +58,6 @@ pub mod errors;
 // Re-export main types for easier usage
 pub use app_config::Config;
 pub use subtitle_processor::{SubtitleCollection, SubtitleEntry};
-pub use translation_service::TranslationService;
+pub use translation::TranslationService;
 pub use language_utils::{language_codes_match, normalize_to_part2t, get_language_name, validate_language_code};
 pub use errors::{AppError, ProviderError, SubtitleError, TranslationError}; 
