@@ -159,6 +159,15 @@ YASTwAI uses a JSON configuration file with these settings:
 
 See the example configuration file for more detailed options.
 
+## Roadmap
+
+- [ ] Support for more subtitle formats beyond SRT
+- [ ] UI improvements for better progress visualization
+- [ ] Additional AI providers
+- [ ] Performance optimizations for large batch processing
+
+See the [open issues](https://github.com/nstefan/yastwai/issues) for a full list of proposed features and known issues.
+
 ## Contributing
 
 Contributions are welcome! If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also open an issue with the tag "enhancement".
@@ -185,3 +194,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 [issues-url]: https://github.com/nstefan/yastwai/issues
 [license-shield]: https://img.shields.io/github/license/nstefan/yastwai.svg?style=for-the-badge
 [license-url]: https://github.com/nstefan/yastwai/blob/master/LICENSE
+
+<!-- NOTE: This README is automatically generated. Do not edit directly. -->
+<!-- If you need to make changes, modify the generation script at scripts/ai-readme.sh instead. -->
