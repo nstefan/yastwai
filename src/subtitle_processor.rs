@@ -7,11 +7,10 @@ use anyhow::{Result, Context, anyhow};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use log::{error, warn, debug};
-use std::process::Command;
 use serde_json::{Value, from_str};
 use crate::app_config::SubtitleInfo;
 use crate::language_utils;
-use std::cmp::Ordering;
+use tokio::process::Command;
 
 // @module: Subtitle processing and manipulation
 
@@ -213,7 +212,7 @@ impl SubtitleCollection {
     }
     
     /// Extract subtitles from a video file
-    pub fn extract_from_video<P: AsRef<Path>>(video_path: P, track_id: usize, source_language: &str, output_path: P) -> Result<Self> {
+    pub async fn extract_from_video<P: AsRef<Path>>(video_path: P, track_id: usize, source_language: &str, output_path: P) -> Result<Self> {
         let video_path = video_path.as_ref();
         let output_path = output_path.as_ref();
         
@@ -240,7 +239,8 @@ impl SubtitleCollection {
                 output_path.to_str().unwrap_or_default()
             ])
             .output()
-            .context("Failed to execute ffmpeg command for subtitle extraction")?;
+            .await
+            .map_err(|e| anyhow!("Failed to execute ffmpeg command for subtitle extraction: {}", e))?;
 
         if !result.status.success() {
             let stderr = String::from_utf8_lossy(&result.stderr);
@@ -395,13 +395,13 @@ impl SubtitleCollection {
     }
     
     /// List subtitle tracks in a video file
-    pub fn list_subtitle_tracks<P: AsRef<Path>>(video_path: P) -> Result<Vec<SubtitleInfo>> {
+    pub async fn list_subtitle_tracks<P: AsRef<Path>>(video_path: P) -> Result<Vec<SubtitleInfo>> {
         let video_path = video_path.as_ref();
         
         // Check if the file exists
         if !video_path.exists() {
             error!(" Video file not found: {:?}", video_path);
-            return Err(anyhow::anyhow!("Video file not found: {:?}", video_path));
+            return Err(anyhow!("Video file not found: {:?}", video_path));
         }
         
         // Remove verbose stack trace and unnecessary ffprobe details logs
@@ -414,7 +414,8 @@ impl SubtitleCollection {
                 video_path.to_str().unwrap_or("")
             ])
             .output()
-            .context("Failed to execute ffprobe command")?;
+            .await
+            .map_err(|e| anyhow!("Failed to execute ffprobe command: {}", e))?;
             
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -538,7 +539,7 @@ impl SubtitleCollection {
     }
     
     /// Extract subtitles from a video file with automatic track selection
-    pub fn extract_with_auto_track_selection<P: AsRef<Path>>(
+    pub async fn extract_with_auto_track_selection<P: AsRef<Path>>(
         video_path: P, 
         preferred_language: &str,
         output_path: Option<&Path>,
@@ -547,7 +548,7 @@ impl SubtitleCollection {
         let video_path = video_path.as_ref();
         
         // List all subtitle tracks
-        let tracks = Self::list_subtitle_tracks(video_path)?;
+        let tracks = Self::list_subtitle_tracks(video_path).await?;
         
         // Exit early if no subtitle streams found
         if tracks.is_empty() {
@@ -561,13 +562,13 @@ impl SubtitleCollection {
         
         // Extract the selected track
         if let Some(output_path) = output_path {
-            Self::extract_from_video(video_path, track_id, source_language, output_path)
+            Self::extract_from_video(video_path, track_id, source_language, output_path).await
         } else {
             // Extract to a temporary file first
             let temp_filename = format!("extracted_subtitle_{}.srt", track_id);
             let temp_path = std::env::temp_dir().join(&temp_filename);
             
-            let result = Self::extract_from_video(video_path, track_id, source_language, &temp_path);
+            let result = Self::extract_from_video(video_path, track_id, source_language, &temp_path).await;
             
             // Clean up temporary file
             if temp_path.exists() {
@@ -579,22 +580,22 @@ impl SubtitleCollection {
     }
 
     /// Extract source language subtitle to memory
-    pub fn extract_source_language_subtitle_to_memory<P: AsRef<Path>>(video_path: P, source_language: &str) -> Result<Self> {
+    pub async fn extract_source_language_subtitle_to_memory<P: AsRef<Path>>(video_path: P, source_language: &str) -> Result<Self> {
         let video_path = video_path.as_ref();
         
         error!("Extracting {source_language} subtitles from video (in-memory)");
         
         // Avoiding additional logs by passing directly to extract_with_auto_track_selection
-        Self::extract_with_auto_track_selection(video_path, source_language, None, source_language)
+        Self::extract_with_auto_track_selection(video_path, source_language, None, source_language).await
     }
     
     /// Fast extraction using ffmpeg subtitle copy
     #[allow(dead_code)]
-    pub fn fast_extract_source_subtitles<P: AsRef<Path>>(video_path: P, source_language: &str) -> Result<Self> {
+    pub async fn fast_extract_source_subtitles<P: AsRef<Path>>(video_path: P, source_language: &str) -> Result<Self> {
         error!("Fast extracting subtitles directly for language: {}", source_language);
         
         // Call extract_with_auto_track_selection directly
-        Self::extract_with_auto_track_selection(video_path, source_language, None, source_language)
+        Self::extract_with_auto_track_selection(video_path, source_language, None, source_language).await
     }
 
     /// Save the subtitle collection to an SRT file
@@ -635,7 +636,7 @@ impl SubtitleCollection {
     /// Parse SRT format string into subtitle entries
     pub fn parse_srt_string(content: &str) -> Result<Vec<SubtitleEntry>> {
         let mut entries = Vec::new();
-        let mut lines = content.lines().peekable();
+        let lines = content.lines().peekable();
         
         // State variables for parsing
         let mut current_seq_num: Option<usize> = None;

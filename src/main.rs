@@ -238,17 +238,18 @@ async fn main() -> Result<()> {
                 options.input_path.parent().unwrap_or(Path::new(".")).to_path_buf(),
                 options.extract_language.as_deref(),
                 options.force_overwrite
-            )?;
+            ).await?;
         } else if options.input_path.is_dir() {
             // Process a directory
             extraction_only_mode_for_folder(
                 &options.input_path,
                 options.extract_language.as_deref(),
                 options.force_overwrite
-            )?;
+            ).await?;
         } else {
             return Err(anyhow!("Input path does not exist: {:?}", options.input_path));
         }
+        
         return Ok(());
     }
     
@@ -455,14 +456,20 @@ fn print_usage(program_name: &str) {
 }
 
 // Helper function to implement extraction-only mode
-fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: Option<&str>, force_overwrite: bool) -> Result<()> {
+async fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: Option<&str>, force_overwrite: bool) -> Result<()> {
     use crate::subtitle_processor::SubtitleCollection;
+    
+    // Check if the input file exists
+    if !input_file.exists() {
+        return Err(anyhow!("Input file does not exist: {:?}", input_file));
+    }
     
     info!("🔍 Extracting subtitles for: {:?}", input_file);
     
     // List available subtitle tracks
     let tracks = SubtitleCollection::list_subtitle_tracks(input_file)
-        .context("Failed to list subtitle tracks")?;
+        .await
+        .map_err(|e| anyhow!("Failed to list subtitle tracks: {}", e))?;
     
     if tracks.is_empty() {
         warn!("No subtitle tracks found in file: {:?}", input_file);
@@ -531,12 +538,13 @@ fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: O
     }
     
     // Extract the subtitle
-    let subtitles = SubtitleCollection::extract_from_video(
+    let _subtitles = SubtitleCollection::extract_from_video(
         input_file, 
         track_id, 
         track_info.language.as_deref().unwrap_or("unknown"),
         &output_file,
-    ).context("Failed to extract subtitle")?;
+    ).await
+    .map_err(|e| anyhow!("Failed to extract subtitle: {}", e))?;
     
     info!("Success: {:?}", output_file);
     
@@ -544,43 +552,47 @@ fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: O
 }
 
 // Helper function to process an entire folder in extraction-only mode
-fn extraction_only_mode_for_folder(input_dir: &Path, language_code: Option<&str>, force_overwrite: bool) -> Result<()> {
+async fn extraction_only_mode_for_folder(input_dir: &Path, language_code: Option<&str>, force_overwrite: bool) -> Result<()> {
     use walkdir::WalkDir;
     
     info!("Starting subtitle extraction mode for directory: {:?}", input_dir);
     
     let mut processed_count = 0;
     
-    // Walk the directory recursively
-    for entry in WalkDir::new(input_dir)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file()) {
-            
+    // Find all video files in the directory
+    for entry in WalkDir::new(input_dir).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         
-        // Check if it's a video file
-        let file_type = file_utils::FileManager::detect_file_type(path);
-        if let Ok(file_type) = file_type {
-            if let file_utils::FileType::Video = file_type {
-                info!("Processing video: {:?}", path);
-                
-                // Extract subtitles for this file
-                if let Err(e) = extraction_only_mode(
-                    path, 
-                    path.parent().unwrap_or(Path::new(".")).to_path_buf(),
-                    language_code,
-                    force_overwrite
-                ) {
-                    error!("Failed to process file {:?}: {}", path, e);
-                } else {
-                    processed_count += 1;
-                }
-            }
+        // Skip directories and non-video files
+        if path.is_dir() || !is_video_file(path) {
+            continue;
+        }
+        
+        info!("Processing video: {:?}", path);
+        
+        // Process the file
+        if let Err(e) = extraction_only_mode(path, path.parent().unwrap_or(Path::new("")).to_path_buf(), language_code, force_overwrite).await {
+            error!("Error processing file: {}", e);
+        } else {
+            processed_count += 1;
         }
     }
     
     info!("Finished processing {} files", processed_count);
     
     Ok(())
+}
+
+// Helper function to check if a file is a video file
+fn is_video_file(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    
+    // Check if it's a video file using FileManager
+    if let Ok(file_type) = file_utils::FileManager::detect_file_type(path) {
+        matches!(file_type, file_utils::FileType::Video)
+    } else {
+        false
+    }
 } 

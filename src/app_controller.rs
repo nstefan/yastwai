@@ -1,8 +1,8 @@
 use anyhow::{Result, Context};
 use log::{error, warn, info, debug};
 use std::path::{Path, PathBuf};
-use crate::app_config::{Config, SubtitleInfo};
-use crate::subtitle_processor::{SubtitleCollection, SubtitleEntry};
+use crate::app_config::Config;
+use crate::subtitle_processor::SubtitleCollection;
 use crate::translation::{TranslationService, BatchTranslator};
 use crate::translation::core::LogEntry;
 use crate::language_utils;
@@ -14,7 +14,6 @@ use std::sync::Mutex;
 use crate::file_utils::{FileManager, FileType};
 use chrono;
 use std::time::Duration;
-use std::fs;
 
 // @module: Application controller for subtitle processing
 
@@ -122,16 +121,18 @@ impl Controller {
         
         // First check if the target language is already available as a subtitle track
         if !force_overwrite {
-            if let Ok(Some(track_id)) = self.find_target_language_track(&input_file) {
+            if let Some(track_id) = self.find_target_language_track(&input_file).await? {
                 
                 // Extract the existing subtitle track
-                if let Ok(subtitles) = self.extract_target_subtitles_to_memory(&input_file, track_id) {
+                if let Ok(subtitles) = self.extract_target_subtitles_to_memory(&input_file, track_id).await {
                     // If extraction was successful, save the existing subtitles
                     self.save_translated_subtitles(subtitles, &input_file, &output_dir)?;
                     return Ok(());
                 }
             }
-        } else if let Ok(Some(_)) = self.find_target_language_track(&input_file) {
+        } else if let Some(_) = self.find_target_language_track(&input_file).await? {
+            warn!("Skipping file, translation already exists (use -f to force overwrite)");
+            return Ok(());
         }
         
         // Initialize translation testing once per run
@@ -154,7 +155,7 @@ impl Controller {
         // Log the extraction step
         
         // Extract subtitles from the input file
-        let subtitles = self.extract_subtitles_to_memory(&input_file)?;
+        let subtitles = self.extract_subtitles_to_memory(&input_file).await?;
         
         // Log the subtitle count
         
@@ -183,7 +184,7 @@ impl Controller {
     }
     
     /// Extract subtitles from a video file to memory
-    fn extract_subtitles_to_memory(&self, input_file: &Path) -> Result<SubtitleCollection> {
+    async fn extract_subtitles_to_memory(&self, input_file: &Path) -> Result<SubtitleCollection> {
         // First check if we can find the source language track
         let source_language = &self.config.source_language;
         
@@ -193,7 +194,7 @@ impl Controller {
             source_language,
             None,
             source_language
-        ) {
+        ).await {
             Ok(subtitles) => Ok(subtitles),
             Err(e) => {
                 warn!("Auto-selection failed: {}", e);
@@ -201,19 +202,12 @@ impl Controller {
                 SubtitleCollection::extract_source_language_subtitle_to_memory(
                     input_file,
                     source_language
-                )
+                ).await
             }
         }
     }
     
     /// Translate subtitles from source to target language
-    async fn translate_subtitles(&self, subtitles: SubtitleCollection) -> Result<(SubtitleCollection, std::time::Duration)> {
-        // Create a new empty progress indicator for use with translate_subtitles_with_progress
-        let multi_progress = MultiProgress::new();
-        // Use a temporary directory for logs when no specific output directory is provided
-        let temp_dir = std::env::temp_dir();
-        self.translate_subtitles_with_progress(subtitles, &multi_progress, &temp_dir).await
-    }
     
     /// Internal method to translate subtitles with a progress bar from the provided MultiProgress
     async fn translate_subtitles_with_progress(&self, subtitles: SubtitleCollection, multi_progress: &MultiProgress, output_dir: &Path) -> Result<(SubtitleCollection, std::time::Duration)> {
@@ -353,10 +347,6 @@ impl Controller {
     /// Save the translated subtitles to files
     fn save_translated_subtitles(&self, subtitles: SubtitleCollection, input_file: &Path, output_dir: &Path) -> Result<PathBuf> {
         // Generate an appropriate output filename
-        let _input_stem = input_file.file_stem()
-            .context("Failed to extract file stem from input file")?
-            .to_string_lossy();
-        
         let output_filename = self.get_subtitle_output_filename(
             input_file, 
             &self.config.target_language
@@ -512,7 +502,7 @@ impl Controller {
         // Check if this is an SRT file and handle appropriately
         if input_file.extension().and_then(|ext| ext.to_str()) == Some("srt") {
             // For SRT files, we need to keep the full path and replace the language code
-            let input_str = input_file.to_string_lossy().to_string();
+            let _input_str = input_file.to_string_lossy().to_string();
             
             // If this is a path with directories
             if let Some(filename) = input_file.file_name().map(|f| f.to_string_lossy()) {
@@ -545,7 +535,7 @@ impl Controller {
             }
         } else {
             // For video files, just extract the filename (no path) and append the target language
-            if let Some(filename) = input_file.file_name() {
+            if let Some(_filename) = input_file.file_name() {
                 if let Some(stem) = input_file.file_stem() {
                     return format!("{}.{}.srt", stem.to_string_lossy(), target_language);
                 }
@@ -650,8 +640,8 @@ impl Controller {
     }
 
     /// Find a subtitle track in the target language if one exists
-    fn find_target_language_track(&self, input_file: &Path) -> Result<Option<usize>> {
-        let tracks = SubtitleCollection::list_subtitle_tracks(input_file)?;
+    async fn find_target_language_track(&self, input_file: &Path) -> Result<Option<usize>> {
+        let tracks = SubtitleCollection::list_subtitle_tracks(input_file).await?;
         
         if tracks.is_empty() {
             return Ok(None);
@@ -682,7 +672,7 @@ impl Controller {
     }
     
     /// Extract subtitles in target language from the video file directly to memory
-    fn extract_target_subtitles_to_memory(&self, input_file: &Path, track_id: usize) -> Result<SubtitleCollection> {
+    async fn extract_target_subtitles_to_memory(&self, input_file: &Path, track_id: usize) -> Result<SubtitleCollection> {
         // Extract the subtitle track
         let output_path = input_file.with_extension("extracted.srt");
         let subtitles = SubtitleCollection::extract_from_video(
@@ -690,7 +680,7 @@ impl Controller {
             track_id, 
             &self.config.target_language, 
             &output_path
-        )?;
+        ).await?;
         
         // Delete the temporary file
         if output_path.exists() {

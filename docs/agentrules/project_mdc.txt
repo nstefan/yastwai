@@ -13,6 +13,32 @@ Every command must not be interactive.
     - use proper arguments to prevent user interaction with commands
         - Example: use "| cat" for a "git diff" operation.
 
+Git Command Safety Guidelines
+    - ALWAYS prevent git commands from opening interactive pagers that could block operations:
+        - Pipe all potentially paginating git commands through cat:
+          ```bash
+          git log | cat
+          git diff | cat
+          git status | cat
+          git show | cat
+          ```
+        - For git log specifically, use these safe alternatives:
+          ```bash
+          # Option 1: Pipe through cat
+          git log | cat
+          
+          # Option 2: Use --no-pager flag
+          git --no-pager log
+          
+          # Option 3: Limit output to avoid pager
+          git log --oneline -n 5 | cat
+          ```
+        - For git commands that might open an editor (like commit), use the -m flag:
+          ```bash
+          git commit -m "Commit message" 
+          ```
+    - NEVER run raw git commands that could trigger interactive behavior without protection
+
 IMPORTANT: Never edit .mdc files directly
     - All .mdc files in the project are symlinks to their corresponding source files.
     - Always edit the original source files (typically in docs/agentrules/) instead.

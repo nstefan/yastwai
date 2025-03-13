@@ -1,10 +1,8 @@
-use anyhow::{Result, Context};
+use anyhow::{anyhow, Result, Context};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::default::Default;
-use std::fmt;
-use std::str::FromStr;
 
 /// Application configuration module
 /// This module handles the application configuration including loading,
@@ -65,7 +63,7 @@ impl TranslationProvider {
             "ollama" => Ok(Self::Ollama),
             "openai" => Ok(Self::OpenAI),
             "anthropic" => Ok(Self::Anthropic),
-            _ => Err(anyhow::anyhow!("Invalid provider type: {}", s)),
+            _ => Err(anyhow!("Invalid provider type: {}", s)),
         }
     }
 }
@@ -452,13 +450,13 @@ impl Config {
             TranslationProvider::OpenAI => {
                 let api_key = self.translation.get_api_key();
                 if api_key.is_empty() {
-                    return Err(anyhow::anyhow!("Translation API key is required for OpenAI provider"));
+                    return Err(anyhow!("Translation API key is required for OpenAI provider"));
                 }
             },
             TranslationProvider::Anthropic => {
                 let api_key = self.translation.get_api_key();
                 if api_key.is_empty() {
-                    return Err(anyhow::anyhow!("Translation API key is required for Anthropic provider"));
+                    return Err(anyhow!("Translation API key is required for Anthropic provider"));
                 }
             },
             _ => {}
