@@ -3,8 +3,13 @@ use serde::{Serialize, Deserialize};
 use anyhow::{Result, anyhow, Context};
 use reqwest::{Client, header};
 use log::error;
+use async_trait::async_trait;
+
+use crate::errors::ProviderError;
+use super::Provider;
 
 /// Anthropic client for interacting with Anthropic API
+#[derive(Debug)]
 pub struct Anthropic {
     /// HTTP client for API requests
     client: Client,
@@ -153,13 +158,24 @@ impl Anthropic {
         }
     }
     
-    /// Complete a messages request
-    pub async fn complete(&self, request: AnthropicRequest) -> Result<AnthropicResponse> {
-        let api_url = if self.endpoint.is_empty() {
+    /// Generate API URL based on configured endpoint
+    fn api_url(&self) -> String {
+        if self.endpoint.is_empty() {
             "https://api.anthropic.com/v1/messages".to_string()
         } else {
             format!("{}/v1/messages", self.endpoint.trim_end_matches('/'))
-        };
+        }
+    }
+}
+
+#[async_trait]
+impl Provider for Anthropic {
+    type Request = AnthropicRequest;
+    type Response = AnthropicResponse;
+    
+    /// Complete a messages request
+    async fn complete(&self, request: Self::Request) -> Result<Self::Response, ProviderError> {
+        let api_url = self.api_url();
         
         let response = self.client.post(&api_url)
             .header("Content-Type", "application/json")
@@ -168,25 +184,28 @@ impl Anthropic {
             .json(&request)
             .send()
             .await
-            .map_err(|e| anyhow!("Failed to send request to Anthropic API: {}", e))?;
+            .map_err(|e| ProviderError::RequestFailed(e.to_string()))?;
         
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await
                 .unwrap_or_else(|_| "Failed to get error response text".to_string());
             error!("Anthropic API error ({}): {}", status, error_text);
-            return Err(anyhow!("Anthropic API error ({}): {}", status, error_text));
+            return Err(ProviderError::ApiError { 
+                status_code: status.as_u16(), 
+                message: error_text
+            });
         }
         
         let anthropic_response = response.json::<AnthropicResponse>().await
-            .map_err(|e| anyhow!("Failed to parse Anthropic API response: {}", e))?;
+            .map_err(|e| ProviderError::ParseError(e.to_string()))?;
             
         Ok(anthropic_response)
     }
     
     /// Test the connection to the Anthropic API
-    pub async fn test_connection(&self, model: &str) -> Result<()> {
-        let request = AnthropicRequest::new(model, 10)
+    async fn test_connection(&self) -> Result<(), ProviderError> {
+        let request = AnthropicRequest::new("claude-3-haiku-20240307", 10)
             .add_message("user", "Hello");
         
         self.complete(request).await?;
@@ -194,7 +213,7 @@ impl Anthropic {
     }
     
     /// Extract text from Anthropic response
-    pub fn extract_text_from_response(response: &AnthropicResponse) -> String {
+    fn extract_text(response: &Self::Response) -> String {
         response.content.iter()
             .filter(|c| c.content_type == "text")
             .map(|c| c.text.clone())
