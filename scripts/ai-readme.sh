@@ -160,6 +160,31 @@ else
 }'
 fi
 
+# Create a preprocessed version of the JSON with proper escaping for markdown
+# This ensures special characters and newlines render correctly
+JSON_TEMP_FILE=$(mktemp)
+echo "$EXAMPLE_CONFIG_CONTENT" > "$JSON_TEMP_FILE"
+
+# Process the JSON to ensure proper escaping
+processed_json=""
+while IFS= read -r line; do
+    # Escape backslashes first (double them)
+    line="${line//\\/\\\\}"
+    # Escape opening braces that are part of format tags like {\an8}
+    line="${line//{\\/\\{\\}"
+    # Add the processed line to our result
+    processed_json="${processed_json}${line}\\n"
+done < "$JSON_TEMP_FILE"
+
+# Remove trailing newline
+processed_json="${processed_json%\\n}"
+
+# Replace the original content with the processed version
+EXAMPLE_CONFIG_CONTENT="$processed_json"
+
+# Clean up
+rm -f "$JSON_TEMP_FILE"
+
 # Generate features list
 FEATURES=""
 # Check for subtitle extraction capability
