@@ -538,7 +538,7 @@ async fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_c
     }
     
     // Extract the subtitle
-    let subtitles = SubtitleCollection::extract_from_video(
+    let _subtitles = SubtitleCollection::extract_from_video(
         input_file, 
         track_id, 
         track_info.language.as_deref().unwrap_or("unknown"),

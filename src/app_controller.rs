@@ -208,13 +208,6 @@ impl Controller {
     }
     
     /// Translate subtitles from source to target language
-    async fn translate_subtitles(&self, subtitles: SubtitleCollection) -> Result<(SubtitleCollection, std::time::Duration)> {
-        // Create a new empty progress indicator for use with translate_subtitles_with_progress
-        let multi_progress = MultiProgress::new();
-        // Use a temporary directory for logs when no specific output directory is provided
-        let temp_dir = std::env::temp_dir();
-        self.translate_subtitles_with_progress(subtitles, &multi_progress, &temp_dir).await
-    }
     
     /// Internal method to translate subtitles with a progress bar from the provided MultiProgress
     async fn translate_subtitles_with_progress(&self, subtitles: SubtitleCollection, multi_progress: &MultiProgress, output_dir: &Path) -> Result<(SubtitleCollection, std::time::Duration)> {
