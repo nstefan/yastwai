@@ -4,14 +4,19 @@ use std::fmt;
 use regex::Regex;
 use once_cell::sync::Lazy;
 use anyhow::{Result, Context, anyhow};
-use std::io::Write;
+use std::io::{self, Write, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use log::{error, warn, debug};
-use std::process::Command;
+use std::process::Command as StdCommand;
 use serde_json::{Value, from_str};
 use crate::app_config::SubtitleInfo;
 use crate::language_utils;
-use std::cmp::Ordering;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::process::Command;
+use futures_util::TryFutureExt;
 
 // @module: Subtitle processing and manipulation
 
