@@ -137,7 +137,8 @@ YASTwAI uses a JSON configuration file with these settings:
         "endpoint": "https://api.anthropic.com",
         "concurrent_requests": 2,
         "max_chars_per_request": 400,
-        "timeout_secs": 60
+        "timeout_secs": 60,
+        "rate_limit": 45
       }
     ],
     "common": {

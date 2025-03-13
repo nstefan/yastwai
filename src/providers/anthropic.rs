@@ -1,9 +1,10 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use serde::{Serialize, Deserialize};
 use anyhow::Result;
 use reqwest::Client;
 use async_trait::async_trait;
 use tokio::time::sleep;
+use tokio::sync::Mutex;
 
 use crate::errors::ProviderError;
 use super::Provider;
@@ -13,6 +14,90 @@ const DEFAULT_MAX_RETRIES: u32 = 3;
 
 /// Default initial backoff duration in milliseconds
 const DEFAULT_INITIAL_BACKOFF_MS: u64 = 100;
+
+/// Token bucket rate limiter implementation
+///
+/// This rate limiter implements the token bucket algorithm:
+/// - A bucket holds tokens up to a maximum capacity
+/// - Tokens are consumed when API requests are made
+/// - Tokens are refilled at a steady rate over time
+/// - If the bucket is empty, requests wait until tokens are available
+///
+/// This helps prevent rate limit errors from the Anthropic API, which has a
+/// limit of 50 requests per minute for most accounts.
+#[derive(Debug)]
+struct TokenBucketRateLimiter {
+    /// Maximum number of tokens in the bucket
+    capacity: u32,
+    
+    /// Current number of tokens in the bucket
+    tokens: u32,
+    
+    /// Time of last token refill
+    last_refill: Instant,
+    
+    /// Refill rate in tokens per second
+    refill_rate: f64,
+}
+
+impl TokenBucketRateLimiter {
+    /// Create a new token bucket rate limiter
+    fn new(requests_per_minute: u32) -> Self {
+        // Calculate tokens per second from requests per minute
+        let refill_rate = requests_per_minute as f64 / 60.0;
+        
+        Self {
+            capacity: requests_per_minute,
+            tokens: requests_per_minute, // Start with a full bucket
+            last_refill: Instant::now(),
+            refill_rate,
+        }
+    }
+    
+    /// Refill the token bucket based on elapsed time
+    fn refill(&mut self) {
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last_refill);
+        let elapsed_secs = elapsed.as_secs_f64();
+        
+        // Calculate how many tokens to add based on elapsed time and refill rate
+        let new_tokens = (elapsed_secs * self.refill_rate).floor() as u32;
+        
+        if new_tokens > 0 {
+            // Add tokens up to capacity
+            self.tokens = (self.tokens + new_tokens).min(self.capacity);
+            self.last_refill = now;
+        }
+    }
+    
+    /// Try to consume a token from the bucket
+    async fn consume(&mut self) -> bool {
+        self.refill();
+        
+        if self.tokens > 0 {
+            self.tokens -= 1;
+            true
+        } else {
+            false
+        }
+    }
+    
+    /// Wait until a token is available
+    async fn wait_for_token(&mut self) {
+        while !self.consume().await {
+            // If no tokens are available, sleep for a short duration
+            // Calculate time until next token is available
+            let time_to_next_token_secs = 1.0 / self.refill_rate;
+            let wait_ms = (time_to_next_token_secs * 1000.0).ceil() as u64;
+            
+            // Add small buffer to ensure token is ready
+            sleep(Duration::from_millis(wait_ms + 10)).await;
+            
+            // Refill bucket after waiting
+            self.refill();
+        }
+    }
+}
 
 /// Anthropic client for interacting with Anthropic API
 #[derive(Debug)]
@@ -27,6 +112,8 @@ pub struct Anthropic {
     max_retries: u32,
     /// Initial backoff duration for retry in milliseconds
     initial_backoff_ms: u64,
+    /// Rate limiter (optional)
+    rate_limiter: Option<Mutex<TokenBucketRateLimiter>>,
 }
 
 /// Anthropic message request
@@ -167,6 +254,7 @@ impl Anthropic {
             endpoint: endpoint.into(),
             max_retries: DEFAULT_MAX_RETRIES,
             initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
+            rate_limiter: None,
         }
     }
     
@@ -186,6 +274,57 @@ impl Anthropic {
             endpoint: endpoint.into(),
             max_retries,
             initial_backoff_ms,
+            rate_limiter: None,
+        }
+    }
+    
+    /// Create a new Anthropic client with rate limiting
+    pub fn new_with_rate_limit(
+        api_key: impl Into<String>,
+        endpoint: impl Into<String>,
+        requests_per_minute: u32,
+    ) -> Self {
+        let rate_limiter = if requests_per_minute > 0 {
+            Some(Mutex::new(TokenBucketRateLimiter::new(requests_per_minute)))
+        } else {
+            None
+        };
+        
+        Self {
+            client: Client::builder()
+                .timeout(Duration::from_secs(120))
+                .build()
+                .unwrap_or_default(),
+            api_key: api_key.into(),
+            endpoint: endpoint.into(),
+            max_retries: DEFAULT_MAX_RETRIES,
+            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
+            rate_limiter,
+        }
+    }
+    
+    /// Create a new Anthropic client with combined configuration
+    pub fn new_with_config(
+        api_key: impl Into<String>,
+        endpoint: impl Into<String>,
+        max_retries: u32,
+        initial_backoff_ms: u64,
+        requests_per_minute: Option<u32>,
+    ) -> Self {
+        let rate_limiter = requests_per_minute
+            .filter(|&rpm| rpm > 0)
+            .map(|rpm| Mutex::new(TokenBucketRateLimiter::new(rpm)));
+        
+        Self {
+            client: Client::builder()
+                .timeout(Duration::from_secs(120))
+                .build()
+                .unwrap_or_default(),
+            api_key: api_key.into(),
+            endpoint: endpoint.into(),
+            max_retries,
+            initial_backoff_ms,
+            rate_limiter,
         }
     }
     
@@ -210,6 +349,11 @@ impl Anthropic {
                 sleep(Duration::from_millis(backoff_ms)).await;
             }
             
+            // Apply rate limiting if configured
+            if let Some(rate_limiter) = &self.rate_limiter {
+                rate_limiter.lock().await.wait_for_token().await;
+            }
+            
             attempts += 1;
             
             match self.send_request(&api_url, request).await {
@@ -218,6 +362,12 @@ impl Anthropic {
                     // Only retry on connection errors and rate limit errors
                     match &err {
                         ProviderError::ConnectionError(_) => {
+                            last_error = Some(err);
+                        },
+                        ProviderError::RateLimitExceeded(_) => {
+                            // For rate limit errors, apply a longer backoff
+                            let rate_limit_backoff_ms = self.initial_backoff_ms * 5 * 2u64.pow(attempts - 1);
+                            sleep(Duration::from_millis(rate_limit_backoff_ms)).await;
                             last_error = Some(err);
                         },
                         ProviderError::ApiError { status_code, .. } => {

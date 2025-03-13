@@ -17,6 +17,11 @@ use crate::providers::openai::{OpenAI, OpenAIRequest};
 use crate::providers::anthropic::{Anthropic, AnthropicRequest};
 use crate::providers::Provider;
 
+/// Default max retries for API requests
+const DEFAULT_MAX_RETRIES: u32 = 3;
+
+/// Default initial backoff duration in milliseconds
+const DEFAULT_INITIAL_BACKOFF_MS: u64 = 100;
 
 /// Token usage statistics for tracking API consumption
 #[derive(Clone)]
@@ -231,8 +236,17 @@ impl TranslationService {
                 }
             },
             ConfigTranslationProvider::Anthropic => {
+                // Get the rate limit from the configuration
+                let rate_limit = config.get_rate_limit();
+                
                 TranslationProviderImpl::Anthropic {
-                    client: Anthropic::new(&config.get_api_key(), &config.get_endpoint()),
+                    client: Anthropic::new_with_config(
+                        &config.get_api_key(),
+                        &config.get_endpoint(),
+                        DEFAULT_MAX_RETRIES,
+                        DEFAULT_INITIAL_BACKOFF_MS,
+                        rate_limit,
+                    ),
                 }
             },
         };

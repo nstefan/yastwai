@@ -98,6 +98,10 @@ pub struct ProviderConfig {
     // @field: Timeout seconds
     #[serde(default = "default_timeout_secs")]
     pub timeout_secs: u64,
+    
+    // @field: Rate limit (requests per minute)
+    #[serde(default)]
+    pub rate_limit: Option<u32>,
 }
 
 impl ProviderConfig {
@@ -113,6 +117,7 @@ impl ProviderConfig {
                 concurrent_requests: default_concurrent_requests(),
                 max_chars_per_request: default_max_chars_per_request(),
                 timeout_secs: default_timeout_secs(),
+                rate_limit: default_ollama_rate_limit(),
             },
             TranslationProvider::OpenAI => Self {
                 provider_type: "openai".to_string(),
@@ -122,6 +127,7 @@ impl ProviderConfig {
                 concurrent_requests: default_concurrent_requests(),
                 max_chars_per_request: default_max_chars_per_request(),
                 timeout_secs: default_timeout_secs(),
+                rate_limit: default_openai_rate_limit(),
             },
             TranslationProvider::Anthropic => Self {
                 provider_type: "anthropic".to_string(),
@@ -131,6 +137,7 @@ impl ProviderConfig {
                 concurrent_requests: default_concurrent_requests(),
                 max_chars_per_request: default_anthropic_max_chars_per_request(),
                 timeout_secs: default_anthropic_timeout_secs(),
+                rate_limit: default_anthropic_rate_limit(),
             },
         }
     }
@@ -244,6 +251,19 @@ pub struct AnthropicConfig {
     /// Request timeout in seconds
     #[serde(default = "default_anthropic_timeout_secs")]
     pub timeout_secs: u64,
+    
+    /// Rate limit in requests per minute (optional)
+    /// 
+    /// This controls the maximum number of requests that can be sent to the Anthropic API
+    /// per minute. The default is 45 requests per minute (slightly below the Anthropic API
+    /// limit of 50 requests per minute) to provide some safety margin.
+    /// 
+    /// Setting a value:
+    /// - Higher than 50: Risk hitting API rate limits, causing failed requests
+    /// - Between 1-45: More conservative rate limiting to avoid API rate limit errors
+    /// - None or 0: Disables client-side rate limiting (not recommended)
+    #[serde(default = "default_anthropic_rate_limit")]
+    pub rate_limit: Option<u32>,
 }
 
 impl Default for AnthropicConfig {
@@ -255,6 +275,7 @@ impl Default for AnthropicConfig {
             concurrent_requests: default_concurrent_requests(),
             max_chars_per_request: default_anthropic_max_chars_per_request(),
             timeout_secs: default_anthropic_timeout_secs(),
+            rate_limit: default_anthropic_rate_limit(),
         }
     }
 }
@@ -427,6 +448,23 @@ fn default_system_prompt() -> String {
     "You are a professional translator. Translate the following text from {source_language} to {target_language}. Preserve formatting and maintain the original meaning and tone.".to_string()
 }
 
+fn default_anthropic_rate_limit() -> Option<u32> {
+    // Default to 45 requests per minute (slightly below the 50 limit for safety)
+    // Anthropic's standard rate limit is 50 requests per minute
+    // We use a slightly lower limit to prevent edge cases where our
+    // timer might not be perfectly synced with Anthropic's
+    Some(45)
+}
+
+// Default rate limits for providers
+fn default_ollama_rate_limit() -> Option<u32> {
+    None // No rate limit by default for local provider
+}
+
+fn default_openai_rate_limit() -> Option<u32> {
+    Some(60) // 60 requests per minute by default
+}
+
 impl Config {
     /// Load configuration from a file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
@@ -595,6 +633,20 @@ impl TranslationConfig {
     /// Get the configured temperature value for text generation
     pub fn get_temperature(&self) -> f32 {
         self.common.temperature
+    }
+    
+    /// Get the rate limit for the active provider
+    pub fn get_rate_limit(&self) -> Option<u32> {
+        if let Some(provider_config) = self.get_active_provider_config() {
+            return provider_config.rate_limit;
+        }
+        
+        // Default fallback based on provider type
+        match self.provider {
+            TranslationProvider::Ollama => default_ollama_rate_limit(),
+            TranslationProvider::OpenAI => default_openai_rate_limit(),
+            TranslationProvider::Anthropic => default_anthropic_rate_limit(),
+        }
     }
 }
 
