@@ -1,10 +1,22 @@
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use anyhow::{Result, anyhow, Context};
-use reqwest::{Client, header};
-use log::error;
+use reqwest::{Client, header, StatusCode};
+use log::{error, warn, debug};
+use async_trait::async_trait;
+use tokio::time::sleep;
+
+use crate::errors::ProviderError;
+use super::Provider;
+
+/// Default max retries for API requests
+const DEFAULT_MAX_RETRIES: u32 = 3;
+
+/// Default initial backoff duration in milliseconds
+const DEFAULT_INITIAL_BACKOFF_MS: u64 = 100;
 
 /// Anthropic client for interacting with Anthropic API
+#[derive(Debug)]
 pub struct Anthropic {
     /// HTTP client for API requests
     client: Client,
@@ -12,6 +24,10 @@ pub struct Anthropic {
     api_key: String,
     /// API endpoint URL (optional, defaults to public API)
     endpoint: String,
+    /// Maximum number of retries for transient errors
+    max_retries: u32,
+    /// Initial backoff duration for retry in milliseconds
+    initial_backoff_ms: u64,
 }
 
 /// Anthropic message request
@@ -150,43 +166,141 @@ impl Anthropic {
                 .unwrap_or_default(),
             api_key: api_key.into(),
             endpoint: endpoint.into(),
+            max_retries: DEFAULT_MAX_RETRIES,
+            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
         }
     }
     
-    /// Complete a messages request
-    pub async fn complete(&self, request: AnthropicRequest) -> Result<AnthropicResponse> {
-        let api_url = if self.endpoint.is_empty() {
+    /// Create a new Anthropic client with custom retry settings
+    pub fn new_with_retry_config(
+        api_key: impl Into<String>, 
+        endpoint: impl Into<String>,
+        max_retries: u32,
+        initial_backoff_ms: u64,
+    ) -> Self {
+        Self {
+            client: Client::builder()
+                .timeout(Duration::from_secs(120))
+                .build()
+                .unwrap_or_default(),
+            api_key: api_key.into(),
+            endpoint: endpoint.into(),
+            max_retries,
+            initial_backoff_ms,
+        }
+    }
+    
+    /// Generate API URL based on configured endpoint
+    fn api_url(&self) -> String {
+        if self.endpoint.is_empty() {
             "https://api.anthropic.com/v1/messages".to_string()
         } else {
             format!("{}/v1/messages", self.endpoint.trim_end_matches('/'))
-        };
+        }
+    }
+    
+    /// Send a request to the Anthropic API with retry logic
+    async fn send_request_with_retry(&self, request: &AnthropicRequest) -> Result<AnthropicResponse, ProviderError> {
+        let api_url = self.api_url();
+        let mut attempts = 0;
+        let mut last_error = None;
         
-        let response = self.client.post(&api_url)
+        while attempts <= self.max_retries {
+            if attempts > 0 {
+                let backoff_ms = self.initial_backoff_ms * 2u64.pow(attempts - 1);
+                debug!("Retrying Anthropic API request (attempt {}/{}), waiting {}ms", 
+                       attempts, self.max_retries, backoff_ms);
+                sleep(Duration::from_millis(backoff_ms)).await;
+            }
+            
+            attempts += 1;
+            
+            match self.send_request(&api_url, request).await {
+                Ok(response) => return Ok(response),
+                Err(err) => {
+                    // Only retry on connection errors and rate limit errors
+                    match &err {
+                        ProviderError::ConnectionError(_) => {
+                            warn!("Connection error on attempt {}/{}, will retry: {}", 
+                                  attempts, self.max_retries + 1, err);
+                            last_error = Some(err);
+                        },
+                        ProviderError::ApiError { status_code, .. } => {
+                            // Retry on rate limiting (429) and server errors (5xx)
+                            if *status_code == 429 || *status_code >= 500 {
+                                warn!("API error {} on attempt {}/{}, will retry: {}", 
+                                      status_code, attempts, self.max_retries + 1, err);
+                                last_error = Some(err);
+                            } else {
+                                // Don't retry on client errors (4xx) except rate limiting
+                                return Err(err);
+                            }
+                        },
+                        _ => return Err(err), // Don't retry on other errors
+                    }
+                }
+            }
+        }
+        
+        // If we get here, all retries failed
+        Err(last_error.unwrap_or_else(|| 
+            ProviderError::ConnectionError("All retry attempts failed".to_string())))
+    }
+    
+    /// Send a single request to the Anthropic API
+    async fn send_request(&self, api_url: &str, request: &AnthropicRequest) -> Result<AnthropicResponse, ProviderError> {
+        let response = self.client.post(api_url)
             .header("Content-Type", "application/json")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
-            .json(&request)
+            .json(request)
             .send()
             .await
-            .map_err(|e| anyhow!("Failed to send request to Anthropic API: {}", e))?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    ProviderError::ConnectionError(format!("Request timed out: {}", e))
+                } else if e.is_connect() {
+                    ProviderError::ConnectionError(format!("Connection failed: {}", e))
+                } else {
+                    ProviderError::RequestFailed(e.to_string())
+                }
+            })?;
         
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await
                 .unwrap_or_else(|_| "Failed to get error response text".to_string());
+            
             error!("Anthropic API error ({}): {}", status, error_text);
-            return Err(anyhow!("Anthropic API error ({}): {}", status, error_text));
+            
+            return match status.as_u16() {
+                429 => Err(ProviderError::RateLimitExceeded(error_text)),
+                401 | 403 => Err(ProviderError::AuthenticationError(error_text)),
+                _ => Err(ProviderError::ApiError { 
+                    status_code: status.as_u16(), 
+                    message: error_text
+                })
+            };
         }
         
-        let anthropic_response = response.json::<AnthropicResponse>().await
-            .map_err(|e| anyhow!("Failed to parse Anthropic API response: {}", e))?;
-            
-        Ok(anthropic_response)
+        response.json::<AnthropicResponse>().await
+            .map_err(|e| ProviderError::ParseError(e.to_string()))
+    }
+}
+
+#[async_trait]
+impl Provider for Anthropic {
+    type Request = AnthropicRequest;
+    type Response = AnthropicResponse;
+    
+    /// Complete a messages request
+    async fn complete(&self, request: Self::Request) -> Result<Self::Response, ProviderError> {
+        self.send_request_with_retry(&request).await
     }
     
     /// Test the connection to the Anthropic API
-    pub async fn test_connection(&self, model: &str) -> Result<()> {
-        let request = AnthropicRequest::new(model, 10)
+    async fn test_connection(&self) -> Result<(), ProviderError> {
+        let request = AnthropicRequest::new("claude-3-haiku-20240307", 10)
             .add_message("user", "Hello");
         
         self.complete(request).await?;
@@ -194,7 +308,7 @@ impl Anthropic {
     }
     
     /// Extract text from Anthropic response
-    pub fn extract_text_from_response(response: &AnthropicResponse) -> String {
+    fn extract_text(response: &Self::Response) -> String {
         response.content.iter()
             .filter(|c| c.content_type == "text")
             .map(|c| c.text.clone())

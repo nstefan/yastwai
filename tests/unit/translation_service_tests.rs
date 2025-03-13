@@ -6,7 +6,8 @@ use std::sync::{Arc, Mutex as StdMutex, atomic::{AtomicUsize, Ordering}};
 use anyhow::Result;
 use yastwai::app_config::{TranslationConfig, TranslationProvider as ConfigTranslationProvider, TranslationCommonConfig, ProviderConfig};
 use yastwai::subtitle_processor::SubtitleEntry;
-use yastwai::translation_service::{TranslationService, TokenUsageStats};
+use yastwai::translation::core::{TranslationService, TokenUsageStats};
+use std::time::Duration;
 
 /// Helper function to create a test configuration
 fn get_test_config() -> TranslationConfig {

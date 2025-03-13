@@ -1,8 +1,12 @@
 use std::env;
 use std::path::Path;
-use anyhow::Result;
-use yastwai::app_config::Config;
-use yastwai::translation_service::TranslationService;
+use anyhow::{Result, Context};
+use std::path::PathBuf;
+use std::io;
+
+use yastwai::translation::TranslationService;
+use yastwai::app_config::{Config, TranslationConfig, TranslationProvider, ProviderConfig, OllamaConfig};
+use yastwai::subtitle_processor::SubtitleCollection;
 use log::debug;
 
 #[tokio::main]

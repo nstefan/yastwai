@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use std::env;
+use yastwai::providers::Provider;
 use yastwai::providers::openai::{OpenAI, OpenAIRequest};
 use yastwai::providers::anthropic::{Anthropic, AnthropicRequest};
 use yastwai::providers::ollama::{Ollama, GenerationRequest, ChatRequest, ChatMessage};
@@ -48,7 +49,14 @@ async fn test_anthropic_provider_withValidApiKey_shouldComplete() {
         .add_message("user", "Say hello!");
     
     let response = client.complete(request).await.unwrap();
-    let text = Anthropic::extract_text_from_response(&response);
+    
+    // Extract text from the response
+    let text = if let Some(content) = response.content.first() {
+        &content.text
+    } else {
+        ""
+    };
+    
     assert!(!text.is_empty());
     
     // Output the response

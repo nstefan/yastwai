@@ -81,6 +81,12 @@ pub struct TokenUsage {
     pub total_tokens: u32,
 }
 
+impl AsRef<TokenUsage> for TokenUsage {
+    fn as_ref(&self) -> &TokenUsage {
+        self
+    }
+}
+
 /// OpenAI completion response
 #[derive(Debug, Deserialize)]
 pub struct OpenAIResponse {

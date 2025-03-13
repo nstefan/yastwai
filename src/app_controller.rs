@@ -2,15 +2,15 @@ use anyhow::{Result, Context};
 use log::{error, warn, info, debug};
 use std::path::{Path, PathBuf};
 use crate::app_config::{Config, SubtitleInfo};
-use crate::subtitle_processor::SubtitleCollection;
-use crate::translation_service::TranslationService;
+use crate::subtitle_processor::{SubtitleCollection, SubtitleEntry};
+use crate::translation::{TranslationService, BatchTranslator};
+use crate::translation::core::LogEntry;
 use crate::language_utils;
 use crate::file_utils;
 use std::sync::Once;
 use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use std::sync::Arc;
 use std::sync::Mutex;
-use crate::translation_service::LogEntry;
 use crate::file_utils::{FileManager, FileType};
 use chrono;
 use std::time::Duration;
@@ -38,6 +38,16 @@ impl Controller {
         };
         
         Ok(controller)
+    }
+    
+    /// Check if the controller is properly initialized with configuration
+    pub fn is_initialized(&self) -> bool {
+        !self.config.source_language.is_empty() && !self.config.target_language.is_empty()
+    }
+    
+    /// Public method to write logs to a file for testing purposes
+    pub fn write_translation_logs(&self, logs: &[LogEntry], file_path: &str, translation_context: &str) -> Result<()> {
+        self.write_logs_to_file(logs, file_path, translation_context)
     }
     
     /// Run the main workflow with input video file and output directory
@@ -247,12 +257,13 @@ impl Controller {
         
         // Use the translation service to translate all chunks
         let translation_service = TranslationService::new(self.config.translation.clone())?;
+        let batch_translator = BatchTranslator::new(translation_service);
         
         // Clone the progress_bar for use in the callback
         let pb = progress_bar.clone();
         
         // Pass a callback to update the progress bar for each completed chunk
-        let (mut translated_entries, token_usage) = translation_service.translate_batches(
+        let (mut translated_entries, token_usage) = batch_translator.translate_batches(
             &chunks, 
             &self.config.source_language, 
             &self.config.target_language,

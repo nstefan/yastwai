@@ -14,6 +14,7 @@ futures-util = "0.3"
 anyhow = "1.0"
 log = { version = "0.4", features = ["std"] }
 once_cell = "1.20"
+async-trait = "0.1.77"
 
 # Serialization/Deserialization
 serde = { version = "1.0.193", features = ["derive"] }
@@ -43,3 +44,21 @@ parking_lot = "0.12.3"
 
 [dev-dependencies]
 tokio-test = "0.4.3"
+env_logger = "0.10"
+
+# Test binary executables
+[[bin]]
+name = "progress_bar_test"
+path = "tests/tools/progress_bar_test.rs"
+
+[[bin]]
+name = "test_config"
+path = "tests/tools/test_config.rs"
+
+[[bin]]
+name = "test_token_stats"
+path = "tests/tools/test_token_stats.rs"
+
+[[bin]]
+name = "test_translation"
+path = "tests/tools/test_translation.rs"
