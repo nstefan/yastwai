@@ -93,15 +93,43 @@ cargo build --release
 
 ## Configuration
 
-YASTwAI uses a simple JSON configuration file with these main settings:
+YASTwAI uses a comprehensive JSON configuration file with these settings:
 
 ```json
 {
   "source_language": "en",
   "target_language": "fr",
   "translation": {
-    "provider": "ollama"
-  }
+    "provider": "ollama",
+    "available_providers": [
+      {
+        "type": "ollama",
+        "model": "mixtral:8x7b",
+        "endpoint": "http://localhost:11434",
+        "concurrent_requests": 2,
+        "max_chars_per_request": 1000,
+        "timeout_secs": 60
+      },
+      {
+        "type": "openai",
+        "model": "gpt-4o-mini",
+        "api_key": "your_api_key",
+        "endpoint": "https://api.openai.com/v1"
+      },
+      {
+        "type": "anthropic",
+        "model": "claude-3-haiku-20240307",
+        "api_key": "your_api_key"
+      }
+    ],
+    "common": {
+      "system_prompt": "You are an expert subtitle translator...",
+      "rate_limit_delay_ms": 3000,
+      "temperature": 0.3
+    }
+  },
+  "log_level": "info",
+  "batch_size": 1000
 }
 ```
 

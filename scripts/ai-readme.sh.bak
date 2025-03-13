@@ -262,7 +262,19 @@ cargo build --release
 
 ## Configuration
 
-YASTwAI uses a comprehensive JSON configuration file with these settings:
+YASTwAI uses a simple JSON configuration file with these main settings:
+
+\`\`\`json
+{
+  "source_language": "en",
+  "target_language": "fr",
+  "translation": {
+    "provider": "ollama"
+  }
+}
+\`\`\`
+
+YASTwAI uses a JSON configuration file with these settings:
 
 \`\`\`json
 {
