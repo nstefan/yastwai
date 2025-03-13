@@ -185,6 +185,8 @@ if [ -n "$PR_TEMPLATE" ]; then
             PR_CONTENT+="$OVERVIEW_MARKER\n"
             if [ -n "$OVERVIEW" ]; then
                 PR_CONTENT+="$OVERVIEW\n\n"
+                # Skip original content in this section
+                CURRENT_SECTION="skip_overview"
             else
                 # Keep original content
                 CURRENT_SECTION="overview"
@@ -199,6 +201,8 @@ if [ -n "$PR_TEMPLATE" ]; then
                     PR_CONTENT+="- $change\n"
                 done
                 PR_CONTENT+="\n"
+                # Skip original content in this section
+                CURRENT_SECTION="skip_key_changes"
             else
                 # Keep original content
                 CURRENT_SECTION="key_changes"
@@ -213,6 +217,8 @@ if [ -n "$PR_TEMPLATE" ]; then
                     PR_CONTENT+="- $detail\n"
                 done
                 PR_CONTENT+="\n"
+                # Skip original content in this section
+                CURRENT_SECTION="skip_implementation"
             else
                 # Keep original content
                 CURRENT_SECTION="implementation"
@@ -230,6 +236,8 @@ if [ -n "$PR_TEMPLATE" ]; then
             PR_CONTENT+="$AI_MODEL_MARKER\n"
             if [ -n "$MODEL" ]; then
                 PR_CONTENT+="$MODEL\n"
+                # Skip original content in this section
+                CURRENT_SECTION="skip_ai_model"
             else
                 # Keep original content
                 CURRENT_SECTION="ai_model"
@@ -238,6 +246,13 @@ if [ -n "$PR_TEMPLATE" ]; then
             # Other section headers
             PR_CONTENT+="$line\n"
             CURRENT_SECTION="other"
+        elif [[ "$CURRENT_SECTION" =~ ^skip_ ]]; then
+            # Skip content for replaced sections
+            if [[ "$line" =~ ^##[[:space:]] ]]; then
+                # We've reached the next section header
+                CURRENT_SECTION=""
+                PR_CONTENT+="$line\n"
+            fi
         elif [[ "$CURRENT_SECTION" == "overview" && "$line" == "$KEY_CHANGES_MARKER"* ]]; then
             # End of overview section
             CURRENT_SECTION=""
@@ -253,7 +268,7 @@ if [ -n "$PR_TEMPLATE" ]; then
         elif [[ "$CURRENT_SECTION" == "checklist" && "$line" == "$AI_MODEL_MARKER"* ]]; then
             # End of checklist section
             CURRENT_SECTION=""
-        elif [[ -n "$CURRENT_SECTION" ]]; then
+        elif [[ -n "$CURRENT_SECTION" && ! "$CURRENT_SECTION" =~ ^skip_ ]]; then
             # Content within a section we're keeping
             PR_CONTENT+="$line\n"
         else
