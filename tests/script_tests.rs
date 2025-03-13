@@ -109,4 +109,10 @@ fn test_ai_rules_symlinks_script() {
 fn test_ai_readme_script() {
     let script = project_root().join("tests/scripts/test_ai_readme.sh");
     assert!(run_script(&script), "ai-readme.sh test failed");
+}
+
+#[test]
+fn test_ai_update_main_script() {
+    let script = project_root().join("tests/scripts/test_ai_update_main.sh");
+    assert!(run_script(&script), "ai-update-main.sh test failed");
 } 

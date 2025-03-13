@@ -1,0 +1,46 @@
+---
+description: branch_rules
+globs: *
+alwaysApply: true
+---
+
+AI agent instructions for branch management and main branch updates.
+    - Use the ai-branch.sh script for creating and managing feature branches.
+    - NEVER work directly on the main branch; always create a feature branch first.
+    - When the user requests to "update main" (or similar phrases like "update from origin", "pull latest", "fetch main"):
+        - ALWAYS use the ai-update-main.sh script to perform the update.
+        - Check for uncommitted changes first and warn the user if found.
+        
+    Branch Update Commands Reference:
+    ```bash
+    # Basic usage - update main and return to current branch
+    ./scripts/ai-update-main.sh
+
+    # Only check for updates without applying them
+    ./scripts/ai-update-main.sh --check-only
+
+    # Update main and rebase current branch onto the updated main
+    ./scripts/ai-update-main.sh --rebase-current
+    ```
+    
+    Workflow Guidelines:
+    1. For new work unrelated to the current branch, create a new feature branch from main:
+       ```bash
+       ./scripts/ai-branch.sh --new-branch "feature-name" --is-related false
+       ```
+       
+    2. When updating the main branch, always update it first before creating a new branch:
+       ```bash
+       ./scripts/ai-update-main.sh
+       ./scripts/ai-branch.sh --new-branch "feature-name" --is-related false
+       ```
+       
+    3. To keep a feature branch in sync with main, use the rebase option:
+       ```bash
+       ./scripts/ai-update-main.sh --rebase-current
+       ```
+       
+    4. Always verify branch status at the beginning of each new user interaction:
+       ```bash
+       ./scripts/ai-branch.sh --check-only
+       ``` 

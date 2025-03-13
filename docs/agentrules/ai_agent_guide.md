@@ -10,7 +10,7 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
 ```
 **Options:**
 - `--check-only` - Only check branch status
-- `--new-branch <name>` - Create new branch
+- `--new-branch <n>` - Create new branch
 - `--is-related <true|false>` - Whether work is related to current branch
 
 **Usage Pattern:**
@@ -22,7 +22,30 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
 ./scripts/ai-branch.sh --new-branch "feature-name" --is-related false
 ```
 
-### 2. Commit Management (`ai-commit.sh`)
+### 2. Main Branch Updates (`ai-update-main.sh`)
+```bash
+./scripts/ai-update-main.sh [options]
+```
+**Options:**
+- `--check-only` - Only check for updates without applying them
+- `--rebase-current` - Also rebase current branch onto updated main
+
+**Usage Pattern:**
+```bash
+# Update main branch and return to current branch
+./scripts/ai-update-main.sh
+
+# Check for updates without applying them
+./scripts/ai-update-main.sh --check-only
+
+# Update main and rebase current branch onto it
+./scripts/ai-update-main.sh --rebase-current
+```
+
+**Trigger Phrases:**
+When the user requests to "update main" or similar phrases (e.g., "pull latest", "fetch main", "update from origin"), automatically run this script. Always check for uncommitted changes first.
+
+### 3. Commit Management (`ai-commit.sh`)
 ```bash
 ./scripts/ai-commit.sh <title> <description> <prompt> <thought-process> <discussion>
 ```
@@ -39,7 +62,7 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
 ./scripts/ai-commit.sh "Title" "Description" "Prompt" "Thought Process" "Discussion"
 ```
 
-### 3. Pull Request Creation (`ai-pr.sh`)
+### 4. Pull Request Creation (`ai-pr.sh`)
 ```bash
 ./scripts/ai-pr.sh [options]
 ```
@@ -59,7 +82,7 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
 ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
 ```
 
-### 4. Code Quality (`ai-clippy.sh`)
+### 5. Code Quality (`ai-clippy.sh`)
 ```bash
 ./scripts/ai-clippy.sh [options]
 ```
@@ -83,13 +106,18 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
 - Commands must be non-interactive (use appropriate flags)
 - Use `ai-cursor-model.sh` to detect current AI model
 
-### 2. Commit Rules
+### 2. Branch Rules
+- Use `ai-update-main.sh` when the user types "update main" or similar phrases
+- Keep feature branches up to date with main using `--rebase-current` option
+- Always fetch latest changes before creating new branches
+
+### 3. Commit Rules
 - Never commit directly to main branch
 - Always stage modified files with `git add`
 - Create new branch if prompt is unrelated to current work
 - Include complete thought process in commit messages
 
-### 3. PR Rules
+### 4. PR Rules
 - Only create PRs when explicitly requested
 - Use `ai-pr.sh` script for PR creation
 - Structure PR descriptions with emojis:
@@ -100,7 +128,7 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
   - 🔄 Migration Notes
   - ⚠️ Areas of Attention
 
-### 4. Rust Development Rules
+### 5. Rust Development Rules
 - Follow functional programming principles
 - Use async programming with tokio
 - Implement proper error handling
@@ -114,6 +142,8 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
    - Always check branch status before making changes
    - Create new branches for unrelated work
    - Branch names should be descriptive and follow conventions
+   - Keep the main branch updated and rebase feature branches regularly
+   - Run `ai-update-main.sh` when the user asks to update main
 
 2. **Code Changes**
    - Run clippy checks before committing
@@ -141,6 +171,7 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
 1. **Branch Errors**
    - If on main branch, create new feature branch
    - If work is unrelated, create new branch
+   - If there are uncommitted changes when trying to update main, warn the user
 
 2. **Commit Errors**
    - If commit fails, check and fix parameter formatting
