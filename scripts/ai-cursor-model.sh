@@ -91,8 +91,7 @@ detect_model() {
         fi
     fi
     
-    # Use "Claude 3.7 Sonnet" as a fallback (Cursor's default model)
-    detected_model="Claude 3.7 Sonnet"
+    detected_model="N/A"
     source="default fallback"
     echo "$detected_model|$source"
 }

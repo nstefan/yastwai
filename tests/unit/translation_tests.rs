@@ -1,5 +1,11 @@
 /*!
- * Tests for translation service functionality
+ * Tests for translation module functionality
+ * 
+ * The translation module is structured as follows:
+ * - core: Core translation functionality and service definition
+ * - batch: Batch processing of translations
+ * - cache: Caching mechanisms for translations
+ * - formatting: Format preservation and processing
  */
 
 use std::sync::{Arc, Mutex as StdMutex, atomic::{AtomicUsize, Ordering}};

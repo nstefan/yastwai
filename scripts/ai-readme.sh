@@ -146,8 +146,18 @@ fi
 EXAMPLE_CONFIG="$PROJECT_ROOT/conf.example.json"
 if [ -f "$EXAMPLE_CONFIG" ]; then
     log "${GREEN}Found example config${NC}"
+    # Read the example config content for dynamic inclusion in README
+    EXAMPLE_CONFIG_CONTENT=$(cat "$EXAMPLE_CONFIG")
 else
     log "${YELLOW}No example config found${NC}"
+    # Fallback to a minimal example if conf.example.json doesn't exist
+    EXAMPLE_CONFIG_CONTENT='{
+  "source_language": "en",
+  "target_language": "fr",
+  "translation": {
+    "provider": "ollama"
+  }
+}'
 fi
 
 # Generate features list
@@ -170,6 +180,8 @@ fi
 FEATURES="$FEATURES\n- 🧠 **Smart Processing** - Preserves formatting and timing of your subtitles"
 FEATURES="$FEATURES\n- 🔄 **Direct Translation** - Translate existing SRT files without needing video"
 FEATURES="$FEATURES\n- 📊 **Progress Tracking** - See real-time progress for lengthy translations"
+
+# Generate features list
 
 # Generate README content
 README_CONTENT=$(cat <<EOL
@@ -262,16 +274,10 @@ cargo build --release
 
 ## Configuration
 
-YASTwAI uses a simple JSON configuration file with these main settings:
+YASTwAI uses a JSON configuration file with these settings:
 
 \`\`\`json
-{
-  "source_language": "en",
-  "target_language": "fr",
-  "translation": {
-    "provider": "ollama"
-  }
-}
+${EXAMPLE_CONFIG_CONTENT}
 \`\`\`
 
 ### Translation Providers

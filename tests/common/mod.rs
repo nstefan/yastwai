@@ -7,6 +7,9 @@ use std::fs;
 use anyhow::Result;
 use tempfile::TempDir;
 
+// Re-export the mock providers module
+pub mod mock_providers;
+
 /// Creates a temporary directory for test files
 pub fn create_temp_dir() -> Result<TempDir> {
     Ok(TempDir::new()?)

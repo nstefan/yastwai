@@ -538,7 +538,7 @@ fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: O
         &output_file,
     ).context("Failed to extract subtitle")?;
     
-    info!("✅ Success: {:?}", output_file);
+    info!("Success: {:?}", output_file);
     
     Ok(())
 }

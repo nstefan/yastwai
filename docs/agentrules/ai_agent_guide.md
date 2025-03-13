@@ -99,8 +99,6 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
   - 🧩 Implementation Details
   - 🔄 Migration Notes
   - ⚠️ Areas of Attention
-  - 📝 Commit Details
-  - 📁 Files Changed
 
 ### 4. Rust Development Rules
 - Follow functional programming principles

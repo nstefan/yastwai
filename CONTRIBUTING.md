@@ -197,8 +197,6 @@ Key parameters for AI PR helper:
 - `--overview` - Brief overview of the PR (required)
 - `--key-changes` - Comma-separated list of key changes
 - `--implementation` - Comma-separated list of implementation details
-- `--files` - Comma-separated list of files changed (optional, will auto-detect if omitted)
-- `--commits` - Comma-separated list of commit descriptions (optional, will auto-detect if omitted)
 - `--draft` - Create as draft PR
 
 This script avoids multiline command issues and creates well-structured PRs. It automatically handles creating the PR using either GitHub CLI if available, or directly through the GitHub API.
@@ -228,8 +226,6 @@ Use emojis for better readability:
 - 🧩 For implementation details
 - 🔄 For migration notes
 - ⚠️ For areas needing special attention
-- 📝 For commit details
-- 📁 For file changes
 
 ## Automated Tools
 

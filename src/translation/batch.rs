@@ -189,7 +189,6 @@ impl TranslationService {
         }
         
         // If batch translation failed, try to translate each entry individually
-        info!("Batch translation failed, retrying individual entries");
         {
             let mut logs = log_capture.lock().unwrap();
             logs.push(LogEntry {
