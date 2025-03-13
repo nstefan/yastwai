@@ -1,6 +1,12 @@
 #!/bin/bash
 # Unit tests for the ai-update-main.sh script
 # Run with: bash tests/scripts/test_ai_update_main.sh
+#
+# IMPORTANT SAFETY NOTE:
+# This test script uses a mock git command to intercept all git operations.
+# It should NEVER execute actual git commands against the real repository.
+# If you modify this test, ensure the mocking approach remains intact to prevent
+# accidental repository modifications.
 
 # Colors for test output
 GREEN="\033[0;32m"
@@ -121,7 +127,13 @@ cleanup_mock() {
         rm -rf "$TEST_TEMP_DIR"
         echo "Mock environment cleaned up"
     fi
+    
+    # Make extra sure we're using the system git when we exit
+    hash -r 2>/dev/null || true
 }
+
+# Set up trap to ensure cleanup even if the script is interrupted
+trap cleanup_mock EXIT SIGINT SIGTERM
 
 # Check if script exists
 if [ ! -f "$UPDATE_SCRIPT" ]; then
@@ -137,6 +149,17 @@ fi
 
 # Set up mock git for all tests
 mock_git_commands
+
+# Verify that our mock git is being used
+WHICH_GIT=$(which git)
+if [[ "$WHICH_GIT" != "$TEST_TEMP_DIR/git" ]]; then
+    echo -e "${RED}Error: Mock git is not being used! This is unsafe.${NC}"
+    echo -e "${RED}Using git from: $WHICH_GIT${NC}"
+    echo -e "${RED}Expected to use: $TEST_TEMP_DIR/git${NC}"
+    cleanup_mock
+    exit 1
+fi
+echo -e "${GREEN}✓ Verified: Using mock git command from $WHICH_GIT${NC}"
 
 # Set default mock environment
 export MOCK_CURRENT_BRANCH="feature-branch"

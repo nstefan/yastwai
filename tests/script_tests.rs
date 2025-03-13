@@ -113,6 +113,8 @@ fn test_ai_readme_script() {
 
 #[test]
 fn test_ai_update_main_script() {
+    // This test runs the shell script test_ai_update_main.sh which uses mock git commands
+    // and should NOT modify the actual repository or filesystem state
     let script = project_root().join("tests/scripts/test_ai_update_main.sh");
     assert!(run_script(&script), "ai-update-main.sh test failed");
 } 
