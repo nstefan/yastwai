@@ -177,8 +177,15 @@ if [ -n "$PR_TEMPLATE" ]; then
     # Build the updated PR content from scratch
     PR_CONTENT=""
     
+    # Check if implementation section should be included
+    INCLUDE_IMPLEMENTATION=false
+    if [ -n "$IMPLEMENTATION" ]; then
+        INCLUDE_IMPLEMENTATION=true
+    fi
+    
     # Read template line by line and replace sections
     CURRENT_SECTION=""
+    SKIP_SECTION=false
     while IFS= read -r line; do
         if [[ "$line" == "$OVERVIEW_MARKER"* ]]; then
             # Overview section
@@ -209,28 +216,41 @@ if [ -n "$PR_TEMPLATE" ]; then
             fi
         elif [[ "$line" == "$IMPLEMENTATION_MARKER"* ]]; then
             # Implementation Details section
-            PR_CONTENT+="$IMPLEMENTATION_MARKER\n"
-            if [ -n "$IMPLEMENTATION" ]; then
+            if [ "$INCLUDE_IMPLEMENTATION" = true ]; then
+                PR_CONTENT+="$IMPLEMENTATION_MARKER\n"
                 # Format implementation details
                 IFS=',' read -ra DETAILS <<< "$IMPLEMENTATION"
                 for detail in "${DETAILS[@]}"; do
                     PR_CONTENT+="- $detail\n"
                 done
                 PR_CONTENT+="\n"
-                # Skip original content in this section
-                CURRENT_SECTION="skip_implementation"
-            else
-                # Keep original content
-                CURRENT_SECTION="implementation"
             fi
+            # Skip this section entirely if not included
+            CURRENT_SECTION="skip_implementation"
         elif [[ "$line" == "$TESTING_MARKER"* ]]; then
-            # Testing section
-            PR_CONTENT+="$TESTING_MARKER\n"
-            CURRENT_SECTION="testing"
+            # Testing section - only include if testing is provided or if there's meaningful content
+            TESTING_CONTENT=$(sed -n "/$TESTING_MARKER/,/$CHECKLIST_MARKER/p" "${PR_BODY_FILE}.original" | grep -v "^$TESTING_MARKER" | grep -v "^$CHECKLIST_MARKER" | grep -v "<!--" | grep -v "^\s*-\s*\[\s*\]\s*" | grep -v "^$")
+            
+            if [ -n "$TESTING_CONTENT" ]; then
+                # Include testing section with existing meaningful content
+                PR_CONTENT+="$TESTING_MARKER\n"
+                CURRENT_SECTION="testing"
+            else
+                # Skip this section
+                CURRENT_SECTION="skip_testing"
+            fi
         elif [[ "$line" == "$CHECKLIST_MARKER"* ]]; then
-            # Checklist section
-            PR_CONTENT+="$CHECKLIST_MARKER\n"
-            CURRENT_SECTION="checklist"
+            # Checklist section - only include if there's meaningful content
+            CHECKLIST_CONTENT=$(sed -n "/$CHECKLIST_MARKER/,/$AI_MODEL_MARKER/p" "${PR_BODY_FILE}.original" | grep -v "^$CHECKLIST_MARKER" | grep -v "^$AI_MODEL_MARKER" | grep -v "<!--" | grep -v "^\s*-\s*\[\s*\]\s*" | grep -v "^$")
+            
+            if [ -n "$CHECKLIST_CONTENT" ]; then
+                # Include checklist section with existing meaningful content
+                PR_CONTENT+="$CHECKLIST_MARKER\n"
+                CURRENT_SECTION="checklist"
+            else
+                # Skip this section
+                CURRENT_SECTION="skip_checklist"
+            fi
         elif [[ "$line" == "$AI_MODEL_MARKER"* ]]; then
             # AI Model section
             PR_CONTENT+="$AI_MODEL_MARKER\n"
