@@ -17,7 +17,7 @@ show_usage() {
     echo "  --base BRANCH        - Base branch to merge into (default: main)"
     echo "  --draft              - Create PR as draft (default: false)"
     echo "  --model MODEL        - Specify AI model (required)"
-    echo "  --no-browser         - Don't open browser after PR creation"
+    echo "  --no-browser         - Don't open browser after PR creation (for testing/automation only)"
     echo "  --help               - Display this help message"
     exit 1
 }
