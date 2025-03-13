@@ -47,3 +47,29 @@ README File Management
         ./scripts/ai-readme.sh --dry-run
         ```
     - Remember to commit the updated README.md file as part of your changes
+
+Script Testing Requirements
+    - ALWAYS create Rust unit tests for any new script added to the codebase.
+    - Test files should follow the existing pattern in the project:
+        1. Create a shell script test file in tests/scripts/ named test_ai_scriptname.sh
+           - Include comprehensive test cases for all script options and edge cases
+           - Follow the pattern of existing test scripts with setup, test cases, and cleanup
+        
+        2. Add a corresponding test function in tests/script_tests.rs:
+           ```rust
+           #[test]
+           fn test_ai_scriptname_script() {
+               let script = project_root().join("tests/scripts/test_ai_scriptname.sh");
+               assert!(run_script(&script), "ai-scriptname.sh test failed");
+           }
+           ```
+        
+    - Script tests should verify:
+        1. All command-line options work as expected
+        2. Error conditions are properly handled
+        3. The script functions correctly in various scenarios
+        4. Edge cases are properly addressed
+        
+    - Use mock functions when testing potentially destructive Git operations
+        - See existing test scripts for examples of mocking Git commands
+        - Ensure tests can run without modifying the actual repository
