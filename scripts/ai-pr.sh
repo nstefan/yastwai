@@ -16,7 +16,7 @@ show_usage() {
     echo "  --key-changes TEXT   - Comma-separated list of key changes"
     echo "  --base BRANCH        - Base branch to merge into (default: main)"
     echo "  --draft              - Create PR as draft (default: false)"
-    echo "  --model MODEL        - Specify AI model (required)"
+    echo "  --model MODEL        - Technical model name (required, e.g., claude-3-sonnet-20240229, not 'Claude 3 Sonnet')"
     echo "  --no-browser         - Don't open browser after PR creation (for testing/automation only)"
     echo "  --help               - Display this help message"
     exit 1
@@ -25,6 +25,21 @@ show_usage() {
 # Helper function to log messages with timestamp
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Function to find and extract sections from PR template
+extract_section() {
+    local template="$1"
+    local section_marker="$2"
+    local next_section_marker="$3"
+    
+    # Extract the section including marker
+    if [[ -n "$next_section_marker" ]]; then
+        echo "$template" | sed -n "/$section_marker/,/$next_section_marker/p" | sed '$d'
+    else
+        # If no next section marker, extract to end
+        echo "$template" | sed -n "/$section_marker/,\$p"
+    fi
 }
 
 # Default values
@@ -126,36 +141,107 @@ fi
 # Ensure MODEL doesn't have quotes that could break the script
 MODEL=$(echo "$MODEL" | tr -d '"'"'")
 
+# Check for PR template location
+PR_TEMPLATE_PATHS=(
+    "./.github/PULL_REQUEST_TEMPLATE.md"
+    "./.github/pull_request_template.md"
+)
+
+PR_TEMPLATE=""
+for template_path in "${PR_TEMPLATE_PATHS[@]}"; do
+    if [ -f "$template_path" ]; then
+        PR_TEMPLATE=$(cat "$template_path")
+        log_message "Found PR template at $template_path"
+        break
+    fi
+done
+
 # Create temp file for PR description
 PR_BODY_FILE=$(mktemp)
 
-# Start building the PR description
-echo "📌 **Overview**:" > "$PR_BODY_FILE"
-echo "$OVERVIEW" >> "$PR_BODY_FILE"
-echo "" >> "$PR_BODY_FILE"
-
-# Add key changes if provided
-if [ -n "$KEY_CHANGES" ]; then
-    echo "🔍 **Key Changes**:" >> "$PR_BODY_FILE"
-    IFS=',' read -ra CHANGES <<< "$KEY_CHANGES"
-    for change in "${CHANGES[@]}"; do
-        echo "- $change" >> "$PR_BODY_FILE"
-    done
+if [ -n "$PR_TEMPLATE" ]; then
+    # Use PR template as base
+    echo "$PR_TEMPLATE" > "$PR_BODY_FILE"
+    
+    # Find section markers in the template
+    OVERVIEW_MARKER="## 📌 Overview"
+    KEY_CHANGES_MARKER="## 🔍 Key Changes"
+    IMPLEMENTATION_MARKER="## 🧩 Implementation Details"
+    TESTING_MARKER="## 🧪 Testing"
+    CHECKLIST_MARKER="## 🔎 Checklist"
+    AI_MODEL_MARKER="## 🤖 AI Model"
+    
+    # Create a simplified PR description based on the template
+    # Start with a clean description
+    PR_DESCRIPTION=""
+    
+    # Add overview (always included)
+    PR_DESCRIPTION+="$OVERVIEW_MARKER\n"
+    PR_DESCRIPTION+="$OVERVIEW\n\n"
+    
+    # Add key changes (always included)
+    PR_DESCRIPTION+="$KEY_CHANGES_MARKER\n"
+    if [ -n "$KEY_CHANGES" ]; then
+        IFS=',' read -ra CHANGES <<< "$KEY_CHANGES"
+        for change in "${CHANGES[@]}"; do
+            PR_DESCRIPTION+="- $change\n"
+        done
+        PR_DESCRIPTION+="\n"
+    else
+        PR_DESCRIPTION+="<!-- No key changes specified -->\n\n"
+    fi
+    
+    # Add implementation details (only if provided)
+    if [ -n "$IMPLEMENTATION" ]; then
+        PR_DESCRIPTION+="$IMPLEMENTATION_MARKER\n"
+        IFS=',' read -ra DETAILS <<< "$IMPLEMENTATION"
+        for detail in "${DETAILS[@]}"; do
+            PR_DESCRIPTION+="- $detail\n"
+        done
+        PR_DESCRIPTION+="\n"
+    fi
+    
+    # Always include AI Model section (last)
+    PR_DESCRIPTION+="$AI_MODEL_MARKER\n"
+    PR_DESCRIPTION+="$MODEL\n"
+    
+    # Write the final PR description to the file
+    echo -e "$PR_DESCRIPTION" > "$PR_BODY_FILE"
+    
+    # Clean up backup file
+    rm -f "${PR_BODY_FILE}.bak"
+else
+    # Fallback: manually construct PR description if template not found
+    log_message "No PR template found, constructing default format"
+    
+    # Start building the PR description
+    echo "📌 **Overview**:" > "$PR_BODY_FILE"
+    echo "$OVERVIEW" >> "$PR_BODY_FILE"
     echo "" >> "$PR_BODY_FILE"
+    
+    # Add key changes if provided
+    if [ -n "$KEY_CHANGES" ]; then
+        echo "🔍 **Key Changes**:" >> "$PR_BODY_FILE"
+        IFS=',' read -ra CHANGES <<< "$KEY_CHANGES"
+        for change in "${CHANGES[@]}"; do
+            echo "- $change" >> "$PR_BODY_FILE"
+        done
+        echo "" >> "$PR_BODY_FILE"
+    fi
+    
+    # Add implementation details if provided
+    if [ -n "$IMPLEMENTATION" ]; then
+        echo "🧩 **Implementation Details**:" >> "$PR_BODY_FILE"
+        IFS=',' read -ra DETAILS <<< "$IMPLEMENTATION"
+        for detail in "${DETAILS[@]}"; do
+            echo "- $detail" >> "$PR_BODY_FILE"
+        done
+        echo "" >> "$PR_BODY_FILE"
+    fi
+    
+    # Add AI model information at the end
+    echo "🤖 **AI Model**: $MODEL" >> "$PR_BODY_FILE"
 fi
-
-# Add implementation details if provided
-if [ -n "$IMPLEMENTATION" ]; then
-    echo "🧩 **Implementation Details**:" >> "$PR_BODY_FILE"
-    IFS=',' read -ra DETAILS <<< "$IMPLEMENTATION"
-    for detail in "${DETAILS[@]}"; do
-        echo "- $detail" >> "$PR_BODY_FILE"
-    done
-    echo "" >> "$PR_BODY_FILE"
-fi
-
-# Add AI model information at the end
-echo "🤖 **AI Model**: $MODEL" >> "$PR_BODY_FILE"
 
 # Display the generated PR description
 log_message "Generated PR description:"
