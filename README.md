@@ -159,15 +159,6 @@ YASTwAI uses a JSON configuration file with these settings:
 
 See the example configuration file for more detailed options.
 
-## Roadmap
-
-- [ ] Support for more subtitle formats beyond SRT
-- [ ] UI improvements for better progress visualization
-- [ ] Additional AI providers
-- [ ] Performance optimizations for large batch processing
-
-See the [open issues](https://github.com/nstefan/yastwai/issues) for a full list of proposed features and known issues.
-
 ## Contributing
 
 Contributions are welcome! If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also open an issue with the tag "enhancement".
