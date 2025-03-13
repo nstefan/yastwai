@@ -295,7 +295,7 @@ impl TranslationService {
                     Err(e) => {
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "error".to_string(),
+                                level: "ERROR".to_string(),
                                 message: format!("Failed to connect to Ollama: {}", e),
                             });
                         }
@@ -319,7 +319,7 @@ impl TranslationService {
                     Err(e) => {
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "error".to_string(),
+                                level: "ERROR".to_string(),
                                 message: format!("Failed to connect to OpenAI API: {}", e),
                             });
                         }
@@ -334,7 +334,7 @@ impl TranslationService {
                     Ok(_) => {
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "info".to_string(),
+                                level: "INFO".to_string(),
                                 message: "Successfully connected to Anthropic API".to_string(),
                             });
                         }
@@ -343,7 +343,7 @@ impl TranslationService {
                     Err(e) => {
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "error".to_string(),
+                                level: "ERROR".to_string(),
                                 message: format!("Failed to connect to Anthropic API: {}", e),
                             });
                         }
@@ -406,7 +406,7 @@ impl TranslationService {
                         // Log the response if requested
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "info".to_string(),
+                                level: "INFO".to_string(),
                                 message: format!("Ollama response received in {:?}", duration),
                             });
                         }
@@ -421,7 +421,7 @@ impl TranslationService {
                         // Log the error if requested
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "error".to_string(),
+                                level: "ERROR".to_string(),
                                 message: format!("Ollama translation error: {}", e),
                             });
                         }
@@ -448,7 +448,7 @@ impl TranslationService {
                         // Log the response if requested
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "info".to_string(),
+                                level: "INFO".to_string(),
                                 message: format!("OpenAI response received in {:?}", duration),
                             });
                         }
@@ -471,7 +471,7 @@ impl TranslationService {
                         // Log the error if requested
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "error".to_string(),
+                                level: "ERROR".to_string(),
                                 message: format!("OpenAI translation error: {}", e),
                             });
                         }
@@ -497,7 +497,7 @@ impl TranslationService {
                         // Log the response if requested
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "info".to_string(),
+                                level: "INFO".to_string(),
                                 message: format!("Anthropic response received in {:?}", duration),
                             });
                         }
@@ -517,7 +517,7 @@ impl TranslationService {
                         // Log the error if requested
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
-                                level: "error".to_string(),
+                                level: "ERROR".to_string(),
                                 message: format!("Anthropic translation error: {}", e),
                             });
                         }

@@ -192,7 +192,7 @@ impl TranslationService {
         {
             let mut logs = log_capture.lock().unwrap();
             logs.push(LogEntry {
-                level: "warn".to_string(),
+                level: "WARN".to_string(),
                 message: "Batch translation failed, retrying individual entries".to_string(),
             });
         }
@@ -214,7 +214,7 @@ impl TranslationService {
                     {
                         let mut logs = log_capture.lock().unwrap();
                         logs.push(LogEntry {
-                            level: "error".to_string(),
+                            level: "ERROR".to_string(),
                             message: error_message,
                         });
                     }
@@ -227,7 +227,16 @@ impl TranslationService {
         
         // Log any errors
         if !errors.is_empty() {
-            warn!("Some entries failed to translate: {}", errors.join("; "));
+            // Remove direct warning that breaks the progress bar
+            // warn!("Some entries failed to translate: {}", errors.join("; "));
+            
+            // Instead, add this warning to the log capture
+            let error_message = format!("Some entries failed to translate: {}", errors.join("; "));
+            let mut logs = log_capture.lock().unwrap();
+            logs.push(LogEntry {
+                level: "WARN".to_string(),
+                message: error_message,
+            });
         }
         
         Ok(translated_entries)
