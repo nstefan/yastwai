@@ -76,7 +76,7 @@ async fn test_ollama_provider_withLocalServer_shouldGenerate() {
         return;
     }
     
-    let request = GenerationRequest::new("llama2", "Hello, world!")
+    let request = GenerationRequest::new("gemma3:27b", "Hello, world!")
         .system("You are a helpful assistant.")
         .temperature(0.7);
     
@@ -106,7 +106,7 @@ async fn test_ollama_provider_withLocalServer_shouldChat() {
         ChatMessage { role: "user".to_string(), content: "Hello, world!".to_string() }
     ];
     
-    let request = ChatRequest::new("llama2", messages)
+    let request = ChatRequest::new("gemma3:27b", messages)
         .system("You are a helpful assistant.")
         .temperature(0.7);
     
