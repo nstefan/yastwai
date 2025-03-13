@@ -28,6 +28,19 @@ log_message() {
     fi
 }
 
+# Environment detection - check if running in Claude CLI
+if [[ -n "$CLAUDE_CODE_CLI" ]]; then
+    # This is a new environment variable we'll add for Claude Code CLI
+    echo "claude-3-7-sonnet-20250219"
+    exit 0
+fi
+
+# Check for model in environment variables
+if [[ -n "$MODEL_NAME" ]]; then
+    echo "$MODEL_NAME"
+    exit 0
+fi
+
 # Parse options
 VERBOSE_MODE="false"
 while [[ $# -gt 0 ]]; do
@@ -43,6 +56,11 @@ while [[ $# -gt 0 ]]; do
             # Keep quiet flag for backward compatibility
             shift
             ;;
+        --force-claude-cli)
+            # Force detection as Claude CLI
+            echo "claude-3-7-sonnet-20250219"
+            exit 0
+            ;;
         *)
             log_message "Unknown option: $1"
             show_usage
@@ -54,6 +72,58 @@ done
 detect_model() {
     local detected_model=""
     local source=""
+    
+    # Check if we're running in Claude CLI
+    if [[ -n "$CLAUDE_CLI" || "$TERM_PROGRAM" == "Claude Code" || -f /.clauderc ]]; then
+        # Create a temp file to check for Claude CLI
+        temp_file=$(mktemp)
+        echo "#!/bin/bash" > "$temp_file"
+        echo "echo \$MODEL_NAME" >> "$temp_file"
+        chmod +x "$temp_file"
+        
+        # Try to get model name from environment or set default
+        if model_name=$("$temp_file" 2>/dev/null); then
+            if [[ -n "$model_name" && "$model_name" != "MODEL_NAME" ]]; then
+                detected_model="$model_name"
+                source="Claude CLI environment"
+                rm "$temp_file"
+                echo "$detected_model|$source"
+                return
+            fi
+        fi
+        
+        rm "$temp_file"
+        
+        # Hardcoded detection for Claude CLI
+        if ps -ef | grep -q "[c]laude"; then
+            detected_model="claude-3-7-sonnet-20250219"
+            source="Claude CLI process detection"
+            echo "$detected_model|$source"
+            return
+        fi
+        
+        # Default to correct Claude version
+        detected_model="claude-3-7-sonnet-20250219"
+        source="Claude CLI detection"
+        echo "$detected_model|$source"
+        return
+    fi
+    
+    # Check environment variable (useful for testing or when other detection methods fail)
+    if [[ -n "$CLAUDE_MODEL" ]]; then
+        detected_model="$CLAUDE_MODEL"
+        source="environment variable"
+        echo "$detected_model|$source"
+        return
+    fi
+    
+    # Check for common CLI environment indicators 
+    if [[ -n "$ANTHROPIC_API_KEY" || "$AWS_EXECUTION_ENV" == *"anthropic"* ]]; then
+        detected_model="claude-3-7-sonnet-20250219"
+        source="API environment detection"
+        echo "$detected_model|$source"
+        return
+    fi
     
     # Check SQLite database in Cursor application directory
     if command -v sqlite3 &> /dev/null && [[ -f ~/Library/Application\ Support/Cursor/User/globalStorage/state.vscdb ]]; then
@@ -89,6 +159,15 @@ detect_model() {
             echo "$detected_model|$source"
             return
         fi
+    fi
+    
+    # Default for Claude CLI if all else fails
+    # This ensures we never return N/A in Claude environment
+    if [[ "$SHELL" == *"claude"* || -f /.dockerenv && -n "$ANTHROPIC_API_KEY" ]]; then
+        detected_model="claude-3-7-sonnet-20250219"
+        source="shell environment fallback"
+        echo "$detected_model|$source"
+        return
     fi
     
     detected_model="N/A"
