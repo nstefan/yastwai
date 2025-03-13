@@ -4,43 +4,78 @@ globs: *
 alwaysApply: true
 ---
 
-AI agent instructions for branch management and main branch updates.
-    - Use the ai-branch.sh script for creating and managing feature branches.
-    - NEVER work directly on the main branch; always create a feature branch first.
-    - When the user requests to "update main" (or similar phrases like "update from origin", "pull latest", "fetch main"):
-        - ALWAYS use the ai-update-main.sh script to perform the update.
-        - Check for uncommitted changes first and warn the user if found.
-        
-    Branch Update Commands Reference:
-    ```bash
-    # Basic usage - update main and return to current branch
-    ./scripts/ai-update-main.sh
+# YASTWAI Project - Branch Management Rules
 
-    # Only check for updates without applying them
-    ./scripts/ai-update-main.sh --check-only
+## CRITICAL BRANCH PROTECTION POLICIES
+- NEVER WORK DIRECTLY ON THE MAIN BRANCH UNDER ANY CIRCUMSTANCES
+- VERIFY BRANCH STATUS AT START OF EVERY USER INTERACTION
+- AUTOMATICALLY CREATE A FEATURE BRANCH IF ON MAIN BRANCH
+- NOTIFY USER WHEN BRANCH ACTIONS ARE TAKEN
 
-    # Update main and rebase current branch onto the updated main
-    ./scripts/ai-update-main.sh --rebase-current
-    ```
-    
-    Workflow Guidelines:
-    1. For new work unrelated to the current branch, create a new feature branch from main:
-       ```bash
-       ./scripts/ai-branch.sh --new-branch "feature-name" --is-related false
-       ```
-       
-    2. When updating the main branch, always update it first before creating a new branch:
-       ```bash
-       ./scripts/ai-update-main.sh
-       ./scripts/ai-branch.sh --new-branch "feature-name" --is-related false
-       ```
-       
-    3. To keep a feature branch in sync with main, use the rebase option:
-       ```bash
-       ./scripts/ai-update-main.sh --rebase-current
-       ```
-       
-    4. Always verify branch status at the beginning of each new user interaction:
-       ```bash
-       ./scripts/ai-branch.sh --check-only
-       ``` 
+## Mandatory Branch Verification 
+- The VERY FIRST ACTION in every user interaction must be to verify current branch status
+- Run this command: `./scripts/ai-protect-main.sh --no-auto-branch`
+- If this command fails OR shows you're on main branch, immediately create a new branch before any other actions
+
+## Automatic Branch Creation (when on main)
+- When working with a user and the current branch is "main", IMMEDIATELY run:
+  `./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"`
+- This script will:
+  1. Detect that you're on main branch
+  2. Create a new feature branch automatically
+  3. Move any uncommitted changes to the new branch
+  4. Notify the user about the branch change
+
+## Branch Update Commands
+- To update main branch from a feature branch:
+  `./scripts/ai-update-main.sh`
+
+- To update feature branch with main branch changes:
+  `./scripts/ai-branch.sh --update-feature-branch`
+
+## Prohibited Branch Actions
+- NEVER use raw git branch commands directly:
+  - NO `git checkout`
+  - NO `git branch`
+  - NO direct branch manipulation
+
+## Verification After Branch Operations
+- After ANY operation that might change branches, re-verify current branch:
+  `./scripts/ai-protect-main.sh --no-auto-branch`
+
+## Error Handling for Branch Operations
+- If any branch command fails, immediately notify the user and stop
+- Do not proceed with further operations until branch status is resolved
+- Provide clear instructions to the user about what went wrong
+
+## Branch Naming Guidelines
+- Feature branches should have descriptive names in kebab-case
+- Use format: `feature-name-description` or `fix-issue-description`
+- Avoid generic names like "feature" or "fix"
+
+Workflow Guidelines:
+1. VERIFY CURRENT BRANCH before EVERY operation:
+   ```bash
+   ./scripts/ai-branch.sh --check-only
+   ```
+   
+2. For new work unrelated to the current branch, create a new feature branch from main:
+   ```bash
+   ./scripts/ai-branch.sh --new-branch "feature-name" --is-related false
+   ```
+   
+3. When updating the main branch, always update it first before creating a new branch:
+   ```bash
+   ./scripts/ai-update-main.sh
+   ./scripts/ai-branch.sh --new-branch "feature-name" --is-related false
+   ```
+   
+4. To keep a feature branch in sync with main, use the rebase option:
+   ```bash
+   ./scripts/ai-update-main.sh --rebase-current
+   ```
+   
+5. CONTINUAL VERIFICATION: After any branch-related operation, verify current branch again:
+   ```bash
+   ./scripts/ai-branch.sh --check-only
+   ``` 
