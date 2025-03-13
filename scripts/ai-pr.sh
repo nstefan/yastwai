@@ -173,7 +173,13 @@ if [ -n "$PR_TEMPLATE" ]; then
     
     # Replace content in Overview section
     if [ -n "$OVERVIEW" ]; then
-        sed -i.bak "/$OVERVIEW_MARKER/,/$KEY_CHANGES_MARKER/c\\$OVERVIEW_MARKER\n$OVERVIEW\n\n$KEY_CHANGES_MARKER" "$PR_BODY_FILE"
+        # Create temporary file with modified content
+        awk -v overview="$OVERVIEW" -v start="$OVERVIEW_MARKER" -v end="$KEY_CHANGES_MARKER" '
+        $0 ~ start {print; print overview; print ""; in_section=1; next}
+        $0 ~ end {in_section=0; print}
+        !in_section {print}
+        ' "$PR_BODY_FILE" > "${PR_BODY_FILE}.new"
+        mv "${PR_BODY_FILE}.new" "$PR_BODY_FILE"
     fi
     
     # Replace content in Key Changes section
@@ -182,10 +188,16 @@ if [ -n "$PR_TEMPLATE" ]; then
         CHANGES_LIST=""
         IFS=',' read -ra CHANGES <<< "$KEY_CHANGES"
         for change in "${CHANGES[@]}"; do
-            CHANGES_LIST+="- $change\n"
+            CHANGES_LIST="${CHANGES_LIST}- $change\n"
         done
         
-        sed -i.bak "/$KEY_CHANGES_MARKER/,/$IMPLEMENTATION_MARKER/c\\$KEY_CHANGES_MARKER\n$CHANGES_LIST\n$IMPLEMENTATION_MARKER" "$PR_BODY_FILE"
+        # Create temporary file with modified content
+        awk -v changes="$CHANGES_LIST" -v start="$KEY_CHANGES_MARKER" -v end="$IMPLEMENTATION_MARKER" '
+        $0 ~ start {print; printf "%s", changes; in_section=1; next}
+        $0 ~ end {in_section=0; print}
+        !in_section {print}
+        ' "$PR_BODY_FILE" > "${PR_BODY_FILE}.new"
+        mv "${PR_BODY_FILE}.new" "$PR_BODY_FILE"
     fi
     
     # Replace content in Implementation Details section
@@ -194,17 +206,36 @@ if [ -n "$PR_TEMPLATE" ]; then
         DETAILS_LIST=""
         IFS=',' read -ra DETAILS <<< "$IMPLEMENTATION"
         for detail in "${DETAILS[@]}"; do
-            DETAILS_LIST+="- $detail\n"
+            DETAILS_LIST="${DETAILS_LIST}- $detail\n"
         done
         
-        sed -i.bak "/$IMPLEMENTATION_MARKER/,/$TESTING_MARKER/c\\$IMPLEMENTATION_MARKER\n$DETAILS_LIST\n$TESTING_MARKER" "$PR_BODY_FILE"
+        # Create temporary file with modified content
+        awk -v details="$DETAILS_LIST" -v start="$IMPLEMENTATION_MARKER" -v end="$TESTING_MARKER" '
+        $0 ~ start {print; printf "%s", details; in_section=1; next}
+        $0 ~ end {in_section=0; print}
+        !in_section {print}
+        ' "$PR_BODY_FILE" > "${PR_BODY_FILE}.new"
+        mv "${PR_BODY_FILE}.new" "$PR_BODY_FILE"
     fi
     
     # Update AI Model section
     if [ -n "$MODEL" ]; then
-        sed -i.bak "/$AI_MODEL_MARKER/.*$/d" "$PR_BODY_FILE"
-        echo "$AI_MODEL_MARKER" >> "$PR_BODY_FILE"
-        echo "$MODEL" >> "$PR_BODY_FILE"
+        # Create temporary file with modified content
+        awk -v model="$MODEL" -v marker="$AI_MODEL_MARKER" '
+        {
+            if ($0 ~ marker) {
+                print marker;
+                print model;
+                in_section = 1;
+            } else if (!in_section) {
+                print;
+            } else if ($0 ~ /^##/) {
+                in_section = 0;
+                print;
+            }
+        }
+        ' "$PR_BODY_FILE" > "${PR_BODY_FILE}.new"
+        mv "${PR_BODY_FILE}.new" "$PR_BODY_FILE"
     fi
     
     # Clean up backup file
