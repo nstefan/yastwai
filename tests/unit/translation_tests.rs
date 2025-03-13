@@ -41,6 +41,7 @@ fn get_test_config() -> TranslationConfig {
                 concurrent_requests: 4,
                 max_chars_per_request: 1000,
                 timeout_secs: 30,
+                rate_limit: None,
             },
             ProviderConfig {
                 provider_type: "openai".to_string(),
@@ -50,6 +51,7 @@ fn get_test_config() -> TranslationConfig {
                 concurrent_requests: 4,
                 max_chars_per_request: 4000,
                 timeout_secs: 30,
+                rate_limit: Some(60),
             },
             ProviderConfig {
                 provider_type: "anthropic".to_string(),
@@ -59,6 +61,7 @@ fn get_test_config() -> TranslationConfig {
                 concurrent_requests: 4,
                 max_chars_per_request: 4000,
                 timeout_secs: 30,
+                rate_limit: Some(45),
             },
         ],
     }

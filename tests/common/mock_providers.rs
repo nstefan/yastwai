@@ -406,6 +406,7 @@ pub fn create_mock_translation_service() -> Result<yastwai::translation::core::T
                 concurrent_requests: 1,
                 max_chars_per_request: 1000,
                 timeout_secs: 1,
+                rate_limit: Some(60),
             },
         ],
     };
