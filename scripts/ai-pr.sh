@@ -17,6 +17,7 @@ show_usage() {
     echo "  --base BRANCH        - Base branch to merge into (default: main)"
     echo "  --draft              - Create PR as draft (default: false)"
     echo "  --model MODEL        - Specify AI model (required)"
+    echo "  --no-browser         - Don't open browser after PR creation (for testing/automation only)"
     echo "  --help               - Display this help message"
     exit 1
 }
@@ -35,6 +36,7 @@ FILES=""
 DRAFT=false
 MODEL=""
 BASE_BRANCH="main"  # Set default base branch explicitly
+OPEN_BROWSER=true   # Default to opening browser
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -89,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --draft)
             DRAFT=true
+            shift
+            ;;
+        --no-browser)
+            OPEN_BROWSER=false
             shift
             ;;
         --help|-h)
@@ -303,8 +309,8 @@ log_message "------------------------------------------------------"
 log_message ""
 log_message "Pull request URL: $PR_URL"
 
-# Only attempt to open the URL if we're not in a non-interactive environment
-if [ -n "$DISPLAY" ] || [ "$(uname)" == "Darwin" ]; then
+# Only attempt to open the URL if we're not in a non-interactive environment and OPEN_BROWSER is true
+if [ "$OPEN_BROWSER" = true ] && ([ -n "$DISPLAY" ] || [ "$(uname)" == "Darwin" ]); then
     # Open the PR URL in the default browser
     if command -v xdg-open >/dev/null 2>&1; then
         xdg-open "$PR_URL" >/dev/null 2>&1 || log_message "Could not open browser automatically"
