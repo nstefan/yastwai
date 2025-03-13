@@ -1,8 +1,8 @@
 use anyhow::{Result, Context};
 use log::{error, warn, info, debug};
 use std::path::{Path, PathBuf};
-use crate::app_config::{Config, SubtitleInfo};
-use crate::subtitle_processor::{SubtitleCollection, SubtitleEntry};
+use crate::app_config::Config;
+use crate::subtitle_processor::SubtitleCollection;
 use crate::translation::{TranslationService, BatchTranslator};
 use crate::translation::core::LogEntry;
 use crate::language_utils;
@@ -14,7 +14,6 @@ use std::sync::Mutex;
 use crate::file_utils::{FileManager, FileType};
 use chrono;
 use std::time::Duration;
-use std::fs;
 
 // @module: Application controller for subtitle processing
 
@@ -355,10 +354,6 @@ impl Controller {
     /// Save the translated subtitles to files
     fn save_translated_subtitles(&self, subtitles: SubtitleCollection, input_file: &Path, output_dir: &Path) -> Result<PathBuf> {
         // Generate an appropriate output filename
-        let _input_stem = input_file.file_stem()
-            .context("Failed to extract file stem from input file")?
-            .to_string_lossy();
-        
         let output_filename = self.get_subtitle_output_filename(
             input_file, 
             &self.config.target_language
@@ -514,7 +509,7 @@ impl Controller {
         // Check if this is an SRT file and handle appropriately
         if input_file.extension().and_then(|ext| ext.to_str()) == Some("srt") {
             // For SRT files, we need to keep the full path and replace the language code
-            let input_str = input_file.to_string_lossy().to_string();
+            let _input_str = input_file.to_string_lossy().to_string();
             
             // If this is a path with directories
             if let Some(filename) = input_file.file_name().map(|f| f.to_string_lossy()) {
@@ -547,7 +542,7 @@ impl Controller {
             }
         } else {
             // For video files, just extract the filename (no path) and append the target language
-            if let Some(filename) = input_file.file_name() {
+            if let Some(_filename) = input_file.file_name() {
                 if let Some(stem) = input_file.file_stem() {
                     return format!("{}.{}.srt", stem.to_string_lossy(), target_language);
                 }

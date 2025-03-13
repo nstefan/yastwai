@@ -5,30 +5,18 @@
  * which is responsible for translating text using various AI providers.
  */
 
-use anyhow::{Result, Context, anyhow};
-use log::{error, warn, info, debug};
+use anyhow::{Result, anyhow};
 use std::time::{Duration, Instant};
 use url::Url;
 use std::sync::Arc;
-use regex::Regex;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex as StdMutex;
-use tokio::sync::Semaphore;
-use std::fmt;
-use std::str::FromStr;
-use futures::stream::{self, StreamExt};
 
 use crate::app_config::{TranslationConfig, TranslationProvider as ConfigTranslationProvider};
-use crate::subtitle_processor::SubtitleEntry;
 use crate::providers::ollama::{Ollama, GenerationRequest};
 use crate::providers::openai::{OpenAI, OpenAIRequest};
 use crate::providers::anthropic::{Anthropic, AnthropicRequest};
-use crate::errors::{TranslationError, ProviderError};
 use crate::providers::Provider;
 
-use super::batch::BatchTranslator;
-use super::cache::TranslationCache;
-use super::formatting::FormatPreserver;
 
 /// Token usage statistics for tracking API consumption
 #[derive(Clone)]

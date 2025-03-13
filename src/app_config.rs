@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::default::Default;
-use std::fmt;
-use std::str::FromStr;
 
 /// Application configuration module
 /// This module handles the application configuration including loading,

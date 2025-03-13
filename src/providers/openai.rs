@@ -1,7 +1,7 @@
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use anyhow::{Result, anyhow, Context};
-use reqwest::{Client, header};
+use reqwest::Client;
 use log::error;
 
 /// OpenAI client for interacting with OpenAI API

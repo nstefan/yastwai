@@ -1,8 +1,7 @@
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
-use anyhow::{Result, anyhow, Context};
-use reqwest::{Client, header, StatusCode};
-use log::{error, warn, debug};
+use anyhow::Result;
+use reqwest::Client;
 use async_trait::async_trait;
 use tokio::time::sleep;
 

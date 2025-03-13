@@ -4,19 +4,13 @@ use std::fmt;
 use regex::Regex;
 use once_cell::sync::Lazy;
 use anyhow::{Result, Context, anyhow};
-use std::io::{self, Write, BufRead, BufReader};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use log::{error, warn, debug};
-use std::process::Command as StdCommand;
 use serde_json::{Value, from_str};
 use crate::app_config::SubtitleInfo;
 use crate::language_utils;
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::process::Command;
-use futures_util::TryFutureExt;
 
 // @module: Subtitle processing and manipulation
 
@@ -642,7 +636,7 @@ impl SubtitleCollection {
     /// Parse SRT format string into subtitle entries
     pub fn parse_srt_string(content: &str) -> Result<Vec<SubtitleEntry>> {
         let mut entries = Vec::new();
-        let mut lines = content.lines().peekable();
+        let lines = content.lines().peekable();
         
         // State variables for parsing
         let mut current_seq_num: Option<usize> = None;

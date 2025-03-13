@@ -6,7 +6,7 @@
  */
 
 use anyhow::{Result, anyhow};
-use log::{error, warn, info, debug};
+use log::error;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -15,7 +15,6 @@ use futures::stream::{self, StreamExt};
 use std::time::Instant;
 
 use crate::subtitle_processor::SubtitleEntry;
-use crate::errors::TranslationError;
 
 use super::core::{TranslationService, TokenUsageStats, LogEntry};
 use super::formatting::FormatPreserver;
@@ -28,9 +27,6 @@ pub struct BatchTranslator {
     /// Maximum number of concurrent requests
     max_concurrent_requests: usize,
     
-    /// Whether to preserve formatting in the translated text
-    preserve_formatting: bool,
-    
     /// Whether to retry individual entries on batch failure
     retry_individual_entries: bool,
 }
@@ -40,7 +36,6 @@ impl BatchTranslator {
     pub fn new(service: TranslationService) -> Self {
         Self {
             max_concurrent_requests: service.options.max_concurrent_requests,
-            preserve_formatting: service.options.preserve_formatting,
             retry_individual_entries: service.options.retry_individual_entries,
             service,
         }
@@ -56,7 +51,7 @@ impl BatchTranslator {
         progress_callback: impl Fn(usize, usize) + Clone + Send + 'static
     ) -> Result<(Vec<SubtitleEntry>, TokenUsageStats)> {
         // Initialize token usage stats
-        let mut token_stats = TokenUsageStats::with_provider_info(
+        let token_stats = TokenUsageStats::with_provider_info(
             self.service.config.provider.to_string(),
             self.service.config.get_model()
         );
