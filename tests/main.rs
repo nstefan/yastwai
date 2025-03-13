@@ -37,6 +37,9 @@ mod unit {
     // Provider tests
     pub mod providers_tests;
     pub mod providers;
+    
+    // Test network isolation
+    pub mod network_monitor_tests;
 }
 
 // Integration tests
