@@ -6,7 +6,7 @@
  */
 
 use anyhow::{Result, Context, anyhow};
-use log::{error, warn, info};
+use log::{error, warn, info, debug};
 use std::time::{Duration, Instant};
 use url::Url;
 use std::sync::Arc;
@@ -283,7 +283,7 @@ impl TranslationService {
             TranslationProviderImpl::Ollama { client } => {
                 let result = client.version().await;
                 match result {
-                    Ok(version) => {
+                    Ok(_version) => {
                         if let Some(log) = &log_capture {
                             log.lock().unwrap().push(LogEntry {
                                 level: "info".to_string(),
@@ -303,7 +303,7 @@ impl TranslationService {
                     }
                 }
             },
-            TranslationProviderImpl::OpenAI { client } => {
+            TranslationProviderImpl::OpenAI { client: _ } => {
                 // For OpenAI, we'll do a simple test translation
                 let test_result = self.test_translation(source_language, target_language).await;
                 match test_result {
@@ -327,7 +327,7 @@ impl TranslationService {
                     }
                 }
             },
-            TranslationProviderImpl::Anthropic { client } => {
+            TranslationProviderImpl::Anthropic { client: _ } => {
                 // For Anthropic, we'll do a simple test translation
                 let test_result = self.test_translation(source_language, target_language).await;
                 match test_result {
