@@ -17,6 +17,7 @@ show_usage() {
     echo "  --base BRANCH        - Base branch to merge into (default: main)"
     echo "  --draft              - Create PR as draft (default: false)"
     echo "  --model MODEL        - Technical model name (required, e.g., claude-3-sonnet-20240229, not 'Claude 3 Sonnet')"
+    echo "  --no-browser         - Don't open browser after PR creation (for automation/testing)"
     echo "  --help               - Display this help message"
     exit 1
 }
@@ -49,6 +50,7 @@ IMPLEMENTATION=""
 DRAFT=false
 MODEL=""
 BASE_BRANCH="main"  # Set default base branch explicitly
+OPEN_BROWSER=true   # Default to opening browser
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -103,6 +105,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --draft)
             DRAFT=true
+            shift
+            ;;
+        --no-browser)
+            OPEN_BROWSER=false
             shift
             ;;
         --help|-h)
@@ -357,6 +363,18 @@ if [ $PR_EXIT_CODE -ne 0 ]; then
 fi
 
 log_message "Successfully created PR: $PR_URL"
+
+# Open the PR URL in the default browser
+if [ "$OPEN_BROWSER" = true ] && ([ -n "$DISPLAY" ] || [ "$(uname)" == "Darwin" ]); then
+    log_message "Opening PR in your browser..."
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$PR_URL" >/dev/null 2>&1 || log_message "Could not open browser automatically"
+    elif command -v open >/dev/null 2>&1; then
+        open "$PR_URL" >/dev/null 2>&1 || log_message "Could not open browser automatically"
+    else
+        log_message "Couldn't find a command to open the browser. Please open this URL manually: $PR_URL"
+    fi
+fi
 
 # Clean up
 rm -f "$PR_BODY_FILE"

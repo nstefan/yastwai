@@ -134,10 +134,10 @@ run_test "Missing required parameters (title only)" "$PR_SCRIPT --title \"Test P
 run_test "Missing model parameter" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\"" 1
 
 # Test 5: Basic valid command
-run_test "Basic valid command" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\" --model \"test-model\""
+run_test "Basic valid command" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\" --model \"test-model\" --no-browser"
 
 # Test 6: Valid command with all parameters
-run_test "Valid command with all parameters" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\" --key-changes \"Change 1,Change 2\" --implementation \"Detail 1,Detail 2\" --model \"test-model\" --base \"main\" --draft"
+run_test "Valid command with all parameters" "$PR_SCRIPT --title \"Test PR\" --overview \"Test overview\" --key-changes \"Change 1,Change 2\" --implementation \"Detail 1,Detail 2\" --model \"test-model\" --base \"main\" --draft --no-browser"
 
 # Test 7: Invalid parameter usage
 run_test "Invalid parameter usage (missing value)" "$PR_SCRIPT --title" 1
