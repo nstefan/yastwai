@@ -14,5 +14,5 @@
 <!-- Optional: How has this been tested? -->
 
 ## 🤖 AI Model
-<!-- Required: Specify AI model technical name -->
-<!-- Example: gpt-style-version -->
+<!-- Required: Specify the exact technical model name (not marketing name) -->
+<!-- Examples: claude-3-sonnet-20240229, gpt-4-turbo-2024-04-09 -->
