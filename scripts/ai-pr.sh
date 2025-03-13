@@ -1,7 +1,6 @@
 #!/bin/bash
 # AI Assistant Helper Script for PR Creation
-# This script helps AI assistants create structured PR descriptions
-# without having to deal with multiline command issues
+# This script helps AI assistants create structured PR descriptions using GitHub CLI
 # Follows the naming pattern of ai-*.sh for consistency
 
 set -e  # Exit on error
@@ -14,10 +13,11 @@ show_usage() {
     echo "  --title TITLE        - PR title (required)"
     echo "  --overview TEXT      - Brief overview of the PR (required)"
     echo "  --key-changes TEXT   - Comma-separated list of key changes"
+    echo "  --implementation TEXT - Comma-separated list of implementation details"
     echo "  --base BRANCH        - Base branch to merge into (default: main)"
     echo "  --draft              - Create PR as draft (default: false)"
     echo "  --model MODEL        - Technical model name (required, e.g., claude-3-sonnet-20240229, not 'Claude 3 Sonnet')"
-    echo "  --no-browser         - Don't open browser after PR creation (for testing/automation only)"
+    echo "  --no-browser         - Don't open browser after PR creation (for automation/testing)"
     echo "  --help               - Display this help message"
     exit 1
 }
@@ -27,18 +27,18 @@ log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Function to find and extract sections from PR template
-extract_section() {
-    local template="$1"
-    local section_marker="$2"
-    local next_section_marker="$3"
+# Check if gh CLI is installed
+check_gh_cli() {
+    if ! command -v gh &> /dev/null; then
+        log_message "Error: GitHub CLI (gh) is not installed. Please install it first."
+        log_message "Installation instructions: https://github.com/cli/cli#installation"
+        exit 1
+    fi
     
-    # Extract the section including marker
-    if [[ -n "$next_section_marker" ]]; then
-        echo "$template" | sed -n "/$section_marker/,/$next_section_marker/p" | sed '$d'
-    else
-        # If no next section marker, extract to end
-        echo "$template" | sed -n "/$section_marker/,\$p"
+    # Check if gh is authenticated
+    if ! gh auth status &> /dev/null; then
+        log_message "Error: GitHub CLI (gh) is not authenticated. Please run 'gh auth login' first."
+        exit 1
     fi
 }
 
@@ -47,7 +47,6 @@ PR_TITLE=""
 OVERVIEW=""
 KEY_CHANGES=""
 IMPLEMENTATION=""
-FILES=""
 DRAFT=false
 MODEL=""
 BASE_BRANCH="main"  # Set default base branch explicitly
@@ -141,6 +140,12 @@ fi
 # Ensure MODEL doesn't have quotes that could break the script
 MODEL=$(echo "$MODEL" | tr -d '"'"'")
 
+# Check if GitHub CLI is installed and authenticated
+check_gh_cli
+
+# Create temp file for PR description
+PR_BODY_FILE=$(mktemp)
+
 # Check for PR template location
 PR_TEMPLATE_PATHS=(
     "./.github/PULL_REQUEST_TEMPLATE.md"
@@ -155,9 +160,6 @@ for template_path in "${PR_TEMPLATE_PATHS[@]}"; do
         break
     fi
 done
-
-# Create temp file for PR description
-PR_BODY_FILE=$(mktemp)
 
 if [ -n "$PR_TEMPLATE" ]; then
     # Use PR template as base
@@ -207,9 +209,6 @@ if [ -n "$PR_TEMPLATE" ]; then
     
     # Write the final PR description to the file
     echo -e "$PR_DESCRIPTION" > "$PR_BODY_FILE"
-    
-    # Clean up backup file
-    rm -f "${PR_BODY_FILE}.bak"
 else
     # Fallback: manually construct PR description if template not found
     log_message "No PR template found, constructing default format"
@@ -249,14 +248,14 @@ log_message "---------------------------------------------"
 cat "$PR_BODY_FILE"
 log_message "---------------------------------------------"
 
-# Get current branch - add | cat to avoid pager
+# Get current branch
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null | cat)
 if [ -z "$CURRENT_BRANCH" ]; then
     log_message "Error: Not on any branch"
     exit 1
 fi
 
-# Check for uncommitted changes - add | cat to avoid pager
+# Check for uncommitted changes
 if [ -n "$(git status --porcelain 2>/dev/null | cat)" ]; then
     log_message "Error: You have uncommitted changes. Please commit or stash them before creating a PR."
     exit 1
@@ -323,8 +322,7 @@ else
     fi
 fi
 
-# Get commit count - add | cat to avoid pager
-# Explicitly check for empty base branch and provide fallback
+# Get commit count
 if [ -z "$BASE_BRANCH" ]; then
     BASE_BRANCH="main"
     log_message "Base branch was empty, using default: $BASE_BRANCH"
@@ -342,66 +340,39 @@ if [ -z "$COMMIT_COUNT" ] || [ "$COMMIT_COUNT" -eq 0 ]; then
     log_message "Continuing anyway, but the PR may be empty..."
 fi
 
-# URL encode function that preserves newlines
-url_encode() {
-    python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))" <<< "$1"
-}
+# Create the PR using GitHub CLI
+log_message "Creating PR using GitHub CLI (gh)..."
 
-# Get the GitHub repo URL
-get_github_url() {
-    REMOTE_URL=$(git config --get remote.origin.url 2>/dev/null | cat)
-    
-    if [[ "$REMOTE_URL" == git@github.com:* ]]; then
-        REPO_PATH=${REMOTE_URL#git@github.com:}
-        REPO_PATH=${REPO_PATH%.git}
-        echo "https://github.com/$REPO_PATH"
-    elif [[ "$REMOTE_URL" == https://github.com/* ]]; then
-        echo "${REMOTE_URL%.git}"
-    else
-        echo "$REMOTE_URL"
-    fi
-}
+# Build the gh command with all required options
+GH_CMD="gh pr create --title \"$PR_TITLE\" --body-file \"$PR_BODY_FILE\" --base \"$BASE_BRANCH\""
 
-# Get PR body content
-PR_BODY_CONTENT=$(cat "$PR_BODY_FILE")
+# Add draft flag if needed
+if [ "$DRAFT" = true ]; then
+    GH_CMD="$GH_CMD --draft"
+fi
 
-# Get the GitHub repository URL
-REPO_URL=$(get_github_url)
-if [ -z "$REPO_URL" ]; then
-    log_message "Error: Could not determine GitHub repository URL"
+# Execute the command
+log_message "Executing: $GH_CMD"
+PR_URL=$(eval "$GH_CMD")
+PR_EXIT_CODE=$?
+
+if [ $PR_EXIT_CODE -ne 0 ]; then
+    log_message "Error: Failed to create pull request"
+    log_message "GitHub CLI command failed with exit code: $PR_EXIT_CODE"
     exit 1
 fi
 
-# Create the PR URL with properly encoded body
-ENCODED_TITLE=$(url_encode "$PR_TITLE")
-ENCODED_BODY=$(url_encode "$PR_BODY_CONTENT")
-PR_URL="$REPO_URL/compare/$BASE_BRANCH...$CURRENT_BRANCH?quick_pull=1"
-PR_URL="${PR_URL}&title=${ENCODED_TITLE}"
-PR_URL="${PR_URL}&body=${ENCODED_BODY}"
+log_message "Successfully created PR: $PR_URL"
 
-if [ "$DRAFT" = true ]; then
-    PR_URL="${PR_URL}&draft=1"
-fi
-
-log_message "Creating PR:"
-log_message "Title: $PR_TITLE"
-log_message "Base branch: $BASE_BRANCH"
-log_message "Current branch: $CURRENT_BRANCH"
-log_message ""
-log_message "PR Description (you can copy this manually if needed):"
-log_message "------------------------------------------------------"
-echo -e "$PR_BODY_CONTENT"
-log_message "------------------------------------------------------"
-log_message ""
-log_message "Pull request URL: $PR_URL"
-
-# Only attempt to open the URL if we're not in a non-interactive environment and OPEN_BROWSER is true
+# Open the PR URL in the default browser
 if [ "$OPEN_BROWSER" = true ] && ([ -n "$DISPLAY" ] || [ "$(uname)" == "Darwin" ]); then
-    # Open the PR URL in the default browser
+    log_message "Opening PR in your browser..."
     if command -v xdg-open >/dev/null 2>&1; then
         xdg-open "$PR_URL" >/dev/null 2>&1 || log_message "Could not open browser automatically"
     elif command -v open >/dev/null 2>&1; then
         open "$PR_URL" >/dev/null 2>&1 || log_message "Could not open browser automatically"
+    else
+        log_message "Couldn't find a command to open the browser. Please open this URL manually: $PR_URL"
     fi
 fi
 
