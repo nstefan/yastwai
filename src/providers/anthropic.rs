@@ -208,8 +208,6 @@ impl Anthropic {
         while attempts <= self.max_retries {
             if attempts > 0 {
                 let backoff_ms = self.initial_backoff_ms * 2u64.pow(attempts - 1);
-                debug!("Retrying Anthropic API request (attempt {}/{}), waiting {}ms", 
-                       attempts, self.max_retries, backoff_ms);
                 sleep(Duration::from_millis(backoff_ms)).await;
             }
             
@@ -221,15 +219,11 @@ impl Anthropic {
                     // Only retry on connection errors and rate limit errors
                     match &err {
                         ProviderError::ConnectionError(_) => {
-                            warn!("Connection error on attempt {}/{}, will retry: {}", 
-                                  attempts, self.max_retries + 1, err);
                             last_error = Some(err);
                         },
                         ProviderError::ApiError { status_code, .. } => {
                             // Retry on rate limiting (429) and server errors (5xx)
                             if *status_code == 429 || *status_code >= 500 {
-                                warn!("API error {} on attempt {}/{}, will retry: {}", 
-                                      status_code, attempts, self.max_retries + 1, err);
                                 last_error = Some(err);
                             } else {
                                 // Don't retry on client errors (4xx) except rate limiting
@@ -270,8 +264,6 @@ impl Anthropic {
         if !status.is_success() {
             let error_text = response.text().await
                 .unwrap_or_else(|_| "Failed to get error response text".to_string());
-            
-            error!("Anthropic API error ({}): {}", status, error_text);
             
             return match status.as_u16() {
                 429 => Err(ProviderError::RateLimitExceeded(error_text)),
