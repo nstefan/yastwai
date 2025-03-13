@@ -112,12 +112,9 @@ impl Controller {
             // Save translated subtitles
             self.save_translated_subtitles(translated_subtitles, &input_file, &output_dir)?;
             
-            // Calculate and log total duration
-            let total_duration = start_time.elapsed();
             info!(
-                "Translation completed in {}. Total processing time: {}",
-                Self::format_duration(translation_duration),
-                Self::format_duration(total_duration)
+                "Translation completed in {}.",
+                Self::format_duration(translation_duration)
             );
             
             return Ok(());
