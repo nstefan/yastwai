@@ -222,34 +222,11 @@ impl OpenAI {
     /// Test the connection to the OpenAI API
     pub async fn test_connection(&self, model: &str) -> Result<()> {
         let request = OpenAIRequest::new(model)
-            .add_message("user", "Hello")
-            .max_tokens(10);
-        
-        self.complete(request).await?;
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[tokio::test]
-    async fn test_openai_complete() {
-        // This test should only run if an API key is provided
-        let api_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
-        if api_key.is_empty() {
-            return;
-        }
-        
-        let client = OpenAI::new(api_key, "");
-        let request = OpenAIRequest::new("gpt-3.5-turbo")
             .add_message("system", "You are a helpful assistant.")
             .add_message("user", "Say hello!")
-            .max_tokens(10);
+            .max_tokens(5);
         
-        let response = client.complete(request).await.unwrap();
-        assert!(!response.choices.is_empty());
-        assert!(!response.choices[0].message.content.is_empty());
+        let _response = self.complete(request).await?;
+        Ok(())
     }
 } 

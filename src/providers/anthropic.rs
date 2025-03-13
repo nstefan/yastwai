@@ -195,34 +195,9 @@ impl Anthropic {
     
     /// Extract text from Anthropic response
     pub fn extract_text_from_response(response: &AnthropicResponse) -> String {
-        response.content
-            .iter()
-            .filter(|content| content.content_type == "text")
-            .map(|content| content.text.trim())
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[tokio::test]
-    async fn test_anthropic_complete() {
-        // This test should only run if an API key is provided
-        let api_key = std::env::var("ANTHROPIC_API_KEY").unwrap_or_default();
-        if api_key.is_empty() {
-            return;
-        }
-        
-        let client = Anthropic::new(api_key, "");
-        let request = AnthropicRequest::new("claude-3-haiku-20240307", 1024)
-            .system("You are a helpful assistant.")
-            .add_message("user", "Say hello!");
-        
-        let response = client.complete(request).await.unwrap();
-        let text = Anthropic::extract_text_from_response(&response);
-        assert!(!text.is_empty());
+        response.content.iter()
+            .filter(|c| c.content_type == "text")
+            .map(|c| c.text.clone())
+            .collect()
     }
 } 

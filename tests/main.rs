@@ -24,6 +24,9 @@ mod unit {
     
     // UI and progress bar tests
     pub mod progress_bar_tests;
+    
+    // Provider implementation tests
+    pub mod providers_tests;
 }
 
 // Import integration tests

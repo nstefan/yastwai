@@ -708,93 +708,19 @@ impl Ollama {
     
     /// Get the Ollama API version
     pub async fn version(&self) -> Result<String> {
-        let url = format!("{}/api/version", self.base_url);
-        
-        let response = self.client.get(&url)
+        let url = format!("{}:{}/api/version", self.base_url, 11434);
+        let response: serde_json::Value = self.client.get(&url)
             .send()
             .await
-            .map_err(|e| anyhow!("Failed to get Ollama API version: {}", e))?;
+            .context("Failed to connect to Ollama")?
+            .json()
+            .await
+            .context("Failed to parse Ollama version response")?;
         
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await
-                .unwrap_or_else(|_| "Failed to get error response text".to_string());
-            error!("Ollama API error ({}): {}", status, error_text);
-            return Err(anyhow!("Ollama API error ({}): {}", status, error_text));
-        }
+        let version = response["version"].as_str()
+            .ok_or_else(|| anyhow!("Invalid version format in response"))?
+            .to_string();
         
-        // Get the raw response text first
-        let response_text = response.text().await
-            .map_err(|e| anyhow!("Failed to get response text from Ollama API: {}", e))?;
-        
-        // Try to parse the response
-        match serde_json::from_str::<serde_json::Value>(&response_text) {
-            Ok(value) => {
-                if let Some(version) = value.get("version").and_then(|v| v.as_str()) {
-                    Ok(version.to_string())
-                } else {
-                    // Log the raw response for debugging
-                    error!("Invalid Ollama API version format. Raw response: {}", response_text);
-                    Err(anyhow!("Invalid Ollama API version format"))
-                }
-            },
-            Err(e) => {
-                // Log the raw response for debugging
-                error!("Failed to parse Ollama API version response: {}. Raw response: {}", e, response_text);
-                Err(anyhow!("Failed to parse Ollama API version response: {}", e))
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[tokio::test]
-    #[ignore]
-    async fn test_ollama_generate() {
-        // This test should only run if Ollama is available locally
-        let client = Ollama::new("http://localhost", 11434);
-        
-        // Try to get the version, if it fails, skip the test
-        if client.version().await.is_err() {
-            debug!("Skipping test because Ollama is not available");
-            return;
-        }
-        
-        let request = GenerationRequest::new("llama2", "Hello, world!")
-            .system("You are a helpful assistant.")
-            .temperature(0.7);
-        
-        let response = client.generate(request).await;
-        assert!(response.is_ok());
-    }
-    
-    #[tokio::test]
-    #[ignore]
-    async fn test_ollama_chat() {
-        // This test should only run if Ollama is available locally
-        let client = Ollama::new("http://localhost", 11434);
-        
-        // Try to get the version, if it fails, skip the test
-        if client.version().await.is_err() {
-            debug!("Skipping test because Ollama is not available");
-            return;
-        }
-        
-        let messages = vec![
-            ChatMessage {
-                role: "user".to_string(),
-                content: "Hello, who are you?".to_string(),
-            }
-        ];
-        
-        let request = ChatRequest::new("llama2", messages)
-            .system("You are a helpful assistant.")
-            .temperature(0.7);
-        
-        let response = client.chat(request).await;
-        assert!(response.is_ok());
+        Ok(version)
     }
 } 
