@@ -299,12 +299,28 @@ impl Ollama {
     pub fn new(host: impl Into<String>, port: u16) -> Self {
         let host = host.into();
         
-        // Check if the host already has a scheme
+        // Construct a proper URL with scheme and port
         let base_url = if host.starts_with("http://") || host.starts_with("https://") {
-            // If the host already includes a scheme, just append the port
-            format!("{}:{}", host, port)
+            // If the host already has a scheme
+            let url_parts: Vec<&str> = host.split("://").collect();
+            if url_parts.len() == 2 {
+                let scheme = url_parts[0];
+                let host_part = url_parts[1];
+                
+                // Check if host_part already contains a port
+                if host_part.contains(":") {
+                    // Already has a port, use as is
+                    host
+                } else {
+                    // No port, append it
+                    format!("{}://{}:{}", scheme, host_part, port)
+                }
+            } else {
+                // Malformed URL, fallback to safe default
+                format!("http://localhost:{}", port)
+            }
         } else {
-            // Otherwise, add the http:// scheme and port
+            // No scheme, add http:// and port
             format!("http://{}:{}", host, port)
         };
         
