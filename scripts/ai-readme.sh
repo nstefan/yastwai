@@ -56,6 +56,26 @@ function log {
     fi
 }
 
+# Function to get pretty name for provider
+function get_provider_pretty_name {
+    local provider=$1
+    case "$provider" in
+        "anthropic")
+            echo "Anthropic"
+            ;;
+        "openai")
+            echo "OpenAI"
+            ;;
+        "ollama")
+            echo "Ollama"
+            ;;
+        *)
+            # Capitalize first letter
+            echo "$provider" | awk '{print toupper(substr($0,1,1)) substr($0,2)}'
+            ;;
+    esac
+}
+
 log "${BLUE}Starting README generator...${NC}"
 
 # Get project information from Cargo.toml
@@ -78,20 +98,28 @@ fi
 # Detect AI providers available in the codebase
 PROVIDERS_DIR="$PROJECT_ROOT/src/providers"
 PROVIDERS=""
+PROVIDERS_PRETTY=""
 
 if [ -d "$PROVIDERS_DIR" ]; then
     log "${GREEN}Found providers directory${NC}"
     for provider in "$PROVIDERS_DIR"/*.rs; do
         if [ -f "$provider" ]; then
             provider_name=$(basename "$provider" .rs)
-            if [ "$PROVIDERS" == "" ]; then
-                PROVIDERS="$provider_name"
-            else
-                PROVIDERS="$PROVIDERS, $provider_name"
+            # Skip mod.rs as it's not a provider
+            if [ "$provider_name" != "mod" ]; then
+                provider_pretty=$(get_provider_pretty_name "$provider_name")
+                if [ "$PROVIDERS" == "" ]; then
+                    PROVIDERS="$provider_name"
+                    PROVIDERS_PRETTY="$provider_pretty"
+                else
+                    PROVIDERS="$PROVIDERS, $provider_name"
+                    PROVIDERS_PRETTY="$PROVIDERS_PRETTY, $provider_pretty"
+                fi
             fi
         fi
     done
     log "${BLUE}Detected providers: $PROVIDERS${NC}"
+    log "${BLUE}Pretty providers: $PROVIDERS_PRETTY${NC}"
 else
     log "${YELLOW}No providers directory found${NC}"
 fi
@@ -111,8 +139,8 @@ if grep -q "ffmpeg" "$PROJECT_ROOT/src" -r 2>/dev/null; then
     FEATURES="$FEATURES\n- 🎯 **Extract & Translate** - Pull subtitles from videos and translate in one step"
 fi
 # Check for multiple providers
-if [ "$PROVIDERS" != "" ]; then
-    FEATURES="$FEATURES\n- 🌐 **Multiple AI Providers** - Support for ${PROVIDERS}"
+if [ "$PROVIDERS_PRETTY" != "" ]; then
+    FEATURES="$FEATURES\n- 🌐 **Multiple AI Providers** - Support for ${PROVIDERS_PRETTY}"
 fi
 # Check for concurrent processing
 if grep -q "tokio::spawn" "$PROJECT_ROOT/src" -r 2>/dev/null || grep -q "async" "$PROJECT_ROOT/src" -r 2>/dev/null; then
