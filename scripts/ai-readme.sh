@@ -78,9 +78,7 @@ fi
 # Extract provider enum values from app_config.rs
 PROVIDER_CONFIG="$PROJECT_ROOT/src/app_config.rs"
 PROVIDERS_PRETTY=""
-
-# Default fallback in case extraction fails
-DEFAULT_PROVIDERS="Ollama, OpenAI, Anthropic"
+PROVIDERS_FOUND=false
 
 if [ -f "$PROVIDER_CONFIG" ]; then
     log "${GREEN}Found provider configuration${NC}"
@@ -126,34 +124,22 @@ if [ -f "$PROVIDER_CONFIG" ]; then
                 
                 if [ -n "$DISPLAY_NAMES" ]; then
                     PROVIDERS_PRETTY="$DISPLAY_NAMES"
+                    PROVIDERS_FOUND=true
                     log "${BLUE}Provider display names: $PROVIDERS_PRETTY${NC}"
                 else
                     log "${YELLOW}Could not extract provider display names from enum${NC}"
-                    PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
                 fi
             else
                 log "${YELLOW}Could not find display_name method${NC}"
-                PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
             fi
         else
             log "${YELLOW}Could not extract enum variants${NC}"
-            PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
         fi
     else
         log "${YELLOW}Could not find TranslationProvider enum${NC}"
-        PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
     fi
 else
     log "${YELLOW}Could not find provider configuration${NC}"
-    PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
-fi
-
-# If we couldn't extract the providers, use the default
-if [ -z "$PROVIDERS_PRETTY" ]; then
-    PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
-    log "${YELLOW}Using default providers: $PROVIDERS_PRETTY${NC}"
-else
-    log "${GREEN}Using extracted providers: $PROVIDERS_PRETTY${NC}"
 fi
 
 # Check for example config
@@ -170,8 +156,12 @@ FEATURES=""
 if grep -q "ffmpeg" "$PROJECT_ROOT/src" -r 2>/dev/null; then
     FEATURES="$FEATURES\n- 🎯 **Extract & Translate** - Pull subtitles from videos and translate in one step"
 fi
-# Add providers
-FEATURES="$FEATURES\n- 🌐 **Multiple AI Providers** - Support for ${PROVIDERS_PRETTY}"
+# Add providers feature
+if [ "$PROVIDERS_FOUND" = true ]; then
+    FEATURES="$FEATURES\n- 🌐 **Multiple AI Providers** - Support for ${PROVIDERS_PRETTY}"
+else
+    FEATURES="$FEATURES\n- 🌐 **Multiple AI Providers** - Support for various AI translation backends"
+fi
 # Check for concurrent processing
 if grep -q "tokio::spawn" "$PROJECT_ROOT/src" -r 2>/dev/null || grep -q "async" "$PROJECT_ROOT/src" -r 2>/dev/null; then
     FEATURES="$FEATURES\n- ⚡ **Concurrent Processing** - Efficient batch translation for faster results"
