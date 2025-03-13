@@ -146,8 +146,18 @@ fi
 EXAMPLE_CONFIG="$PROJECT_ROOT/conf.example.json"
 if [ -f "$EXAMPLE_CONFIG" ]; then
     log "${GREEN}Found example config${NC}"
+    # Read the example config content for dynamic inclusion in README
+    EXAMPLE_CONFIG_CONTENT=$(cat "$EXAMPLE_CONFIG")
 else
     log "${YELLOW}No example config found${NC}"
+    # Fallback to a minimal example if conf.example.json doesn't exist
+    EXAMPLE_CONFIG_CONTENT='{
+  "source_language": "en",
+  "target_language": "fr",
+  "translation": {
+    "provider": "ollama"
+  }
+}'
 fi
 
 # Generate features list
@@ -170,6 +180,8 @@ fi
 FEATURES="$FEATURES\n- 🧠 **Smart Processing** - Preserves formatting and timing of your subtitles"
 FEATURES="$FEATURES\n- 🔄 **Direct Translation** - Translate existing SRT files without needing video"
 FEATURES="$FEATURES\n- 📊 **Progress Tracking** - See real-time progress for lengthy translations"
+
+# Generate features list
 
 # Generate README content
 README_CONTENT=$(cat <<EOL
@@ -262,44 +274,10 @@ cargo build --release
 
 ## Configuration
 
-YASTwAI uses a comprehensive JSON configuration file with these settings:
+YASTwAI uses a JSON configuration file with these settings:
 
 \`\`\`json
-{
-  "source_language": "en",
-  "target_language": "fr",
-  "translation": {
-    "provider": "ollama",
-    "available_providers": [
-      {
-        "type": "ollama",
-        "model": "mixtral:8x7b",
-        "endpoint": "http://localhost:11434",
-        "concurrent_requests": 2,
-        "max_chars_per_request": 1000,
-        "timeout_secs": 60
-      },
-      {
-        "type": "openai",
-        "model": "gpt-4o-mini",
-        "api_key": "your_api_key",
-        "endpoint": "https://api.openai.com/v1"
-      },
-      {
-        "type": "anthropic",
-        "model": "claude-3-haiku-20240307",
-        "api_key": "your_api_key"
-      }
-    ],
-    "common": {
-      "system_prompt": "You are an expert subtitle translator...",
-      "rate_limit_delay_ms": 3000,
-      "temperature": 0.3
-    }
-  },
-  "log_level": "info",
-  "batch_size": 1000
-}
+${EXAMPLE_CONFIG_CONTENT}
 \`\`\`
 
 ### Translation Providers

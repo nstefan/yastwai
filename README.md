@@ -93,7 +93,7 @@ cargo build --release
 
 ## Configuration
 
-YASTwAI uses a comprehensive JSON configuration file with these settings:
+YASTwAI uses a JSON configuration file with these settings:
 
 ```json
 {
@@ -114,17 +114,37 @@ YASTwAI uses a comprehensive JSON configuration file with these settings:
         "type": "openai",
         "model": "gpt-4o-mini",
         "api_key": "your_api_key",
-        "endpoint": "https://api.openai.com/v1"
+        "endpoint": "https://api.openai.com/v1",
+        "concurrent_requests": 10,
+        "max_chars_per_request": 2000,
+        "timeout_secs": 60
       },
       {
         "type": "anthropic",
         "model": "claude-3-haiku-20240307",
-        "api_key": "your_api_key"
+        "api_key": "your_api_key",
+        "endpoint": "https://api.anthropic.com",
+        "concurrent_requests": 2,
+        "max_chars_per_request": 400,
+        "timeout_secs": 60
       }
     ],
     "common": {
-      "system_prompt": "You are an expert subtitle translator...",
+      "system_prompt": "You are an expert subtitle translator specializing in {source_language} to {target_language} translation. Your task is to translate subtitle text PRECISELY while following these CRITICAL RULES:
+
+1. TRANSLATE EVERY SINGLE SUBTITLE - never skip any line or leave anything untranslated.
+2. PRESERVE EXACT FORMATTING - keep ALL special tags (like {\an8}), line breaks, and punctuation in the EXACT SAME POSITION as the original.
+3. MAINTAIN EXACT NUMBER OF LINES - your output MUST have the SAME number of lines as the input.
+4. PRESERVE TIMING CONSIDERATIONS - keep translations concise enough to be read in the same timeframe.
+5. PRESERVE MEANING AND CONTEXT - capture cultural nuances accurately.
+6. MAINTAIN TONE AND REGISTER - preserve formality level, slang, humor, and emotional tone.
+7. KEEP SPECIAL CHARACTERS INTACT - never modify or remove format codes like {\an8} or any other technical markers.
+8. RESPECT SUBTITLE LENGTH - translations should ideally be similar in length to maintain readability.
+
+For each subtitle I send you, you MUST return a complete translation. Missing translations are NOT acceptable under any circumstances.",
       "rate_limit_delay_ms": 3000,
+      "retry_count": 3,
+      "retry_backoff_ms": 3000,
       "temperature": 0.3
     }
   },
