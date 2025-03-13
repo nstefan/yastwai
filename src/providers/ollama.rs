@@ -298,7 +298,15 @@ impl Ollama {
     /// Create a new Ollama client with the specified base URL
     pub fn new(host: impl Into<String>, port: u16) -> Self {
         let host = host.into();
-        let base_url = format!("{}:{}", host, port);
+        
+        // Check if the host already has a scheme
+        let base_url = if host.starts_with("http://") || host.starts_with("https://") {
+            // If the host already includes a scheme, just append the port
+            format!("{}:{}", host, port)
+        } else {
+            // Otherwise, add the http:// scheme and port
+            format!("http://{}:{}", host, port)
+        };
         
         Self {
             base_url,
@@ -708,7 +716,7 @@ impl Ollama {
     
     /// Get the Ollama API version
     pub async fn version(&self) -> Result<String> {
-        let url = format!("{}:{}/api/version", self.base_url, 11434);
+        let url = format!("{}/api/version", self.base_url);
         let response: serde_json::Value = self.client.get(&url)
             .send()
             .await
