@@ -146,7 +146,6 @@ fi
 
 # Add AI model information at the end
 echo "" >> "$PR_BODY_FILE"
-echo "" >> "$PR_BODY_FILE"
 echo "🤖 **AI Model**: $MODEL" >> "$PR_BODY_FILE"
 
 # Display the generated PR description
