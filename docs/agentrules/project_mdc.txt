@@ -22,3 +22,21 @@ Model Detection Instructions for AI Agents
         ```bash
         MODEL=$(./scripts/ai-cursor-model.sh --quiet)
         ```
+
+README File Management
+    - The README.md should be dynamically generated using the scripts/ai-readme.sh script.
+    - Automatically regenerate the README.md file in the following situations:
+        1. When Cargo.toml dependencies or project metadata changes
+        2. When new features are added to the codebase
+        3. When the docs directory content is modified
+        4. When provider implementations are added or significantly modified
+        5. After completing significant refactoring that affects functionality
+    - Use the following command to update the README.md:
+        ```bash
+        ./scripts/ai-readme.sh
+        ```
+    - You can check if README needs an update with a dry run:
+        ```bash
+        ./scripts/ai-readme.sh --dry-run
+        ```
+    - Remember to commit the updated README.md file as part of your changes
