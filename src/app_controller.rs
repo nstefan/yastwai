@@ -177,7 +177,7 @@ impl Controller {
         
         // Log completion time metrics
         info!(
-            "⏱️ Translation complete. Extraction: {} - Translation: {}", 
+            "Translation complete. Extraction: {} - Translation: {}", 
             Self::format_duration(extraction_time),
             Self::format_duration(translation_elapsed)
         );
@@ -371,7 +371,7 @@ impl Controller {
         subtitles.write_to_srt(&output_path)?;
         
         // Log that we saved the subtitle file
-        info!("✅ Success: {}", output_path.display());
+        info!("Success: {}", output_path.display());
                 
         Ok(output_path)
     }
