@@ -29,7 +29,7 @@ mod unit {
     pub mod app_config_tests;
     pub mod file_utils_tests;
     pub mod subtitle_processor_tests;
-    pub mod translation_service_tests;
+    pub mod translation_tests;
     pub mod app_controller_tests;
     pub mod language_utils_tests;
     pub mod progress_bar_tests;
