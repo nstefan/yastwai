@@ -11,7 +11,17 @@ Pull requests creation instructions, ONLY create PRs when EXPLICITLY requested b
         ```bash
         ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
         ```
-    - Use this syntax with comma-separated lists instead of trying to create multiline strings directly.
+    - Use the `--draft` option to create a draft PR in the following scenarios:
+        - When the changes are a work-in-progress and not ready for final review
+        - When you need feedback on the approach but implementation is incomplete
+        - When tests are still failing or need to be written
+        - When documentation needs to be updated before merging
+        - When the user explicitly asks for a draft PR
+        ```bash
+        ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --draft
+        ```
+    - Use the `--no-browser` option only for automation or when explicitly requested
+    - Use syntax with comma-separated lists instead of trying to create multiline strings directly.
     - Only fall back to direct git commands if the ai-pr.sh is not available.
     - When a PR is explicitly requested with words like "pr" or "create pr", leverage AI capabilities for intelligent summarization:
         - Analyzing all commits on the branch to understand the complete change set
