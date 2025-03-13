@@ -75,9 +75,86 @@ else
     log "${YELLOW}No docs directory found${NC}"
 fi
 
-# Use hardcoded provider names since we know what they are
-PROVIDERS_PRETTY="Ollama, OpenAI, Anthropic"
-log "${BLUE}Using provider display names: $PROVIDERS_PRETTY${NC}"
+# Extract provider enum values from app_config.rs
+PROVIDER_CONFIG="$PROJECT_ROOT/src/app_config.rs"
+PROVIDERS_PRETTY=""
+
+# Default fallback in case extraction fails
+DEFAULT_PROVIDERS="Ollama, OpenAI, Anthropic"
+
+if [ -f "$PROVIDER_CONFIG" ]; then
+    log "${GREEN}Found provider configuration${NC}"
+    
+    # First, try to extract the enum variants
+    ENUM_START=$(grep -n "pub enum TranslationProvider" "$PROVIDER_CONFIG" | cut -d ':' -f1)
+    
+    if [ -n "$ENUM_START" ]; then
+        # Find the line where the enum ends by finding the first closing brace after the enum start
+        ENUM_END=$(tail -n +$ENUM_START "$PROVIDER_CONFIG" | grep -n "^}" | head -1 | cut -d ':' -f1)
+        ENUM_END=$((ENUM_START + ENUM_END - 1))
+        
+        # Extract the enum variants
+        VARIANTS=$(sed -n "${ENUM_START},${ENUM_END}p" "$PROVIDER_CONFIG" | grep -o "#\[default\]\s*\|\s*[A-Za-z]\+," | sed 's/#\[default\]//g' | sed 's/,//g' | sed 's/^[[:space:]]*//g' | grep -v "^$")
+        
+        if [ -n "$VARIANTS" ]; then
+            log "${BLUE}Found TranslationProvider enum variants${NC}"
+            
+            # Now extract display names from display_name method
+            DISPLAY_NAME_START=$(grep -n "pub fn display_name" "$PROVIDER_CONFIG" | cut -d ':' -f1)
+            
+            if [ -n "$DISPLAY_NAME_START" ]; then
+                # Find the end of the display_name method
+                DISPLAY_NAME_END=$(tail -n +$DISPLAY_NAME_START "$PROVIDER_CONFIG" | grep -n "^[[:space:]]*}$" | head -1 | cut -d ':' -f1)
+                DISPLAY_NAME_END=$((DISPLAY_NAME_START + DISPLAY_NAME_END - 1))
+                
+                # Extract display names
+                DISPLAY_NAMES=""
+                
+                # Process each variant
+                while read -r variant; do
+                    # Find the corresponding display name
+                    DISPLAY_NAME=$(sed -n "${DISPLAY_NAME_START},${DISPLAY_NAME_END}p" "$PROVIDER_CONFIG" | grep -o "Self::${variant}[[:space:]]*=>[[:space:]]*\"[^\"]*\"" | grep -o "\"[^\"]*\"" | tr -d '"')
+                    
+                    if [ -n "$DISPLAY_NAME" ]; then
+                        if [ -z "$DISPLAY_NAMES" ]; then
+                            DISPLAY_NAMES="$DISPLAY_NAME"
+                        else
+                            DISPLAY_NAMES="$DISPLAY_NAMES, $DISPLAY_NAME"
+                        fi
+                    fi
+                done <<< "$VARIANTS"
+                
+                if [ -n "$DISPLAY_NAMES" ]; then
+                    PROVIDERS_PRETTY="$DISPLAY_NAMES"
+                    log "${BLUE}Provider display names: $PROVIDERS_PRETTY${NC}"
+                else
+                    log "${YELLOW}Could not extract provider display names from enum${NC}"
+                    PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
+                fi
+            else
+                log "${YELLOW}Could not find display_name method${NC}"
+                PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
+            fi
+        else
+            log "${YELLOW}Could not extract enum variants${NC}"
+            PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
+        fi
+    else
+        log "${YELLOW}Could not find TranslationProvider enum${NC}"
+        PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
+    fi
+else
+    log "${YELLOW}Could not find provider configuration${NC}"
+    PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
+fi
+
+# If we couldn't extract the providers, use the default
+if [ -z "$PROVIDERS_PRETTY" ]; then
+    PROVIDERS_PRETTY="$DEFAULT_PROVIDERS"
+    log "${YELLOW}Using default providers: $PROVIDERS_PRETTY${NC}"
+else
+    log "${GREEN}Using extracted providers: $PROVIDERS_PRETTY${NC}"
+fi
 
 # Check for example config
 EXAMPLE_CONFIG="$PROJECT_ROOT/conf.example.json"
