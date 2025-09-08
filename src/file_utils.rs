@@ -5,7 +5,7 @@ use walkdir::WalkDir;
 use std::fs::OpenOptions;
 use std::io::Write;
 use chrono::Local;
-use std::process::Command;
+use tokio::process::Command;
 use regex::Regex;
 
 // @module: File and directory utilities
@@ -148,7 +148,7 @@ impl FileManager {
     }
 
     /// Detect if a file is a subtitle file (SRT) or a video file supported by ffmpeg
-    pub fn detect_file_type<P: AsRef<Path>>(path: P) -> Result<FileType> {
+    pub async fn detect_file_type<P: AsRef<Path>>(path: P) -> Result<FileType> {
         let path = path.as_ref();
         
         if !path.exists() {
@@ -177,7 +177,8 @@ impl FileManager {
         }
         
         // If extension check doesn't work, try to examine the file with ffprobe
-        let output = Command::new("ffprobe")
+        // Use timeout to prevent hanging on problematic files
+        let ffprobe_future = Command::new("ffprobe")
             .arg("-v")
             .arg("error")
             .arg("-show_entries")
@@ -186,6 +187,14 @@ impl FileManager {
             .arg("default=noprint_wrappers=1:nokey=1")
             .arg(path)
             .output();
+        
+        let timeout_duration = std::time::Duration::from_secs(30); // 30 second timeout
+        let output = tokio::select! {
+            result = ffprobe_future => result,
+            _ = tokio::time::sleep(timeout_duration) => {
+                return Err(anyhow::anyhow!("ffprobe command timed out after 30 seconds"));
+            }
+        };
         
         if let Ok(output) = output {
             if output.status.success() {

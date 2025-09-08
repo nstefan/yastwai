@@ -78,7 +78,7 @@ impl Controller {
         }
         
         // Detect file type
-        let file_type = FileManager::detect_file_type(&input_file)?;
+        let file_type = FileManager::detect_file_type(&input_file).await?;
         
         // If it's a subtitle file, process it directly without extraction
         if file_type == FileType::Subtitle {

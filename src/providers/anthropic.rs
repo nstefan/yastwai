@@ -392,22 +392,31 @@ impl Anthropic {
     
     /// Send a single request to the Anthropic API
     async fn send_request(&self, api_url: &str, request: &AnthropicRequest) -> Result<AnthropicResponse, ProviderError> {
-        let response = self.client.post(api_url)
+        // Add timeout to prevent hanging HTTP requests
+        let request_future = self.client.post(api_url)
             .header("Content-Type", "application/json")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .json(request)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    ProviderError::ConnectionError(format!("Request timed out: {}", e))
-                } else if e.is_connect() {
-                    ProviderError::ConnectionError(format!("Connection failed: {}", e))
-                } else {
-                    ProviderError::RequestFailed(e.to_string())
-                }
-            })?;
+            .send();
+        
+        let timeout_duration = std::time::Duration::from_secs(60); // 1 minute timeout
+        let response = tokio::select! {
+            result = request_future => {
+                result.map_err(|e| {
+                    if e.is_timeout() {
+                        ProviderError::ConnectionError(format!("Request timed out: {}", e))
+                    } else if e.is_connect() {
+                        ProviderError::ConnectionError(format!("Connection failed: {}", e))
+                    } else {
+                        ProviderError::RequestFailed(e.to_string())
+                    }
+                })?
+            },
+            _ = tokio::time::sleep(timeout_duration) => {
+                return Err(ProviderError::ConnectionError("Anthropic API request timed out after 60 seconds".to_string()));
+            }
+        };
         
         let status = response.status();
         if !status.is_success() {
