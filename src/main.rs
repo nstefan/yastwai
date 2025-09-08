@@ -169,7 +169,7 @@ async fn main() -> Result<()> {
         
         if let Some(model) = &options.model {
             // Find the provider config and update the model
-            let provider_str = config.translation.provider.to_string();
+            let provider_str = config.translation.provider.to_lowercase_string();
             if let Some(provider_config) = config.translation.available_providers.iter_mut()
                 .find(|p| p.provider_type == provider_str) {
                 provider_config.model = model.clone();
@@ -210,6 +210,10 @@ async fn main() -> Result<()> {
         
         config
     };
+    
+    // Validate the configuration after loading and overriding
+    config.validate()
+        .context("Configuration validation failed")?;
     
     // If log level was not set via command line, update it from config now
     if options.log_level.is_none() {
@@ -490,11 +494,11 @@ async fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_c
         // Find track matching the requested language
         let lang = lang.to_lowercase();
         if let Some(matching_track) = tracks.iter().find(|t| 
-            t.language.as_ref().map_or(false, |track_lang| language_utils::language_codes_match(track_lang, &lang))) {
+            t.language.as_ref().is_some_and(|track_lang| language_utils::language_codes_match(track_lang, &lang))) {
             debug!("Selected track {} matching requested language: {}", 
                  matching_track.index, 
                  matching_track.language.as_deref().unwrap_or("unknown"));
-            matching_track.index as usize
+            matching_track.index
         } else {
             warn!("No track found matching requested language: {}. Available languages: {}", 
                  lang, 
@@ -509,11 +513,11 @@ async fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_c
         info!("No language specified, using first track: {} ({})", 
              tracks[0].language.as_deref().unwrap_or("unknown"), 
              tracks[0].title.as_deref().unwrap_or("No title"));
-        tracks[0].index as usize
+        tracks[0].index
     };
     
     // Create output filename
-    let track_info = tracks.iter().find(|t| t.index as usize == track_id)
+    let track_info = tracks.iter().find(|t| t.index == track_id)
         .expect("Track should exist");
     
     // Determine the language code to use in the output filename

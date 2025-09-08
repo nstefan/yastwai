@@ -48,17 +48,27 @@ impl TranslationProvider {
     }
     
     // @returns: Lowercase provider identifier
-    pub fn to_string(&self) -> String {
+    pub fn to_lowercase_string(&self) -> String {
         match self {
             Self::Ollama => "ollama".to_string(),
             Self::OpenAI => "openai".to_string(),
             Self::Anthropic => "anthropic".to_string(),
         }
     }
+}
+
+// Implement Display trait for TranslationProvider
+impl std::fmt::Display for TranslationProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_lowercase_string())
+    }
+}
+
+// Implement FromStr trait for TranslationProvider
+impl std::str::FromStr for TranslationProvider {
+    type Err = anyhow::Error;
     
-    // @param s: Provider identifier string
-    // @returns: Provider enum or error
-    pub fn from_str(s: &str) -> Result<Self> {
+    fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
             "ollama" => Ok(Self::Ollama),
             "openai" => Ok(Self::OpenAI),
@@ -144,7 +154,7 @@ impl ProviderConfig {
     
     // @returns: Provider enum from string field
     pub fn get_provider_type(&self) -> Result<TranslationProvider> {
-        TranslationProvider::from_str(&self.provider_type)
+        self.provider_type.parse::<TranslationProvider>()
     }
 }
 
@@ -503,15 +513,6 @@ impl Config {
         Ok(())
     }
     
-    /// Create a new configuration with default values
-    pub fn default() -> Self {
-        Config {
-            source_language: "en".to_string(),
-            target_language: "fr".to_string(),
-            translation: TranslationConfig::default(),
-            log_level: LogLevel::default(),
-        }
-    }
     
     /// Save the configuration to a file
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
@@ -519,6 +520,18 @@ impl Config {
         std::fs::write(&path, json)?;
         
         Ok(())
+    }
+}
+
+/// Default implementation for Config
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            source_language: "en".to_string(),
+            target_language: "fr".to_string(),
+            translation: TranslationConfig::default(),
+            log_level: LogLevel::default(),
+        }
     }
 }
 
@@ -541,14 +554,14 @@ impl TranslationConfig {
     
     /// Get the active provider configuration from the available_providers array
     pub fn get_active_provider_config(&self) -> Option<&ProviderConfig> {
-        let provider_str = self.provider.to_string();
+        let provider_str = self.provider.to_lowercase_string();
         self.available_providers.iter()
             .find(|p| p.provider_type == provider_str)
     }
     
     /// Get a specific provider configuration by type
     pub fn get_provider_config(&self, provider_type: &TranslationProvider) -> Option<&ProviderConfig> {
-        let provider_str = provider_type.to_string();
+        let provider_str = provider_type.to_lowercase_string();
         self.available_providers.iter()
             .find(|p| p.provider_type == provider_str)
     }

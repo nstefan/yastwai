@@ -9,7 +9,7 @@ use anyhow::{Result, anyhow};
 use std::time::{Duration, Instant};
 use url::Url;
 use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
+use tokio::sync::Mutex;
 
 use crate::app_config::{TranslationConfig, TranslationProvider as ConfigTranslationProvider};
 use crate::providers::ollama::{Ollama, GenerationRequest};
@@ -46,6 +46,12 @@ pub struct TokenUsageStats {
     
     /// Model name
     pub model: String,
+}
+
+impl Default for TokenUsageStats {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TokenUsageStats {
@@ -232,7 +238,7 @@ impl TranslationService {
             },
             ConfigTranslationProvider::OpenAI => {
                 TranslationProviderImpl::OpenAI {
-                    client: OpenAI::new(&config.get_api_key(), &config.get_endpoint()),
+                    client: OpenAI::new(config.get_api_key(), config.get_endpoint()),
                 }
             },
             ConfigTranslationProvider::Anthropic => {
@@ -241,8 +247,8 @@ impl TranslationService {
                 
                 TranslationProviderImpl::Anthropic {
                     client: Anthropic::new_with_config(
-                        &config.get_api_key(),
-                        &config.get_endpoint(),
+                        config.get_api_key(),
+                        config.get_endpoint(),
                         DEFAULT_MAX_RETRIES,
                         DEFAULT_INITIAL_BACKOFF_MS,
                         rate_limit,
@@ -270,12 +276,12 @@ impl TranslationService {
         &self, 
         source_language: &str, 
         target_language: &str,
-        log_capture: Option<Arc<StdMutex<Vec<LogEntry>>>>
+        log_capture: Option<Arc<Mutex<Vec<LogEntry>>>>
     ) -> Result<()> {
         // Log the test attempt
         if let Some(log) = &log_capture {
-            log.lock().unwrap().push(LogEntry {
-                level: "info".to_string(),
+            log.lock().await.push(LogEntry {
+                level: "INFO".to_string(),
                 message: format!("Testing connection to {:?} with model {}", 
                                 self.config.provider, self.config.get_model()),
             });
@@ -287,16 +293,16 @@ impl TranslationService {
                 match result {
                     Ok(_version) => {
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
-                                level: "info".to_string(),
-                                message: format!("Successfully connected to Ollama"),
+                            log.lock().await.push(LogEntry {
+                                level: "INFO".to_string(),
+                                message: "Successfully connected to Ollama".to_string(),
                             });
                         }
                         Ok(())
                     },
                     Err(e) => {
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "ERROR".to_string(),
                                 message: format!("Failed to connect to Ollama: {}", e),
                             });
@@ -311,8 +317,8 @@ impl TranslationService {
                 match test_result {
                     Ok(_) => {
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
-                                level: "info".to_string(),
+                            log.lock().await.push(LogEntry {
+                                level: "INFO".to_string(),
                                 message: "Successfully connected to OpenAI API".to_string(),
                             });
                         }
@@ -320,7 +326,7 @@ impl TranslationService {
                     },
                     Err(e) => {
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "ERROR".to_string(),
                                 message: format!("Failed to connect to OpenAI API: {}", e),
                             });
@@ -335,7 +341,7 @@ impl TranslationService {
                 match test_result {
                     Ok(_) => {
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "INFO".to_string(),
                                 message: "Successfully connected to Anthropic API".to_string(),
                             });
@@ -344,7 +350,7 @@ impl TranslationService {
                     },
                     Err(e) => {
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "ERROR".to_string(),
                                 message: format!("Failed to connect to Anthropic API: {}", e),
                             });
@@ -374,7 +380,7 @@ impl TranslationService {
         text: &str, 
         source_language: &str, 
         target_language: &str,
-        log_capture: Option<Arc<StdMutex<Vec<LogEntry>>>>
+        log_capture: Option<Arc<Mutex<Vec<LogEntry>>>>
     ) -> Result<(String, Option<(Option<u64>, Option<u64>, Option<Duration>)>)> {
         let start_time = Instant::now();
         
@@ -394,7 +400,7 @@ impl TranslationService {
         match &self.provider {
             TranslationProviderImpl::Ollama { client } => {
                 // Create generation request
-                let request = GenerationRequest::new(&self.config.get_model(), text)
+                let request = GenerationRequest::new(self.config.get_model(), text)
                     .system(&system_prompt)
                     .temperature(self.config.common.temperature);
                 
@@ -407,7 +413,7 @@ impl TranslationService {
                         
                         // Log the response if requested
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "INFO".to_string(),
                                 message: format!("Ollama response received in {:?}", duration),
                             });
@@ -422,7 +428,7 @@ impl TranslationService {
                     Err(e) => {
                         // Log the error if requested
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "ERROR".to_string(),
                                 message: format!("Ollama translation error: {}", e),
                             });
@@ -434,7 +440,7 @@ impl TranslationService {
             },
             TranslationProviderImpl::OpenAI { client } => {
                 // Create OpenAI request
-                let request = OpenAIRequest::new(&self.config.get_model())
+                let request = OpenAIRequest::new(self.config.get_model())
                     .add_message("system", &system_prompt)
                     .add_message("user", text)
                     .temperature(self.config.common.temperature)
@@ -449,7 +455,7 @@ impl TranslationService {
                         
                         // Log the response if requested
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "INFO".to_string(),
                                 message: format!("OpenAI response received in {:?}", duration),
                             });
@@ -472,7 +478,7 @@ impl TranslationService {
                     Err(e) => {
                         // Log the error if requested
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "ERROR".to_string(),
                                 message: format!("OpenAI translation error: {}", e),
                             });
@@ -484,7 +490,7 @@ impl TranslationService {
             },
             TranslationProviderImpl::Anthropic { client } => {
                 // Create Anthropic request
-                let request = AnthropicRequest::new(&self.config.get_model(), self.max_tokens_for_model(&self.config.get_model()))
+                let request = AnthropicRequest::new(self.config.get_model(), self.max_tokens_for_model(&self.config.get_model()))
                     .system(&system_prompt)
                     .add_message("user", text)
                     .temperature(self.config.common.temperature);
@@ -498,7 +504,7 @@ impl TranslationService {
                         
                         // Log the response if requested
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "INFO".to_string(),
                                 message: format!("Anthropic response received in {:?}", duration),
                             });
@@ -518,7 +524,7 @@ impl TranslationService {
                     Err(e) => {
                         // Log the error if requested
                         if let Some(log) = &log_capture {
-                            log.lock().unwrap().push(LogEntry {
+                            log.lock().await.push(LogEntry {
                                 level: "ERROR".to_string(),
                                 message: format!("Anthropic translation error: {}", e),
                             });
@@ -558,6 +564,8 @@ impl TranslationService {
 impl Clone for TranslationService {
     fn clone(&self) -> Self {
         // Create a new instance with the same config
-        TranslationService::new(self.config.clone()).unwrap()
+        // This should not fail if the original instance was created successfully
+        TranslationService::new(self.config.clone())
+            .expect("Failed to clone TranslationService - this indicates a serious configuration issue")
     }
 } 

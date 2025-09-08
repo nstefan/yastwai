@@ -10,9 +10,8 @@ use crate::file_utils;
 use std::sync::Once;
 use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use std::sync::Arc;
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 use crate::file_utils::{FileManager, FileType};
-use chrono;
 use std::time::Duration;
 
 // @module: Application controller for subtitle processing
@@ -130,7 +129,7 @@ impl Controller {
                     return Ok(());
                 }
             }
-        } else if let Some(_) = self.find_target_language_track(&input_file).await? {
+        } else if (self.find_target_language_track(&input_file).await?).is_some() {
             warn!("Skipping file, translation already exists (use -f to force overwrite)");
             return Ok(());
         }
@@ -140,14 +139,13 @@ impl Controller {
         INIT_TEST.call_once(|| {
             // Skip translation test for better performance, will fail later if there's an issue
             
-            // Run test in a background thread to avoid blocking
+            // Run test in a background task using tokio::spawn
             let config_clone = self.config.clone();
-            std::thread::spawn(move || {
-                if let Ok(rt) = tokio::runtime::Runtime::new() {
-                    let _ = rt.block_on(async {
-                        let translation_service = TranslationService::new(config_clone.translation)?;
-                        translation_service.test_connection(&config_clone.source_language, &config_clone.target_language, None).await
-                    });
+            let source_lang = self.config.source_language.clone();
+            let target_lang = self.config.target_language.clone();
+            tokio::spawn(async move {
+                if let Ok(translation_service) = TranslationService::new(config_clone.translation) {
+                    let _ = translation_service.test_connection(&source_lang, &target_lang, None).await;
                 }
             });
         });
@@ -207,8 +205,6 @@ impl Controller {
         }
     }
     
-    /// Translate subtitles from source to target language
-    
     /// Internal method to translate subtitles with a progress bar from the provided MultiProgress
     async fn translate_subtitles_with_progress(&self, subtitles: SubtitleCollection, multi_progress: &MultiProgress, output_dir: &Path) -> Result<(SubtitleCollection, std::time::Duration)> {
         // Start timing the translation process
@@ -226,12 +222,11 @@ impl Controller {
         // Create a progress bar for translation tracking
         let total_chunks = chunks.len() as u64;
         let progress_bar = multi_progress.add(ProgressBar::new(total_chunks));
-        progress_bar.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg} {eta}")
-                .expect("Invalid progress bar template")
-                .progress_chars("█▓▒░")
-        );
+        let template_result = ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg} {eta}")
+            .or_else(|_| ProgressStyle::default_bar().template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}"))
+            .unwrap_or_else(|_| ProgressStyle::default_bar());
+        progress_bar.set_style(template_result.progress_chars("█▓▒░"));
         
         // Log that we're starting translation with provider and model info
         info!("🚀 YASTwAI: {} - {}", 
@@ -270,8 +265,7 @@ impl Controller {
         
         // Now that the progress bar is finished, print any captured logs
         let logs = {
-            let logs_guard = log_capture.lock().unwrap();
-            // Clone the Vec to avoid issues with MutexGuard
+            let logs_guard = log_capture.lock().await;
             logs_guard.clone()
         };
         
@@ -300,7 +294,7 @@ impl Controller {
             let context = format!("{} - {} ({})",
                 self.config.translation.provider.display_name(), 
                 self.config.translation.get_model(),
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
                 
             if let Err(e) = self.write_logs_to_file(&logs, &log_file_path, &context) {
                 warn!("Failed to write logs to file: {}", e);
@@ -407,12 +401,11 @@ impl Controller {
         
         // Create a progress bar for folder processing
         let folder_pb = multi_progress.add(ProgressBar::new(video_files.len() as u64));
-        folder_pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({percent}%) {msg} {eta}")
-                .expect("Invalid progress bar template")
-                .progress_chars("█▓▒░")
-        );
+        let template_result = ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({percent}%) {msg} {eta}")
+            .or_else(|_| ProgressStyle::default_bar().template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}"))
+            .unwrap_or_else(|_| ProgressStyle::default_bar());
+        folder_pb.set_style(template_result.progress_chars("█▓▒░"));
         folder_pb.set_message("Processing files");
         
         // Track success and failure counts
@@ -421,7 +414,7 @@ impl Controller {
         let mut skip_count = 0;
         
         // Process each video file
-        for (_index, video_file) in video_files.iter().enumerate() {
+        for video_file in video_files.iter() {
             // Get the file name for display
             let file_name = video_file.file_name()
                 .map(|f| f.to_string_lossy().to_string())
@@ -478,7 +471,7 @@ impl Controller {
         let log_file_path = input_dir.join("yastwai.issues.log").to_string_lossy().to_string();
         let context = format!("Folder Processing: {} ({})",
             input_dir.display(),
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
             
         let folder_log_entry = LogEntry {
             level: "INFO".to_string(),
@@ -560,12 +553,11 @@ impl Controller {
         
         // Create a file progress bar
         let file_pb = multi_progress.add(ProgressBar::new(10));
-        file_pb.set_style(
-            ProgressStyle::default_bar()
+            let template_result = ProgressStyle::default_bar()
                 .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg}")
-                .expect("Invalid progress bar template")
-                .progress_chars("█▓▒░")
-        );
+                .or_else(|_| ProgressStyle::default_bar().template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}"))
+                .unwrap_or_else(|_| ProgressStyle::default_bar());
+            file_pb.set_style(template_result.progress_chars("█▓▒░"));
         file_pb.set_message("Translating test file");
         
         // Simulate progress updates
@@ -590,12 +582,11 @@ impl Controller {
         
         // Create a folder progress bar
         let folder_pb = multi_progress.add(ProgressBar::new(3));
-        folder_pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({percent}%) {msg}")
-                .expect("Invalid progress bar template")
-                .progress_chars("█▓▒░")
-        );
+        let template_result = ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({percent}%) {msg}")
+            .or_else(|_| ProgressStyle::default_bar().template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}"))
+            .unwrap_or_else(|_| ProgressStyle::default_bar());
+        folder_pb.set_style(template_result.progress_chars("█▓▒░"));
         folder_pb.set_message("Processing test files");
         
         // Simulate processing 3 files
@@ -606,12 +597,11 @@ impl Controller {
             
             // Create a file progress bar
             let file_pb = multi_progress.add(ProgressBar::new(5));
-            file_pb.set_style(
-                ProgressStyle::default_bar()
-                    .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg}")
-                    .expect("Invalid progress bar template")
-                    .progress_chars("█▓▒░")
-            );
+            let template_result = ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg}")
+                .or_else(|_| ProgressStyle::default_bar().template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}"))
+                .unwrap_or_else(|_| ProgressStyle::default_bar());
+            file_pb.set_style(template_result.progress_chars("█▓▒░"));
             file_pb.set_message(format!("Translating {}", file_name));
             
             // Simulate progress updates
