@@ -130,9 +130,13 @@ detect_model() {
         local SQL_PREFIX="PRAGMA query_only=ON;"
         local SQL_RECENT="SELECT hex(value) FROM cursorDiskKV WHERE key GLOB 'composerData:*' ORDER BY rowid DESC LIMIT ${FAST_LIMIT};"
 
+        # Execute SQLite query once and search for both patterns
+        local sqlite_data
+        sqlite_data=$(LC_ALL=C sqlite3 "${SQLITE_FLAGS[@]}" "$DB_PATH_FAST" "${SQL_PREFIX} ${SQL_RECENT}" | xxd -r -p || true)
+        
         # Try modelName first (Cursor commonly stores it under this key)
         local fast_from_composer
-        fast_from_composer=$(LC_ALL=C sqlite3 "${SQLITE_FLAGS[@]}" "$DB_PATH_FAST" "${SQL_PREFIX} ${SQL_RECENT}" | xxd -r -p | grep -m 1 -ao '"modelName":"[^\"]*"' | cut -d '"' -f4 || true)
+        fast_from_composer=$(echo "$sqlite_data" | grep -ao '"modelName":"[^\"]*"' | cut -d '"' -f4 | head -1 || true)
         if [[ -n "$fast_from_composer" ]]; then
             if [[ "$fast_from_composer" != *"-thinking" ]]; then
                 detected_model="$fast_from_composer"; source="db-fast(composerData:modelName)"; echo "$detected_model|$source"; return
@@ -140,7 +144,7 @@ detect_model() {
         fi
         # Fallback: composerModel field
         local fast_comp_model
-        fast_comp_model=$(LC_ALL=C sqlite3 "${SQLITE_FLAGS[@]}" "$DB_PATH_FAST" "${SQL_PREFIX} ${SQL_RECENT}" | xxd -r -p | grep -m 1 -ao '"composerModel":"[^\"]*"' | cut -d '"' -f4 || true)
+        fast_comp_model=$(echo "$sqlite_data" | grep -ao '"composerModel":"[^\"]*"' | cut -d '"' -f4 | head -1 || true)
         if [[ -n "$fast_comp_model" ]]; then
             if [[ "$fast_comp_model" != *"-thinking" ]]; then
                 detected_model="$fast_comp_model"; source="db-fast(composerData:composerModel)"; echo "$detected_model|$source"; return
