@@ -568,7 +568,7 @@ async fn extraction_only_mode_for_folder(input_dir: &Path, language_code: Option
         let path = entry.path();
         
         // Skip directories and non-video files
-        if path.is_dir() || !is_video_file(path) {
+        if path.is_dir() || !is_video_file(path).await {
             continue;
         }
         
@@ -588,13 +588,13 @@ async fn extraction_only_mode_for_folder(input_dir: &Path, language_code: Option
 }
 
 // Helper function to check if a file is a video file
-fn is_video_file(path: &Path) -> bool {
+async fn is_video_file(path: &Path) -> bool {
     if !path.is_file() {
         return false;
     }
     
     // Check if it's a video file using FileManager
-    if let Ok(file_type) = file_utils::FileManager::detect_file_type(path) {
+    if let Ok(file_type) = file_utils::FileManager::detect_file_type(path).await {
         matches!(file_type, file_utils::FileType::Video)
     } else {
         false

@@ -230,7 +230,8 @@ impl SubtitleCollection {
         };
         
         // Use ffmpeg to extract the subtitle directly to SRT file
-        let result = Command::new("ffmpeg")
+        // Add timeout to prevent hanging on problematic files
+        let ffmpeg_future = Command::new("ffmpeg")
             .args([
                 "-y",                       // Overwrite existing file
                 "-i", video_path.to_str().unwrap_or_default(),
@@ -238,9 +239,17 @@ impl SubtitleCollection {
                 "-c:s", "srt",              // SRT output format
                 output_path.to_str().unwrap_or_default()
             ])
-            .output()
-            .await
-            .map_err(|e| anyhow!("Failed to execute ffmpeg command for subtitle extraction: {}", e))?;
+            .output();
+        
+        let timeout_duration = std::time::Duration::from_secs(120); // 2 minute timeout for ffmpeg
+        let result = tokio::select! {
+            result = ffmpeg_future => {
+                result.map_err(|e| anyhow!("Failed to execute ffmpeg command for subtitle extraction: {}", e))?
+            },
+            _ = tokio::time::sleep(timeout_duration) => {
+                return Err(anyhow!("ffmpeg command timed out after 2 minutes"));
+            }
+        };
 
         if !result.status.success() {
             let stderr = String::from_utf8_lossy(&result.stderr);
@@ -405,7 +414,8 @@ impl SubtitleCollection {
         }
         
         // Remove verbose stack trace and unnecessary ffprobe details logs
-        let output = Command::new("ffprobe")
+        // Add timeout to prevent hanging on problematic files
+        let ffprobe_future = Command::new("ffprobe")
             .args([
                 "-v", "quiet",
                 "-print_format", "json",
@@ -413,9 +423,17 @@ impl SubtitleCollection {
                 "-select_streams", "s",
                 video_path.to_str().unwrap_or("")
             ])
-            .output()
-            .await
-            .map_err(|e| anyhow!("Failed to execute ffprobe command: {}", e))?;
+            .output();
+        
+        let timeout_duration = std::time::Duration::from_secs(60); // 1 minute timeout
+        let output = tokio::select! {
+            result = ffprobe_future => {
+                result.map_err(|e| anyhow!("Failed to execute ffprobe command: {}", e))?
+            },
+            _ = tokio::time::sleep(timeout_duration) => {
+                return Err(anyhow!("ffprobe command timed out after 60 seconds"));
+            }
+        };
             
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

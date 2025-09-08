@@ -203,13 +203,22 @@ impl OpenAI {
             format!("{}/chat/completions", self.endpoint.trim_end_matches('/'))
         };
         
-        let response = self.client.post(&api_url)
+        // Add timeout to prevent hanging HTTP requests
+        let request_future = self.client.post(&api_url)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&request)
-            .send()
-            .await
-            .map_err(|e| anyhow!("Failed to send request to OpenAI API: {}", e))?;
+            .send();
+        
+        let timeout_duration = std::time::Duration::from_secs(60); // 1 minute timeout
+        let response = tokio::select! {
+            result = request_future => {
+                result.map_err(|e| anyhow!("Failed to send request to OpenAI API: {}", e))?
+            },
+            _ = tokio::time::sleep(timeout_duration) => {
+                return Err(anyhow!("OpenAI API request timed out after 60 seconds"));
+            }
+        };
         
         let status = response.status();
         if !status.is_success() {
