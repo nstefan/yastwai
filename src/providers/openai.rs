@@ -12,6 +12,12 @@ pub struct OpenAI {
     api_key: String,
     /// API endpoint URL
     endpoint: String,
+    /// Maximum number of retry attempts
+    max_retries: u32,
+    /// Base backoff time in milliseconds for exponential backoff
+    backoff_base_ms: u64,
+    /// Optional rate limit in requests per minute
+    rate_limit: Option<u32>,
 }
 
 /// OpenAI chat completion request
@@ -192,10 +198,34 @@ impl OpenAI {
                 .unwrap_or_default(),
             api_key: api_key.into(),
             endpoint: endpoint.into(),
+            max_retries: 3,
+            backoff_base_ms: 1000,
+            rate_limit: None,
         }
     }
     
-    /// Complete a chat request
+    /// Create a new OpenAI client with configuration
+    pub fn new_with_config(
+        api_key: impl Into<String>, 
+        endpoint: impl Into<String>,
+        max_retries: u32,
+        backoff_base_ms: u64,
+        rate_limit: Option<u32>
+    ) -> Self {
+        Self {
+            client: Client::builder()
+                .timeout(Duration::from_secs(60))
+                .build()
+                .unwrap_or_default(),
+            api_key: api_key.into(),
+            endpoint: endpoint.into(),
+            max_retries,
+            backoff_base_ms,
+            rate_limit,
+        }
+    }
+    
+    /// Complete a chat request with retry logic
     pub async fn complete(&self, request: OpenAIRequest) -> Result<OpenAIResponse> {
         let api_url = if self.endpoint.is_empty() {
             "https://api.openai.com/v1/chat/completions".to_string()
@@ -203,35 +233,75 @@ impl OpenAI {
             format!("{}/chat/completions", self.endpoint.trim_end_matches('/'))
         };
         
-        // Add timeout to prevent hanging HTTP requests
-        let request_future = self.client.post(&api_url)
-            .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .json(&request)
-            .send();
+        let mut attempt = 0;
+        let mut last_error = None;
         
-        let timeout_duration = std::time::Duration::from_secs(60); // 1 minute timeout
-        let response = tokio::select! {
-            result = request_future => {
-                result.map_err(|e| anyhow!("Failed to send request to OpenAI API: {}", e))?
-            },
-            _ = tokio::time::sleep(timeout_duration) => {
-                return Err(anyhow!("OpenAI API request timed out after 60 seconds"));
+        while attempt <= self.max_retries {
+            // Add rate limiting if configured
+            if let Some(rate_limit) = self.rate_limit {
+                let delay_ms = 60_000 / rate_limit as u64; // Convert requests per minute to milliseconds
+                if attempt > 0 {
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                }
             }
-        };
-        
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await
-                .unwrap_or_else(|_| "Failed to get error response text".to_string());
-            error!("OpenAI API error ({}): {}", status, error_text);
-            return Err(anyhow!("OpenAI API error ({}): {}", status, error_text));
+            
+            // Add timeout to prevent hanging HTTP requests
+            let request_future = self.client.post(&api_url)
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .json(&request)
+                .send();
+            
+            let timeout_duration = Duration::from_secs(60); // 1 minute timeout
+            let response_result = tokio::select! {
+                result = request_future => {
+                    result.map_err(|e| anyhow!("Failed to send request to OpenAI API: {}", e))
+                },
+                _ = tokio::time::sleep(timeout_duration) => {
+                    Err(anyhow!("OpenAI API request timed out after 60 seconds"))
+                }
+            };
+            
+            match response_result {
+                Ok(response) => {
+                    let status = response.status();
+                    if status.is_success() {
+                        // Success - parse and return response
+                        let openai_response = response.json::<OpenAIResponse>().await
+                            .with_context(|| "Failed to parse OpenAI API response")?;
+                        return Ok(openai_response);
+                    } else if status.as_u16() == 429 || status.is_server_error() {
+                        // Rate limit or server error - can retry
+                        let error_text = response.text().await
+                            .unwrap_or_else(|_| "Failed to get error response text".to_string());
+                        last_error = Some(anyhow!("OpenAI API error ({}): {}", status, error_text));
+                        error!("OpenAI API error ({}): {} - attempt {}/{}", status, error_text, attempt + 1, self.max_retries + 1);
+                    } else {
+                        // Client error (4xx, but not 429) - don't retry
+                        let error_text = response.text().await
+                            .unwrap_or_else(|_| "Failed to get error response text".to_string());
+                        error!("OpenAI API error ({}): {}", status, error_text);
+                        return Err(anyhow!("OpenAI API error ({}): {}", status, error_text));
+                    }
+                },
+                Err(e) => {
+                    // Network error - can retry
+                    last_error = Some(e);
+                    error!("OpenAI API network error: {} - attempt {}/{}", last_error.as_ref().unwrap(), attempt + 1, self.max_retries + 1);
+                }
+            }
+            
+            attempt += 1;
+            
+            // If we have more retries left, wait with exponential backoff
+            if attempt <= self.max_retries {
+                let backoff_ms = self.backoff_base_ms * (1u64 << (attempt - 1));
+                tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+            }
         }
         
-        let openai_response = response.json::<OpenAIResponse>().await
-            .with_context(|| "Failed to parse OpenAI API response")?;
-        
-        Ok(openai_response)
+        // If we get here, all retries failed
+        Err(last_error.unwrap_or_else(|| anyhow!("OpenAI API request failed after {} attempts", self.max_retries + 1)))
     }
     
     /// Test the connection to the OpenAI API

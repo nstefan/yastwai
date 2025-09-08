@@ -17,11 +17,6 @@ use crate::providers::openai::{OpenAI, OpenAIRequest};
 use crate::providers::anthropic::{Anthropic, AnthropicRequest};
 use crate::providers::Provider;
 
-/// Default max retries for API requests
-const DEFAULT_MAX_RETRIES: u32 = 3;
-
-/// Default initial backoff duration in milliseconds
-const DEFAULT_INITIAL_BACKOFF_MS: u64 = 100;
 
 /// Token usage statistics for tracking API consumption
 #[derive(Clone)]
@@ -232,35 +227,58 @@ impl TranslationService {
         let provider = match config.provider {
             ConfigTranslationProvider::Ollama => {
                 let (host, port) = parse_endpoint(&config.get_endpoint())?;
+                let retry_count = config.common.retry_count;
+                let retry_backoff_ms = config.common.retry_backoff_ms;
+                let rate_limit = config.get_rate_limit();
+                
                 TranslationProviderImpl::Ollama {
-                    client: Ollama::new(&host, port),
+                    client: Ollama::new_with_config(&host, port, retry_count, retry_backoff_ms, rate_limit),
                 }
             },
             ConfigTranslationProvider::OpenAI => {
+                let retry_count = config.common.retry_count;
+                let retry_backoff_ms = config.common.retry_backoff_ms;
+                let rate_limit = config.get_rate_limit();
+                
                 TranslationProviderImpl::OpenAI {
-                    client: OpenAI::new(config.get_api_key(), config.get_endpoint()),
+                    client: OpenAI::new_with_config(
+                        config.get_api_key(), 
+                        config.get_endpoint(),
+                        retry_count,
+                        retry_backoff_ms,
+                        rate_limit
+                    ),
                 }
             },
             ConfigTranslationProvider::Anthropic => {
-                // Get the rate limit from the configuration
+                // Get retry and rate limit configuration from the config
                 let rate_limit = config.get_rate_limit();
+                let retry_count = config.common.retry_count;
+                let retry_backoff_ms = config.common.retry_backoff_ms;
                 
                 TranslationProviderImpl::Anthropic {
                     client: Anthropic::new_with_config(
                         config.get_api_key(),
                         config.get_endpoint(),
-                        DEFAULT_MAX_RETRIES,
-                        DEFAULT_INITIAL_BACKOFF_MS,
+                        retry_count,
+                        retry_backoff_ms,
                         rate_limit,
                     ),
                 }
             },
         };
         
+        // Create options that use config-driven concurrency settings
+        let options = TranslationOptions {
+            preserve_formatting: true,
+            max_concurrent_requests: config.optimal_concurrent_requests(),
+            retry_individual_entries: true,
+        };
+        
         Ok(Self {
             provider,
             config,
-            options: TranslationOptions::default(),
+            options,
         })
     }
     

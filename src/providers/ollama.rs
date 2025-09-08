@@ -10,6 +10,12 @@ pub struct Ollama {
     base_url: String,
     /// HTTP client for making requests
     client: Client,
+    /// Maximum number of retry attempts
+    max_retries: u32,
+    /// Base backoff time in milliseconds for exponential backoff
+    backoff_base_ms: u64,
+    /// Optional rate limit in requests per minute
+    rate_limit: Option<u32>,
 }
 
 /// Generate request for the Ollama API
@@ -330,6 +336,50 @@ impl Ollama {
                 .timeout(Duration::from_secs(60))
                 .build()
                 .unwrap_or_default(),
+            max_retries: 3,
+            backoff_base_ms: 1000,
+            rate_limit: None,
+        }
+    }
+    
+    /// Create a new Ollama client with configuration
+    pub fn new_with_config(
+        host: impl Into<String>, 
+        port: u16,
+        max_retries: u32,
+        backoff_base_ms: u64,
+        rate_limit: Option<u32>
+    ) -> Self {
+        let host = host.into();
+        
+        // Construct a proper URL with scheme and port (same logic as new())
+        let base_url = if host.starts_with("http://") || host.starts_with("https://") {
+            let url_parts: Vec<&str> = host.split("://").collect();
+            if url_parts.len() == 2 {
+                let scheme = url_parts[0];
+                let host_part = url_parts[1];
+                
+                if host_part.contains(":") {
+                    host
+                } else {
+                    format!("{}://{}:{}", scheme, host_part, port)
+                }
+            } else {
+                format!("http://localhost:{}", port)
+            }
+        } else {
+            format!("http://{}:{}", host, port)
+        };
+        
+        Self {
+            base_url,
+            client: Client::builder()
+                .timeout(Duration::from_secs(60))
+                .build()
+                .unwrap_or_default(),
+            max_retries,
+            backoff_base_ms,
+            rate_limit,
         }
     }
     
@@ -341,155 +391,198 @@ impl Ollama {
                 .timeout(Duration::from_secs(60))
                 .build()
                 .unwrap_or_default(),
+            max_retries: 3,
+            backoff_base_ms: 1000,
+            rate_limit: None,
         }
     }
     
-    /// Generate text from the Ollama API
+    /// Generate text from the Ollama API with retry logic
     pub async fn generate(&self, request: GenerationRequest) -> Result<GenerationResponse> {
         let url = format!("{}/api/generate", self.base_url);
         
-        let response = self.client.post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| anyhow!("Failed to send request to Ollama API: {}", e))?;
+        let mut attempt = 0;
+        let mut last_error = None;
         
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await
-                .unwrap_or_else(|_| "Failed to get error response text".to_string());
-            error!("Ollama API error ({}): {}", status, error_text);
-            return Err(anyhow!("Ollama API error ({}): {}", status, error_text));
-        }
+        while attempt <= self.max_retries {
+            // Add rate limiting if configured
+            if let Some(rate_limit) = self.rate_limit {
+                let delay_ms = 60_000 / rate_limit as u64; // Convert requests per minute to milliseconds
+                if attempt > 0 {
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                }
+            }
+            
+            let response_result = self.client.post(&url)
+                .json(&request)
+                .send()
+                .await;
+            
+            match response_result {
+                Ok(response) => {
+                    let status = response.status();
+                    if status.is_success() {
         
         // Get the raw response text first
         let response_text = response.text().await
             .map_err(|e| anyhow!("Failed to get response text from Ollama API: {}", e))?;
         
-        // Try to parse as single JSON object first
-        match serde_json::from_str::<GenerationResponse>(&response_text) {
-            Ok(generated_response) => {
-                Ok(generated_response)
-            },
-            Err(e) => {
-                // Log the raw response for debugging
-                error!("Failed to parse Ollama API response: {}. Raw response (first 500 chars): {}", 
-                      e, if response_text.chars().count() > 500 { 
-                          response_text.chars().take(500).collect::<String>() 
-                      } else { 
-                          response_text.clone() 
-                      });
+                        // Try to parse as single JSON object first
+                        match serde_json::from_str::<GenerationResponse>(&response_text) {
+                            Ok(generated_response) => {
+                                return Ok(generated_response);
+                            },
+                            Err(e) => {
+                                // Log the raw response for debugging
+                                error!("Failed to parse Ollama API response: {}. Raw response (first 500 chars): {}", 
+                                      e, if response_text.chars().count() > 500 { 
+                                          response_text.chars().take(500).collect::<String>() 
+                                      } else { 
+                                          response_text.clone() 
+                                      });
                 
                 // The response might be in JSONL format (streaming response)
                 // Split by lines and try to parse each as a JSON object
                 let lines: Vec<&str> = response_text.lines().collect();
                 
-                if !lines.is_empty() {
-                    // Try to parse the last line, which should contain the final state
-                    for line in lines.iter().rev() {
-                        if line.is_empty() {
-                            continue;
-                        }
-                        
-                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
-                            // Check if it's a "done" message
-                            if value.get("done").and_then(|v| v.as_bool()).unwrap_or(false) {
-                                // Found the final response
-                                let model = value.get("model").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                                let created_at = value.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                
-                                // For streaming responses, we need to concatenate all the pieces
-                                let mut full_response = String::new();
-                                for line in lines.iter() {
-                                    if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
-                                        if let Some(part) = obj.get("response").and_then(|v| v.as_str()) {
-                                            full_response.push_str(part);
+                                if !lines.is_empty() {
+                                    // Try to parse the last line, which should contain the final state
+                                    for line in lines.iter().rev() {
+                                        if line.is_empty() {
+                                            continue;
                                         }
+                                        
+                                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
+                                            // Check if it's a "done" message
+                                            if value.get("done").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                                // Found the final response
+                                                let model = value.get("model").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                                                let created_at = value.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                                
+                                                // For streaming responses, we need to concatenate all the pieces
+                                                let mut full_response = String::new();
+                                                for line in lines.iter() {
+                                                    if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                                                        if let Some(part) = obj.get("response").and_then(|v| v.as_str()) {
+                                                            full_response.push_str(part);
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // Extract optional numeric fields if available
+                                                let prompt_eval_count = value.get("prompt_eval_count").and_then(|v| v.as_u64());
+                                                let eval_count = value.get("eval_count").and_then(|v| v.as_u64());
+                                                
+                                                return Ok(GenerationResponse {
+                                                    model,
+                                                    created_at,
+                                                    response: full_response,
+                                                    done: true,
+                                                    context: None,
+                                                    total_duration: None,
+                                                    load_duration: None,
+                                                    prompt_eval_count,
+                                                    prompt_eval_duration: None,
+                                                    eval_count,
+                                                    eval_duration: None,
+                                                });
+                                            }
+                                        }
+                                    }
+                                    
+                                    // If we didn't find a "done" message, try to use the last valid JSON object
+                                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(lines[lines.len() - 1]) {
+                                        let model = value.get("model").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                                        let created_at = value.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        let response_text = value.get("response").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        
+                                        // Extract optional numeric fields if available
+                                        let prompt_eval_count = value.get("prompt_eval_count").and_then(|v| v.as_u64());
+                                        let eval_count = value.get("eval_count").and_then(|v| v.as_u64());
+                                        
+                                        return Ok(GenerationResponse {
+                                            model,
+                                            created_at,
+                                            response: response_text,
+                                            done: true,
+                                            context: None,
+                                            total_duration: None,
+                                            load_duration: None,
+                                            prompt_eval_count,
+                                            prompt_eval_duration: None,
+                                            eval_count,
+                                            eval_duration: None,
+                                        });
                                     }
                                 }
                                 
-                                // Extract optional numeric fields if available
-                                let prompt_eval_count = value.get("prompt_eval_count").and_then(|v| v.as_u64());
-                                let eval_count = value.get("eval_count").and_then(|v| v.as_u64());
-                                
-                                return Ok(GenerationResponse {
-                                    model,
-                                    created_at,
-                                    response: full_response,
-                                    done: true,
-                                    context: None,
-                                    total_duration: None,
-                                    load_duration: None,
-                                    prompt_eval_count,
-                                    prompt_eval_duration: None,
-                                    eval_count,
-                                    eval_duration: None,
-                                });
+                                // If we still can't parse the response, try our original lenient approach
+                                match serde_json::from_str::<serde_json::Value>(&response_text) {
+                                    Ok(value) => {
+                                        // Try to extract essential fields
+                                        let model = value.get("model").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                                        let response_text = value.get("response").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        let created_at = value.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        let done = value.get("done").and_then(|v| v.as_bool()).unwrap_or(true);
+                                        
+                                        // Extract optional numeric fields if available
+                                        let prompt_eval_count = value.get("prompt_eval_count").and_then(|v| v.as_u64());
+                                        let eval_count = value.get("eval_count").and_then(|v| v.as_u64());
+                                        
+                                        // Create a response with the extracted fields
+                                        return Ok(GenerationResponse {
+                                            model,
+                                            created_at,
+                                            response: response_text,
+                                            done,
+                                            context: None,
+                                            total_duration: None,
+                                            load_duration: None,
+                                            prompt_eval_count,
+                                            prompt_eval_duration: None,
+                                            eval_count,
+                                            eval_duration: None,
+                                        });
+                                    },
+                                    Err(_) => {
+                                        // If we can't even parse as a JSON Value, set last_error
+                                        last_error = Some(anyhow!("Failed to parse Ollama API response: {}. Response contains invalid JSON.", e));
+                                    }
+                                }
                             }
                         }
+                    } else if status.is_server_error() {
+                        // Server error - can retry
+                        let error_text = response.text().await
+                            .unwrap_or_else(|_| "Failed to get error response text".to_string());
+                        last_error = Some(anyhow!("Ollama API error ({}): {}", status, error_text));
+                        error!("Ollama API error ({}): {} - attempt {}/{}", status, error_text, attempt + 1, self.max_retries + 1);
+                    } else {
+                        // Client error - don't retry
+                        let error_text = response.text().await
+                            .unwrap_or_else(|_| "Failed to get error response text".to_string());
+                        error!("Ollama API error ({}): {}", status, error_text);
+                        return Err(anyhow!("Ollama API error ({}): {}", status, error_text));
                     }
-                    
-                    // If we didn't find a "done" message, try to use the last valid JSON object
-                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(lines[lines.len() - 1]) {
-                        let model = value.get("model").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                        let created_at = value.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let response_text = value.get("response").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        
-                        // Extract optional numeric fields if available
-                        let prompt_eval_count = value.get("prompt_eval_count").and_then(|v| v.as_u64());
-                        let eval_count = value.get("eval_count").and_then(|v| v.as_u64());
-                        
-                        return Ok(GenerationResponse {
-                            model,
-                            created_at,
-                            response: response_text,
-                            done: true,
-                            context: None,
-                            total_duration: None,
-                            load_duration: None,
-                            prompt_eval_count,
-                            prompt_eval_duration: None,
-                            eval_count,
-                            eval_duration: None,
-                        });
-                    }
-                }
-                
-                // If we still can't parse the response, try our original lenient approach
-                match serde_json::from_str::<serde_json::Value>(&response_text) {
-                    Ok(value) => {
-                        // Try to extract essential fields
-                        let model = value.get("model").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                        let response_text = value.get("response").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let created_at = value.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let done = value.get("done").and_then(|v| v.as_bool()).unwrap_or(true);
-                        
-                        // Extract optional numeric fields if available
-                        let prompt_eval_count = value.get("prompt_eval_count").and_then(|v| v.as_u64());
-                        let eval_count = value.get("eval_count").and_then(|v| v.as_u64());
-                        
-                        // Create a response with the extracted fields
-                        Ok(GenerationResponse {
-                            model,
-                            created_at,
-                            response: response_text,
-                            done,
-                            context: None,
-                            total_duration: None,
-                            load_duration: None,
-                            prompt_eval_count,
-                            prompt_eval_duration: None,
-                            eval_count,
-                            eval_duration: None,
-                        })
-                    },
-                    Err(_) => {
-                        // If we can't even parse as a JSON Value, return the original error
-                        Err(anyhow!("Failed to parse Ollama API response: {}. Response contains invalid JSON.", e))
-                    }
+                },
+                Err(e) => {
+                    // Network error - can retry
+                    last_error = Some(anyhow!("Failed to send request to Ollama API: {}", e));
+                    error!("Ollama API network error: {} - attempt {}/{}", last_error.as_ref().unwrap(), attempt + 1, self.max_retries + 1);
                 }
             }
+            
+            attempt += 1;
+            
+            // If we have more retries left, wait with exponential backoff
+            if attempt <= self.max_retries {
+                let backoff_ms = self.backoff_base_ms * (1u64 << (attempt - 1));
+                tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+            }
         }
+        
+        // If we get here, all retries failed
+        Err(last_error.unwrap_or_else(|| anyhow!("Ollama API request failed after {} attempts", self.max_retries + 1)))
     }
     
     /// Chat with the Ollama API
