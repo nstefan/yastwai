@@ -35,11 +35,7 @@ if [[ -n "$CLAUDE_CODE_CLI" ]]; then
     exit 0
 fi
 
-# Check for model in environment variables
-if [[ -n "$MODEL_NAME" ]]; then
-    echo "$MODEL_NAME"
-    exit 0
-fi
+# Removed early trust of MODEL_NAME to avoid stale/incorrect values; rely on detection logic below
 
 # Parse options
 VERBOSE_MODE="false"
@@ -66,6 +62,14 @@ while [[ $# -gt 0 ]]; do
             show_usage
             ;;
     esac
+done
+
+# Prefer explicit environment variables if present (override DB heuristics)
+for VAR in CURSOR_CURRENT_MODEL AI_CURSOR_MODEL AI_MODEL OPENAI_MODEL CLAUDE_MODEL MODEL_NAME; do
+    if [[ -n "${!VAR}" ]]; then
+        echo "${!VAR}"
+        exit 0
+    fi
 done
 
 # Function to detect the current model - search for model information
@@ -132,10 +136,12 @@ detect_model() {
             "SELECT hex(value) FROM cursorDiskKV WHERE key = 'inlineDiffsData'" | xxd -r -p | grep -o '"composerModel":"[^"]*"' | cut -d'"' -f4)
         
         if [[ -n "$model_from_db" ]]; then
-            detected_model="$model_from_db"
-            source="inlineDiffsData"
-            echo "$detected_model|$source"
-            return
+            if [[ "$model_from_db" != *"-thinking" ]]; then
+                detected_model="$model_from_db"
+                source="inlineDiffsData"
+                echo "$detected_model|$source"
+                return
+            fi
         fi
         
         # Try each composerData entry (there are many)
@@ -143,10 +149,12 @@ detect_model() {
             "SELECT hex(value) FROM cursorDiskKV WHERE key LIKE 'composerData%' LIMIT 10" | xxd -r -p | grep -o '"composerModel":"[^"]*"' | head -1 | cut -d'"' -f4)
             
         if [[ -n "$model_from_composer" ]]; then
-            detected_model="$model_from_composer"
-            source="composerData"
-            echo "$detected_model|$source"
-            return
+            if [[ "$model_from_composer" != *"-thinking" ]]; then
+                detected_model="$model_from_composer"
+                source="composerData"
+                echo "$detected_model|$source"
+                return
+            fi
         fi
         
         # Try to check if present in any of the data with a broader search
@@ -154,6 +162,14 @@ detect_model() {
             "SELECT hex(value) FROM ItemTable" | xxd -r -p | grep -o '"composerModel":"[^"]*"' | head -1 | cut -d'"' -f4)
             
         if [[ -n "$any_model" ]]; then
+            # If the first hit is a "-thinking" variant, try to find a non-thinking alternative
+            if [[ "$any_model" == *"-thinking" ]]; then
+                alt_model=$(sqlite3 ~/Library/Application\ Support/Cursor/User/globalStorage/state.vscdb \
+                    "SELECT hex(value) FROM ItemTable" | xxd -r -p | grep -o '"composerModel":"[^\"]*"' | cut -d'"' -f4 | grep -v -- -thinking | head -1)
+                if [[ -n "$alt_model" ]]; then
+                    any_model="$alt_model"
+                fi
+            fi
             detected_model="$any_model"
             source="general search"
             echo "$detected_model|$source"
