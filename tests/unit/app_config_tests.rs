@@ -3,7 +3,7 @@
  */
 
 use anyhow::Result;
-use yastwai::app_config::{Config, TranslationProvider, LogLevel};
+use yastwai::app_config::{Config, TranslationProvider, LogLevel, ProviderConfig, TranslationCommonConfig};
 
 /// Test default configuration values
 #[test]
@@ -84,4 +84,34 @@ fn test_config_validation_withVariousConfigs_shouldValidateCorrectly() {
     // Ollama doesn't require API key
     config.translation.provider = TranslationProvider::Ollama;
     assert!(config.validate().is_ok());
+}
+
+/// Test that common configuration provides reasonable default values
+#[test]
+fn test_commonConfigDefaults_shouldProvideReasonableValues() {
+    let common_config = TranslationCommonConfig::default();
+    
+    // Verify reasonable default values for retry configuration
+    assert_eq!(common_config.retry_count, 3);
+    assert_eq!(common_config.retry_backoff_ms, 1000);
+    assert!(common_config.rate_limit_delay_ms > 0);
+    assert!(common_config.temperature >= 0.0 && common_config.temperature <= 1.0);
+}
+
+/// Test that each provider has appropriate default rate limits
+#[test]
+fn test_providerSpecificDefaults_shouldHaveCorrectRateLimits() {
+    // Test that each provider has appropriate default rate limits
+    
+    // Ollama (local) should have no rate limit by default
+    let ollama_config = ProviderConfig::new(TranslationProvider::Ollama);
+    assert_eq!(ollama_config.rate_limit, None);
+    
+    // OpenAI should have a reasonable rate limit
+    let openai_config = ProviderConfig::new(TranslationProvider::OpenAI);
+    assert_eq!(openai_config.rate_limit, Some(60));
+    
+    // Anthropic should have a conservative rate limit (45 < 50 limit)
+    let anthropic_config = ProviderConfig::new(TranslationProvider::Anthropic);
+    assert_eq!(anthropic_config.rate_limit, Some(45));
 } 

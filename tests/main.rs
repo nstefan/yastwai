@@ -40,9 +40,6 @@ mod unit {
     
     // Test network isolation
     pub mod network_monitor_tests;
-    
-    // Stage 3 audit tests
-    pub mod stage3_config_tests;
 }
 
 // Integration tests
