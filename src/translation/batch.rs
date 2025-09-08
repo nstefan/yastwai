@@ -8,7 +8,7 @@
 use anyhow::{Result, anyhow};
 use log::error;
 use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
+use tokio::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::Semaphore;
 use futures::stream::{self, StreamExt};
@@ -47,12 +47,12 @@ impl BatchTranslator {
         batches: &[Vec<SubtitleEntry>],
         source_language: &str,
         target_language: &str,
-        log_capture: Arc<StdMutex<Vec<LogEntry>>>,
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
         progress_callback: impl Fn(usize, usize) + Clone + Send + 'static
     ) -> Result<(Vec<SubtitleEntry>, TokenUsageStats)> {
         // Initialize token usage stats
         let token_stats = TokenUsageStats::with_provider_info(
-            self.service.config.provider.to_string(),
+            self.service.config.provider.to_lowercase_string(),
             self.service.config.get_model()
         );
         
@@ -77,13 +77,24 @@ impl BatchTranslator {
                 
                 async move {
                     // Acquire a permit from the semaphore
-                    let _permit = semaphore.acquire().await.unwrap();
+                    let _permit = match semaphore.acquire().await {
+                        Ok(permit) => permit,
+                        Err(e) => {
+                            // Log error and return early - semaphore acquisition should not fail under normal conditions
+                            let mut logs = log_capture.lock().await;
+                            logs.push(LogEntry {
+                                level: "ERROR".to_string(),
+                                message: format!("Failed to acquire semaphore permit: {}", e),
+                            });
+                            return (batch_index, Err(anyhow!("Failed to acquire semaphore permit: {}", e)));
+                        }
+                    };
                     
                     // Log batch processing start
                     {
-                        let mut logs = log_capture.lock().unwrap();
+                        let mut logs = log_capture.lock().await;
                         logs.push(LogEntry {
-                            level: "info".to_string(),
+                            level: "INFO".to_string(),
                             message: format!("Processing batch {} of {}", batch_index + 1, total_batches),
                         });
                     }
@@ -104,18 +115,18 @@ impl BatchTranslator {
                     
                     // Log batch processing completion
                     {
-                        let mut logs = log_capture.lock().unwrap();
+                        let mut logs = log_capture.lock().await;
                         let duration = start_time.elapsed();
                         match &result {
                             Ok(_) => {
                                 logs.push(LogEntry {
-                                    level: "info".to_string(),
+                                    level: "INFO".to_string(),
                                     message: format!("Batch {} completed in {:?}", batch_index + 1, duration),
                                 });
                             },
                             Err(e) => {
                                 logs.push(LogEntry {
-                                    level: "error".to_string(),
+                                    level: "ERROR".to_string(),
                                     message: format!("Batch {} failed: {}", batch_index + 1, e),
                                 });
                             }
@@ -167,7 +178,7 @@ impl TranslationService {
         batch: &[SubtitleEntry],
         source_language: &str,
         target_language: &str,
-        log_capture: Arc<StdMutex<Vec<LogEntry>>>,
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
         retry_individual_entries: bool
     ) -> Result<Vec<SubtitleEntry>> {
         // Skip empty batches
@@ -185,7 +196,7 @@ impl TranslationService {
         
         // If batch translation failed, try to translate each entry individually
         {
-            let mut logs = log_capture.lock().unwrap();
+            let mut logs = log_capture.lock().await;
             logs.push(LogEntry {
                 level: "WARN".to_string(),
                 message: "Batch translation failed, retrying individual entries".to_string(),
@@ -207,7 +218,7 @@ impl TranslationService {
                     errors.push(error_message.clone());
                     
                     {
-                        let mut logs = log_capture.lock().unwrap();
+                        let mut logs = log_capture.lock().await;
                         logs.push(LogEntry {
                             level: "ERROR".to_string(),
                             message: error_message,
@@ -227,7 +238,7 @@ impl TranslationService {
             
             // Instead, add this warning to the log capture
             let error_message = format!("Some entries failed to translate: {}", errors.join("; "));
-            let mut logs = log_capture.lock().unwrap();
+            let mut logs = log_capture.lock().await;
             logs.push(LogEntry {
                 level: "WARN".to_string(),
                 message: error_message,
@@ -243,7 +254,7 @@ impl TranslationService {
         batch: &[SubtitleEntry],
         source_language: &str,
         target_language: &str,
-        log_capture: Arc<StdMutex<Vec<LogEntry>>>
+        log_capture: Arc<Mutex<Vec<LogEntry>>>
     ) -> Result<Vec<SubtitleEntry>> {
         // Skip empty batches
         if batch.is_empty() {
@@ -327,7 +338,7 @@ impl TranslationService {
         entry: &SubtitleEntry,
         source_language: &str,
         target_language: &str,
-        log_capture: Arc<StdMutex<Vec<LogEntry>>>
+        log_capture: Arc<Mutex<Vec<LogEntry>>>
     ) -> Result<SubtitleEntry> {
         // Skip empty entries
         if entry.text.trim().is_empty() {

@@ -187,18 +187,15 @@ impl FileManager {
             .arg(path)
             .output();
         
-        match output {
-            Ok(output) => {
-                if output.status.success() {
-                    let format = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
-                    
-                    // Check if the format is a known video format
-                    if !format.is_empty() {
-                        return Ok(FileType::Video);
-                    }
+        if let Ok(output) = output {
+            if output.status.success() {
+                let format = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+                
+                // Check if the format is a known video format
+                if !format.is_empty() {
+                    return Ok(FileType::Video);
                 }
-            },
-            Err(_) => {}
+            }
         }
         
         // Fall back to examining file contents
