@@ -14,7 +14,7 @@
 pub use self::core::TranslationService;
 // pub use self::core::TranslationOptions;
 pub use self::batch::BatchTranslator;
-// pub use self::cache::TranslationCache;
+pub use self::cache::TranslationCache;
 // pub use self::formatting::FormatPreserver;
 
 // Submodules

@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::Semaphore;
 use futures::stream::{self, StreamExt};
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 use crate::subtitle_processor::SubtitleEntry;
 
@@ -51,7 +51,7 @@ impl BatchTranslator {
         progress_callback: impl Fn(usize, usize) + Clone + Send + 'static
     ) -> Result<(Vec<SubtitleEntry>, TokenUsageStats)> {
         // Initialize token usage stats
-        let token_stats = TokenUsageStats::with_provider_info(
+        let mut token_stats = TokenUsageStats::with_provider_info(
             self.service.config.provider.to_lowercase_string(),
             self.service.config.get_model()
         );
@@ -150,8 +150,16 @@ impl BatchTranslator {
         
         for (batch_idx, result) in sorted_results {
             match result {
-                Ok(entries) => {
+                Ok((entries, token_usage)) => {
                     all_entries.extend(entries);
+                    
+                    // Aggregate token usage if available
+                    if let Some((prompt_tokens, completion_tokens, duration)) = token_usage {
+                        token_stats.add_token_usage(prompt_tokens, completion_tokens);
+                        if let Some(dur) = duration {
+                            token_stats.api_duration += dur;
+                        }
+                    }
                 },
                 Err(e) => {
                     errors.push(format!("Batch {} failed: {}", batch_idx + 1, e));
@@ -180,10 +188,10 @@ impl TranslationService {
         target_language: &str,
         log_capture: Arc<Mutex<Vec<LogEntry>>>,
         retry_individual_entries: bool
-    ) -> Result<Vec<SubtitleEntry>> {
+    ) -> Result<(Vec<SubtitleEntry>, Option<(Option<u64>, Option<u64>, Option<Duration>)>)> {
         // Skip empty batches
         if batch.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), None));
         }
         
         // Try to translate the entire batch first
@@ -245,7 +253,9 @@ impl TranslationService {
             });
         }
         
-        Ok(translated_entries)
+        // For individual entries, we don't have aggregated token usage easily available
+        // This could be improved in the future to track individual entry token usage
+        Ok((translated_entries, None))
     }
     
     /// Translate a batch of subtitle entries
@@ -255,10 +265,10 @@ impl TranslationService {
         source_language: &str,
         target_language: &str,
         log_capture: Arc<Mutex<Vec<LogEntry>>>
-    ) -> Result<Vec<SubtitleEntry>> {
+    ) -> Result<(Vec<SubtitleEntry>, Option<(Option<u64>, Option<u64>, Option<Duration>)>)> {
         // Skip empty batches
         if batch.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), None));
         }
         
         // Combine all entries into a single text for translation
@@ -282,7 +292,7 @@ impl TranslationService {
         combined_text.push_str("<<END>>");
         
         // Translate the combined text
-        let (translated_text, _) = self.translate_text_with_usage(
+        let (translated_text, token_usage) = self.translate_text_with_usage(
             &combined_text,
             source_language,
             target_language,
@@ -329,7 +339,7 @@ impl TranslationService {
             current_idx = end_pos;
         }
         
-        Ok(translated_entries)
+        Ok((translated_entries, token_usage))
     }
     
     /// Translate a single subtitle entry

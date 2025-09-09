@@ -16,6 +16,7 @@ use crate::providers::ollama::{Ollama, GenerationRequest};
 use crate::providers::openai::{OpenAI, OpenAIRequest};
 use crate::providers::anthropic::{Anthropic, AnthropicRequest};
 use crate::providers::Provider;
+use super::cache::TranslationCache;
 
 
 /// Token usage statistics for tracking API consumption
@@ -214,6 +215,9 @@ pub struct TranslationService {
     
     /// Translation options
     pub options: TranslationOptions,
+    
+    /// Translation cache for storing and retrieving translations
+    pub cache: TranslationCache,
 }
 
 impl TranslationService {
@@ -274,6 +278,7 @@ impl TranslationService {
             provider,
             config,
             options,
+            cache: TranslationCache::new(true), // Enable cache by default
         })
     }
     
@@ -396,6 +401,17 @@ impl TranslationService {
             return Ok((String::new(), None));
         }
         
+        // Check cache first
+        if let Some(cached_translation) = self.cache.get(text, source_language, target_language).await {
+            if let Some(log) = &log_capture {
+                log.lock().await.push(LogEntry {
+                    level: "INFO".to_string(),
+                    message: format!("Cache hit for translation ({} -> {})", source_language, target_language),
+                });
+            }
+            return Ok((cached_translation, None)); // No token usage for cached results
+        }
+        
         // Prepare system prompt
         let system_prompt = format!(
             "You are a professional translator. Translate the following text from {} to {}. \
@@ -428,6 +444,9 @@ impl TranslationService {
                         
                         // Extract the translated text
                         let translated_text = response.response;
+                        
+                        // Store in cache
+                        self.cache.store(text, source_language, target_language, &translated_text).await;
                         
                         // Return the translated text and token usage (Ollama doesn't provide token counts)
                         Ok((translated_text, Some((None, None, Some(duration)))))
@@ -479,6 +498,9 @@ impl TranslationService {
                         let prompt_tokens = Some(response.usage.prompt_tokens as u64);
                         let completion_tokens = Some(response.usage.completion_tokens as u64);
                         
+                        // Store in cache
+                        self.cache.store(text, source_language, target_language, &translated_text).await;
+                        
                         // Return the translated text and token usage
                         Ok((translated_text, Some((prompt_tokens, completion_tokens, Some(duration)))))
                     },
@@ -524,6 +546,9 @@ impl TranslationService {
                         // Get token usage
                         let prompt_tokens = Some(response.usage.input_tokens as u64);
                         let completion_tokens = Some(response.usage.output_tokens as u64);
+                        
+                        // Store in cache
+                        self.cache.store(text, source_language, target_language, &translated_text).await;
                         
                         // Return the translated text and token usage
                         Ok((translated_text, Some((prompt_tokens, completion_tokens, Some(duration)))))

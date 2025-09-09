@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
+use tokio::sync::RwLock;
 use log::debug;
 
 /// Cache key combining source text, source language, and target language
@@ -61,18 +61,18 @@ impl TranslationCache {
     }
     
     /// Get a translation from the cache
-    pub fn get(&self, source_text: &str, source_language: &str, target_language: &str) -> Option<String> {
+    pub async fn get(&self, source_text: &str, source_language: &str, target_language: &str) -> Option<String> {
         if !self.enabled {
             return None;
         }
         
         let key = CacheKey::new(source_text, source_language, target_language);
-        let cache = self.cache.read();
+        let cache = self.cache.read().await;
         
         match cache.get(&key) {
             Some(translation) => {
                 // Increment hit counter
-                let mut hits = self.hits.write();
+                let mut hits = self.hits.write().await;
                 *hits += 1;
                 
                 debug!("Cache hit for '{}' ({} -> {})", 
@@ -84,7 +84,7 @@ impl TranslationCache {
             },
             None => {
                 // Increment miss counter
-                let mut misses = self.misses.write();
+                let mut misses = self.misses.write().await;
                 *misses += 1;
                 
                 debug!("Cache miss for '{}' ({} -> {})", 
@@ -98,13 +98,13 @@ impl TranslationCache {
     }
     
     /// Store a translation in the cache
-    pub fn store(&self, source_text: &str, source_language: &str, target_language: &str, translation: &str) {
+    pub async fn store(&self, source_text: &str, source_language: &str, target_language: &str, translation: &str) {
         if !self.enabled {
             return;
         }
         
         let key = CacheKey::new(source_text, source_language, target_language);
-        let mut cache = self.cache.write();
+        let mut cache = self.cache.write().await;
         
         cache.insert(key, translation.to_string());
         
@@ -115,9 +115,9 @@ impl TranslationCache {
     }
     
     /// Get cache statistics
-    pub fn stats(&self) -> (usize, usize, f64) {
-        let hits = *self.hits.read();
-        let misses = *self.misses.read();
+    pub async fn stats(&self) -> (usize, usize, f64) {
+        let hits = *self.hits.read().await;
+        let misses = *self.misses.read().await;
         let total = hits + misses;
         
         let hit_rate = if total > 0 {
@@ -130,27 +130,27 @@ impl TranslationCache {
     }
     
     /// Clear the cache
-    pub fn clear(&self) {
-        let mut cache = self.cache.write();
+    pub async fn clear(&self) {
+        let mut cache = self.cache.write().await;
         cache.clear();
         
-        let mut hits = self.hits.write();
+        let mut hits = self.hits.write().await;
         *hits = 0;
         
-        let mut misses = self.misses.write();
+        let mut misses = self.misses.write().await;
         *misses = 0;
         
         debug!("Translation cache cleared");
     }
     
     /// Get the number of entries in the cache
-    pub fn len(&self) -> usize {
-        self.cache.read().len()
+    pub async fn len(&self) -> usize {
+        self.cache.read().await.len()
     }
     
     /// Check if the cache is empty
-    pub fn is_empty(&self) -> bool {
-        self.cache.read().is_empty()
+    pub async fn is_empty(&self) -> bool {
+        self.cache.read().await.is_empty()
     }
     
     /// Enable or disable the cache
