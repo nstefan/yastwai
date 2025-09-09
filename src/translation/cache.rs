@@ -25,7 +25,7 @@ struct CacheKey {
 
 impl CacheKey {
     /// Create a new cache key
-    fn new(source_text: &str, source_language: &str, target_language: &str) -> Self {
+    pub fn new(source_text: &str, source_language: &str, target_language: &str) -> Self {
         Self {
             source_text: source_text.to_string(),
             source_language: source_language.to_string(),

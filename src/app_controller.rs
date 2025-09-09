@@ -12,7 +12,6 @@ use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::file_utils::{FileManager, FileType};
-use std::time::Duration;
 
 // @module: Application controller for subtitle processing
 
@@ -23,8 +22,8 @@ pub struct Controller {
 }
 
 impl Controller {
-    // @method: Create a new controller with default configuration
-    pub fn new() -> Result<Self> {
+    /// Create a new controller for test purposes with default configuration
+    pub fn new_for_test() -> Result<Self> {
         Self::with_config(Config::default())
     }
     
@@ -47,7 +46,7 @@ impl Controller {
     pub fn write_translation_logs(&self, logs: &[LogEntry], file_path: &str, translation_context: &str) -> Result<()> {
         self.write_logs_to_file(logs, file_path, translation_context)
     }
-    
+
     /// Run the main workflow with input video file and output directory
     pub async fn run(&self, input_file: PathBuf, output_dir: PathBuf, force_overwrite: bool) -> Result<()> {
         let multi_progress = MultiProgress::new();
@@ -543,91 +542,8 @@ impl Controller {
         }
     }
 
-    // Helper method for testing with simulated run (no actual translation)
-    pub async fn test_run(&self, _input_file: PathBuf, _output_dir: PathBuf, _force_overwrite: bool) -> Result<()> {
-        // Test method that simulates the progress bar behavior without doing actual work
-        info!("Running test_run with progress bar simulation");
-        
-        // Create a new multi-progress instance
-        let multi_progress = MultiProgress::new();
-        
-        // Create a file progress bar
-        let file_pb = multi_progress.add(ProgressBar::new(10));
-            let template_result = ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg}")
-                .or_else(|_| ProgressStyle::default_bar().template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}"))
-                .unwrap_or_else(|_| ProgressStyle::default_bar());
-            file_pb.set_style(template_result.progress_chars("█▓▒░"));
-        file_pb.set_message("Translating test file");
-        
-        // Simulate progress updates
-        for _i in 0..10 {
-            file_pb.inc(1);
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-        
-        // Finish and clear the file progress bar
-        file_pb.finish_and_clear();
-        
-        Ok(())
-    }
     
-    // Helper method for testing with simulated run_folder
-    pub async fn test_run_folder(&self, _input_dir: PathBuf, _force_overwrite: bool) -> Result<()> {
-        // Test method that simulates folder processing with progress bars
-        info!("Running test_run_folder with progress bar simulation");
-        
-        // Create a new multi-progress instance
-        let multi_progress = MultiProgress::new();
-        
-        // Create a folder progress bar
-        let folder_pb = multi_progress.add(ProgressBar::new(3));
-        let template_result = ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({percent}%) {msg}")
-            .or_else(|_| ProgressStyle::default_bar().template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}"))
-            .unwrap_or_else(|_| ProgressStyle::default_bar());
-        folder_pb.set_style(template_result.progress_chars("█▓▒░"));
-        folder_pb.set_message("Processing test files");
-        
-        // Simulate processing 3 files
-        for i in 0..3 {
-            // Update folder progress message
-            let file_name = format!("test_file_{}.mp4", i+1);
-            folder_pb.set_message(format!("Processing: {}", file_name));
-            
-            // Create a file progress bar
-            let file_pb = multi_progress.add(ProgressBar::new(5));
-            let template_result = ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg}")
-                .or_else(|_| ProgressStyle::default_bar().template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}"))
-                .unwrap_or_else(|_| ProgressStyle::default_bar());
-            file_pb.set_style(template_result.progress_chars("█▓▒░"));
-            file_pb.set_message(format!("Translating {}", file_name));
-            
-            // Simulate progress updates
-            for _ in 0..5 {
-                file_pb.inc(1);
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-            
-            // Finish and clear the file progress bar
-            file_pb.finish_and_clear();
-            
-            // Update the folder progress bar
-            folder_pb.inc(1);
-        }
-        
-        // Finish the folder progress bar
-        folder_pb.finish_with_message("Folder processing complete");
-        
-        Ok(())
-    }
 
-    pub fn new_for_test() -> Result<Self> {
-        // Create a minimal configuration for tests
-        let config = Config::default();
-        Self::with_config(config)
-    }
 
     /// Find a subtitle track in the target language if one exists
     async fn find_target_language_track(&self, input_file: &Path) -> Result<Option<usize>> {

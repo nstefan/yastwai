@@ -71,16 +71,26 @@ impl SubtitleEntry {
         })
     }
     
-    // @returns: Duration in milliseconds
-    pub fn duration_ms(&self) -> u64 {
-        self.end_time_ms.saturating_sub(self.start_time_ms)
-    }
-    
-    /// Check if this subtitle entry overlaps with another
-    pub fn overlaps_with(&self, other: &Self) -> bool {
-        // Check if either entry's start time falls within the other's time range
-        (self.start_time_ms >= other.start_time_ms && self.start_time_ms < other.end_time_ms) ||
-        (other.start_time_ms >= self.start_time_ms && other.start_time_ms < self.end_time_ms)
+    /// Parse an SRT timestamp to milliseconds for testing
+    pub fn parse_timestamp(timestamp: &str) -> Result<u64> {
+        // Parse HH:MM:SS,mmm format
+        let parts: Vec<&str> = timestamp.split(&[':', ',', '.'][..]).collect();
+        
+        if parts.len() != 4 {
+            return Err(anyhow!("Invalid timestamp format: {}", timestamp));
+        }
+        
+        let hours: u64 = parts[0].parse().context("Failed to parse hours")?;
+        let minutes: u64 = parts[1].parse().context("Failed to parse minutes")?;
+        let seconds: u64 = parts[2].parse().context("Failed to parse seconds")?;
+        let millis: u64 = parts[3].parse().context("Failed to parse milliseconds")?;
+        
+        // Validate time components
+        if minutes >= 60 || seconds >= 60 || millis >= 1000 {
+            return Err(anyhow!("Invalid time components in timestamp: {}", timestamp));
+        }
+        
+        Ok(hours * 3_600_000 + minutes * 60_000 + seconds * 1_000 + millis)
     }
     
     /// Convert start time to formatted SRT timestamp
@@ -103,80 +113,9 @@ impl SubtitleEntry {
         format!("{:02}:{:02}:{:02},{:03}", hours, minutes, seconds, millis)
     }
     
-    /// Parse an SRT timestamp to milliseconds
-    pub fn parse_timestamp(timestamp: &str) -> Result<u64> {
-        // Parse HH:MM:SS,mmm format
-        let parts: Vec<&str> = timestamp.split(&[':', ',', '.'][..]).collect();
-        
-        if parts.len() != 4 {
-            return Err(anyhow!("Invalid timestamp format: {}", timestamp));
-        }
-        
-        let hours: u64 = parts[0].parse().context("Failed to parse hours")?;
-        let minutes: u64 = parts[1].parse().context("Failed to parse minutes")?;
-        let seconds: u64 = parts[2].parse().context("Failed to parse seconds")?;
-        let millis: u64 = parts[3].parse().context("Failed to parse milliseconds")?;
-        
-        // Validate time components
-        if minutes >= 60 || seconds >= 60 || millis >= 1000 {
-            return Err(anyhow!("Invalid time components in timestamp: {}", timestamp));
-        }
-        
-        Ok(hours * 3_600_000 + minutes * 60_000 + seconds * 1_000 + millis)
-    }
     
-    /// Escape special characters that might interfere with API communication
-    pub fn escape_text(&self) -> String {
-        self.text.replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r")
-            .replace('\t', "\\t")
-            .replace('\u{0008}', "\\b")  // backspace
-            .replace('\u{000C}', "\\f")  // form feed
-    }
     
-    /// Unescape special characters after receiving translated text
-    pub fn unescape_text(text: &str) -> String {
-        // Create a mutable buffer for the result with a capacity that's a reasonable estimate
-        let mut result = String::with_capacity(text.len());
-        let mut chars = text.chars().peekable();
-        
-        while let Some(ch) = chars.next() {
-            if ch == '\\' && chars.peek().is_some() {
-                match chars.next().unwrap() {
-                    'n' => result.push('\n'),
-                    'r' => result.push('\r'),
-                    't' => result.push('\t'),
-                    'b' => result.push('\u{0008}'),  // backspace
-                    'f' => result.push('\u{000C}'),  // form feed
-                    '\\' => result.push('\\'),
-                    '"' => result.push('"'),
-                    // For any other escaped character, just add the character itself
-                    c => result.push(c),
-                }
-            } else {
-                result.push(ch);
-            }
-        }
-        
-        result
-    }
     
-    /// Check if this subtitle entry has valid content
-    pub fn is_valid(&self) -> bool {
-        !self.text.trim().is_empty() && self.end_time_ms > self.start_time_ms
-    }
-    
-    /// Word count in the subtitle text
-    pub fn word_count(&self) -> usize {
-        self.text.split_whitespace().count()
-    }
-    
-    /// Character count in the subtitle text
-    pub fn char_count(&self) -> usize {
-        self.text.chars().count()
-    }
 }
 
 impl fmt::Display for SubtitleEntry {
@@ -616,34 +555,6 @@ impl SubtitleCollection {
         Self::extract_with_auto_track_selection(video_path, source_language, None, source_language).await
     }
 
-    /// Save the subtitle collection to an SRT file
-    pub fn save_to_file<P: AsRef<Path>>(&self, file_path: P) -> Result<()> {
-        let file_path = file_path.as_ref();
-        
-        // Ensure the parent directory exists
-        if let Some(parent) = file_path.parent() {
-            crate::file_utils::FileManager::ensure_dir(parent)?;
-        }
-        
-        let _file_name = file_path.file_name()
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_else(|| String::from("Unknown file"));
-        
-        // Keep this log as it's useful for progress tracking
-        error!("Writing {} subtitle entries to {}", self.entries.len(), _file_name);
-        
-        // Convert to string
-        let srt_content = self.to_string();
-        
-        // Write to file
-        let mut file = File::create(file_path)
-            .with_context(|| format!("Failed to create subtitle file: {}", _file_name))?;
-        
-        file.write_all(srt_content.as_bytes())
-            .with_context(|| format!("Failed to write to subtitle file: {}", _file_name))?;
-        
-        Ok(())
-    }
     
     /// Parse SRT file content to subtitle entries
     fn parse_srt_file(path: &Path) -> Result<Vec<SubtitleEntry>> {

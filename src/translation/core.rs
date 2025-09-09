@@ -63,7 +63,7 @@ impl TokenUsageStats {
         }
     }
     
-    /// Add token usage numbers
+    /// Add token usage numbers for testing
     pub fn add_token_usage(&mut self, prompt_tokens: Option<u64>, completion_tokens: Option<u64>) {
         if let Some(pt) = prompt_tokens {
             self.prompt_tokens += pt;
@@ -74,11 +74,6 @@ impl TokenUsageStats {
             self.completion_tokens += ct;
             self.total_tokens += ct;
         }
-    }
-    
-    /// Add API request duration
-    pub fn add_request_duration(&mut self, duration: Duration) {
-        self.api_duration += duration;
     }
     
     /// Create new token usage stats with provider info
@@ -282,12 +277,6 @@ impl TranslationService {
         })
     }
     
-    /// Create a new translation service with custom options
-    pub fn with_options(config: TranslationConfig, options: TranslationOptions) -> Result<Self> {
-        let mut service = Self::new(config)?;
-        service.options = options;
-        Ok(service)
-    }
     
     /// Test the connection to the translation provider
     pub async fn test_connection(

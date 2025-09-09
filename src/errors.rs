@@ -42,38 +42,18 @@ pub enum ProviderError {
 
 /// Errors that can occur during subtitle processing
 #[derive(Error, Debug)]
-pub enum SubtitleError {
-    /// Error when parsing a subtitle file
-    #[error("Failed to parse subtitle file: {0}")]
-    ParseError(String),
-    
-    /// Error when writing a subtitle file
-    #[error("Failed to write subtitle file: {0}")]
-    WriteError(String),
-    
-    /// Error when converting subtitle formats
-    #[error("Failed to convert subtitle format: {0}")]
-    ConversionError(String),
-}
+pub enum SubtitleError {}
 
 /// Errors that can occur during translation
 #[derive(Error, Debug)]
 pub enum TranslationError {
     /// Error from the provider API
     #[error("Provider error: {0}")]
-    ProviderError(#[from] ProviderError),
+    Provider(#[from] ProviderError),
     
     /// Error with subtitle processing
     #[error("Subtitle error: {0}")]
-    SubtitleError(#[from] SubtitleError),
-    
-    /// Error with configuration
-    #[error("Configuration error: {0}")]
-    ConfigError(String),
-    
-    /// Error with unsupported language
-    #[error("Unsupported language: {0}")]
-    UnsupportedLanguage(String),
+    Subtitle(#[from] SubtitleError),
 }
 
 /// Main application error type that wraps all other errors
@@ -81,23 +61,19 @@ pub enum TranslationError {
 pub enum AppError {
     /// Error from a file operation
     #[error("File error: {0}")]
-    FileError(String),
+    File(String),
     
     /// Error from a provider
     #[error("Provider error: {0}")]
-    ProviderError(#[from] ProviderError),
+    Provider(#[from] ProviderError),
     
     /// Error from subtitle processing
     #[error("Subtitle error: {0}")]
-    SubtitleError(#[from] SubtitleError),
+    Subtitle(#[from] SubtitleError),
     
     /// Error from translation
     #[error("Translation error: {0}")]
-    TranslationError(#[from] TranslationError),
-    
-    /// Error from configuration
-    #[error("Configuration error: {0}")]
-    ConfigError(String),
+    Translation(#[from] TranslationError),
 
     /// Any other error
     #[error("Unknown error: {0}")]
@@ -113,6 +89,6 @@ impl From<anyhow::Error> for AppError {
 
 impl From<std::io::Error> for AppError {
     fn from(error: std::io::Error) -> Self {
-        Self::FileError(error.to_string())
+        Self::File(error.to_string())
     }
 } 
