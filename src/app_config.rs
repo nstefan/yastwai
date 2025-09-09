@@ -1,7 +1,5 @@
-use anyhow::{anyhow, Result, Context};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
 use std::default::Default;
 
 /// Application configuration module
@@ -152,10 +150,6 @@ impl ProviderConfig {
         }
     }
     
-    // @returns: Provider enum from string field
-    pub fn get_provider_type(&self) -> Result<TranslationProvider> {
-        self.provider_type.parse::<TranslationProvider>()
-    }
 }
 
 /// Ollama service configuration
@@ -476,16 +470,6 @@ fn default_openai_rate_limit() -> Option<u32> {
 }
 
 impl Config {
-    /// Load configuration from a file
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let file = fs::File::open(path.as_ref())
-            .with_context(|| format!("Failed to open config file: {:?}", path.as_ref()))?;
-        
-        let reader = std::io::BufReader::new(file);
-        let config: Config = serde_json::from_reader(reader)?;
-        
-        Ok(config)
-    }
     
     /// Validate the configuration for consistency and required values
     pub fn validate(&self) -> Result<()> {
@@ -514,13 +498,6 @@ impl Config {
     }
     
     
-    /// Save the configuration to a file
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let json = serde_json::to_string_pretty(self)?;
-        std::fs::write(&path, json)?;
-        
-        Ok(())
-    }
 }
 
 /// Default implementation for Config
@@ -535,11 +512,6 @@ impl Default for Config {
     }
 }
 
-pub fn create_default_config_file<P: AsRef<Path>>(path: P) -> Result<Config> {
-    let config = Config::default();
-    config.save_to_file(&path)?;
-    Ok(config)
-}
 
 impl TranslationConfig {
     pub fn optimal_concurrent_requests(&self) -> usize {
@@ -559,7 +531,7 @@ impl TranslationConfig {
             .find(|p| p.provider_type == provider_str)
     }
     
-    /// Get a specific provider configuration by type
+    /// Get a specific provider configuration by type for testing
     pub fn get_provider_config(&self, provider_type: &TranslationProvider) -> Option<&ProviderConfig> {
         let provider_str = provider_type.to_lowercase_string();
         self.available_providers.iter()
@@ -622,31 +594,8 @@ impl TranslationConfig {
         default_max_chars_per_request()
     }
     
-    /// Get the timeout in seconds for the active provider
-    pub fn get_timeout_secs(&self) -> u64 {
-        if let Some(provider_config) = self.get_active_provider_config() {
-            if provider_config.timeout_secs > 0 {
-                return provider_config.timeout_secs;
-            }
-        }
-        
-        // Default fallback
-        default_timeout_secs()
-    }
     
-    /// Get the rate limit delay in milliseconds
-    pub fn rate_limit_delay_ms(&self) -> u64 {
-        if self.common.rate_limit_delay_ms > 0 {
-            self.common.rate_limit_delay_ms
-        } else {
-            default_rate_limit_delay_ms()
-        }
-    }
     
-    /// Get the configured temperature value for text generation
-    pub fn get_temperature(&self) -> f32 {
-        self.common.temperature
-    }
     
     /// Get the rate limit for the active provider
     pub fn get_rate_limit(&self) -> Option<u32> {

@@ -13,9 +13,6 @@ pub enum LanguageCodeType {
     Part2T,
     /// ISO 639-2/B (3-letter) code
     Part2B,
-    /// Unknown or invalid code
-    #[allow(dead_code)]
-    Unknown,
 }
 
 /// Validate if a language code is a valid ISO 639-1 or ISO 639-2 code
@@ -36,8 +33,6 @@ pub fn validate_language_code(code: &str) -> Result<LanguageCodeType> {
         }
         
         // Check if it's a ISO 639-2/B code that differs from ISO 639-2/T
-        // This is a bit tricky since isolang doesn't directly support ISO 639-2/B
-        // We'll check some common cases
         match normalized_code.as_str() {
             "fre" => return Ok(LanguageCodeType::Part2B), // French (fra in 639-2/T)
             "ger" => return Ok(LanguageCodeType::Part2B), // German (deu in 639-2/T)

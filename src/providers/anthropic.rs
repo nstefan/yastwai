@@ -9,11 +9,6 @@ use tokio::sync::Mutex;
 use crate::errors::ProviderError;
 use super::Provider;
 
-/// Default max retries for API requests
-const DEFAULT_MAX_RETRIES: u32 = 3;
-
-/// Default initial backoff duration in milliseconds
-const DEFAULT_INITIAL_BACKOFF_MS: u64 = 100;
 
 /// Token bucket rate limiter implementation
 ///
@@ -243,39 +238,9 @@ impl AnthropicRequest {
 }
 
 impl Anthropic {
-    /// Create a new Anthropic client
+    /// Create a new Anthropic client with simple configuration
     pub fn new(api_key: impl Into<String>, endpoint: impl Into<String>) -> Self {
-        Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(120))
-                .build()
-                .unwrap_or_default(),
-            api_key: api_key.into(),
-            endpoint: endpoint.into(),
-            max_retries: DEFAULT_MAX_RETRIES,
-            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
-            rate_limiter: None,
-        }
-    }
-    
-    /// Create a new Anthropic client with custom retry settings
-    pub fn new_with_retry_config(
-        api_key: impl Into<String>, 
-        endpoint: impl Into<String>,
-        max_retries: u32,
-        initial_backoff_ms: u64,
-    ) -> Self {
-        Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(120))
-                .build()
-                .unwrap_or_default(),
-            api_key: api_key.into(),
-            endpoint: endpoint.into(),
-            max_retries,
-            initial_backoff_ms,
-            rate_limiter: None,
-        }
+        Self::new_with_config(api_key, endpoint, 3, 1000, None)
     }
     
     /// Create a new Anthropic client with rate limiting
@@ -284,23 +249,7 @@ impl Anthropic {
         endpoint: impl Into<String>,
         requests_per_minute: u32,
     ) -> Self {
-        let rate_limiter = if requests_per_minute > 0 {
-            Some(Mutex::new(TokenBucketRateLimiter::new(requests_per_minute)))
-        } else {
-            None
-        };
-        
-        Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(120))
-                .build()
-                .unwrap_or_default(),
-            api_key: api_key.into(),
-            endpoint: endpoint.into(),
-            max_retries: DEFAULT_MAX_RETRIES,
-            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
-            rate_limiter,
-        }
+        Self::new_with_config(api_key, endpoint, 3, 1000, Some(requests_per_minute))
     }
     
     /// Create a new Anthropic client with combined configuration
