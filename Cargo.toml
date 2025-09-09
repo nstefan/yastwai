@@ -33,6 +33,8 @@ tempfile = "3.10"
 
 # CLI interface and progress
 indicatif = "0.17.8"
+clap = { version = "4.4", features = ["derive", "env", "string"] }
+clap_complete = "4.4"
 
 # Random for testing
 rand = "0.9"

@@ -5,12 +5,12 @@
 
 use anyhow::{Result, anyhow, Context};
 use log::{error, warn, info, debug, LevelFilter, Log, Metadata, Record, Level, SetLoggerError};
-use std::process;
 use std::path::{Path, PathBuf};
 use std::io::Write;
-use std::env;
 use std::fs::File;
 use std::io::BufReader;
+use clap::{Parser, ValueEnum, CommandFactory, Subcommand};
+use clap_complete::{generate, Shell};
 
 use crate::app_config::{Config, TranslationProvider};
 use app_controller::Controller;
@@ -24,18 +24,175 @@ mod language_utils;
 mod providers;
 mod errors;
 
-// @struct: CLI options
-struct CommandLineOptions {
+/// CLI Wrapper for TranslationProvider to implement ValueEnum
+#[derive(Debug, Clone, ValueEnum)]
+enum CliTranslationProvider {
+    Ollama,
+    OpenAI,
+    Anthropic,
+}
+
+impl From<CliTranslationProvider> for TranslationProvider {
+    fn from(cli_provider: CliTranslationProvider) -> Self {
+        match cli_provider {
+            CliTranslationProvider::Ollama => TranslationProvider::Ollama,
+            CliTranslationProvider::OpenAI => TranslationProvider::OpenAI,
+            CliTranslationProvider::Anthropic => TranslationProvider::Anthropic,
+        }
+    }
+}
+
+/// CLI Wrapper for LogLevel to implement ValueEnum
+#[derive(Debug, Clone, ValueEnum)]
+enum CliLogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl From<CliLogLevel> for app_config::LogLevel {
+    fn from(cli_level: CliLogLevel) -> Self {
+        match cli_level {
+            CliLogLevel::Error => app_config::LogLevel::Error,
+            CliLogLevel::Warn => app_config::LogLevel::Warn,
+            CliLogLevel::Info => app_config::LogLevel::Info,
+            CliLogLevel::Debug => app_config::LogLevel::Debug,
+            CliLogLevel::Trace => app_config::LogLevel::Trace,
+        }
+    }
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Translate video subtitles using AI providers (default command)
+    #[command(alias = "translate")]
+    Translate(TranslateArgs),
+    
+    /// Generate shell completions for yastwai
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+}
+
+#[derive(Parser, Debug)]
+struct TranslateArgs {
+    /// Input video file or directory to process
+    #[arg(value_name = "INPUT_PATH")]
     input_path: PathBuf,
+
+    /// Force overwrite of existing output files
+    #[arg(short, long)]
     force_overwrite: bool,
-    provider: Option<TranslationProvider>,
+
+    /// Translation provider to use
+    #[arg(short, long, value_enum)]
+    provider: Option<CliTranslationProvider>,
+
+    /// Model name to use for translation
+    #[arg(short, long)]
     model: Option<String>,
+
+    /// Source language code (e.g., 'en', 'es', 'fr')
+    #[arg(short, long)]
     source_language: Option<String>,
+
+    /// Target language code (e.g., 'en', 'es', 'fr')  
+    #[arg(short, long)]
     target_language: Option<String>,
+
+    /// Configuration file path
+    #[arg(short, long, default_value = "conf.json")]
     config_path: String,
-    log_level: Option<app_config::LogLevel>,
-    // New fields for extraction-only mode
+
+    /// Set logging level
+    #[arg(short, long, value_enum)]
+    log_level: Option<CliLogLevel>,
+
+    /// Extract subtitle without translation
+    #[arg(short, long)]
     extract_only: bool,
+
+    /// Language code for extraction (when using --extract)
+    #[arg(long, requires = "extract_only")]
+    extract_language: Option<String>,
+}
+
+/// YASTwAI - Yet Another Subtitle Translation with AI
+/// 
+/// A powerful subtitle translation tool that extracts subtitles from video files 
+/// and translates them using various AI providers (Ollama, OpenAI, Anthropic).
+#[derive(Parser, Debug)]
+#[command(name = "yastwai")]
+#[command(author = "YASTwAI Team")]
+#[command(version = "0.1.0")]
+#[command(about = "AI-powered subtitle translation tool")]
+#[command(long_about = "YASTwAI extracts subtitles from video files and translates them using AI providers.
+
+EXAMPLES:
+    yastwai movie.mkv                           # Translate using default config
+    yastwai -f movie.mkv                        # Force overwrite existing files
+    yastwai -p openai -m gpt-4 movie.mkv       # Use specific provider and model
+    yastwai -s en -t es movie.mkv               # Translate from English to Spanish
+    yastwai -e movie.mkv                        # Extract subtitles without translation
+    yastwai -e --extract-language en movie.mkv # Extract English subtitles only
+    yastwai --log-level debug /movies/         # Process entire directory with debug logging
+    yastwai completions bash > yastwai.bash    # Generate bash completions
+
+CONFIGURATION:
+    Configuration is stored in conf.json by default. You can specify a different
+    config file with --config. If the config file doesn't exist, a default one
+    will be created automatically.
+
+SUPPORTED PROVIDERS:
+    ollama    - Local Ollama server (default: llama3.2:3b)
+    openai    - OpenAI API (requires API key)
+    anthropic - Anthropic Claude API (requires API key)")]
+struct CommandLineOptions {
+    #[command(subcommand)]
+    command: Option<Commands>,
+    
+    /// Input video file or directory to process
+    #[arg(value_name = "INPUT_PATH")]
+    input_path: Option<PathBuf>,
+
+    /// Force overwrite of existing output files
+    #[arg(short, long)]
+    force_overwrite: bool,
+
+    /// Translation provider to use
+    #[arg(short, long, value_enum)]
+    provider: Option<CliTranslationProvider>,
+
+    /// Model name to use for translation
+    #[arg(short, long)]
+    model: Option<String>,
+
+    /// Source language code (e.g., 'en', 'es', 'fr')
+    #[arg(short, long)]
+    source_language: Option<String>,
+
+    /// Target language code (e.g., 'en', 'es', 'fr')  
+    #[arg(short, long)]
+    target_language: Option<String>,
+
+    /// Configuration file path
+    #[arg(short, long, default_value = "conf.json")]
+    config_path: String,
+
+    /// Set logging level
+    #[arg(short, long, value_enum)]
+    log_level: Option<CliLogLevel>,
+
+    /// Extract subtitle without translation
+    #[arg(short, long)]
+    extract_only: bool,
+
+    /// Language code for extraction (when using --extract)
+    #[arg(long, requires = "extract_only")]
     extract_language: Option<String>,
 }
 
@@ -136,12 +293,48 @@ async fn main() -> Result<()> {
     // We'll update the level after loading the config if needed
     CustomLogger::init(LevelFilter::Info)?;
     
-    // Parse command line arguments
-    let options = parse_command_line_args()?;
+    // Parse command line arguments using clap
+    let cli = CommandLineOptions::parse();
     
+    // Handle subcommands
+    match cli.command {
+        Some(Commands::Completions { shell }) => {
+            let mut cmd = CommandLineOptions::command();
+            generate(shell, &mut cmd, "yastwai", &mut std::io::stdout());
+            return Ok(());
+        }
+        Some(Commands::Translate(args)) => {
+            // Use the explicit translate subcommand args
+            return run_translate(args).await;
+        }
+        None => {
+            // Default behavior - use top-level args for backwards compatibility
+            let input_path = cli.input_path.ok_or_else(|| {
+                anyhow!("INPUT_PATH is required when no subcommand is specified")
+            })?;
+            
+            let translate_args = TranslateArgs {
+                input_path,
+                force_overwrite: cli.force_overwrite,
+                provider: cli.provider,
+                model: cli.model,
+                source_language: cli.source_language,
+                target_language: cli.target_language,
+                config_path: cli.config_path,
+                log_level: cli.log_level,
+                extract_only: cli.extract_only,
+                extract_language: cli.extract_language,
+            };
+            return run_translate(translate_args).await;
+        }
+    }
+}
+
+async fn run_translate(options: TranslateArgs) -> Result<()> {
     // If log level is set via command line, apply it immediately
     if let Some(cmd_log_level) = &options.log_level {
-        let log_level = match cmd_log_level {
+        let config_log_level: app_config::LogLevel = cmd_log_level.clone().into();
+        let log_level = match config_log_level {
             app_config::LogLevel::Error => LevelFilter::Error,
             app_config::LogLevel::Warn => LevelFilter::Warn,
             app_config::LogLevel::Info => LevelFilter::Info,
@@ -164,7 +357,7 @@ async fn main() -> Result<()> {
         
         // Override config with CLI options if provided
         if let Some(provider) = &options.provider {
-            config.translation.provider = provider.clone();
+            config.translation.provider = provider.clone().into();
         }
         
         if let Some(model) = &options.model {
@@ -186,7 +379,7 @@ async fn main() -> Result<()> {
         
         // Update log level in config if specified via command line
         if let Some(log_level) = &options.log_level {
-            config.log_level = log_level.clone();
+            config.log_level = log_level.clone().into();
         }
         
         config
@@ -198,7 +391,7 @@ async fn main() -> Result<()> {
         
         // Apply command line log level to default config if specified
         if let Some(log_level) = &options.log_level {
-            config.log_level = log_level.clone();
+            config.log_level = log_level.clone().into();
         }
         
         // Save default config
@@ -278,186 +471,6 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// Parse command line arguments and return options
-fn parse_command_line_args() -> Result<CommandLineOptions> {
-    let args: Vec<String> = env::args().collect();
-    
-    // Check for help flag first
-    if args.len() > 1 && (args[1] == "-h" || args[1] == "--help") {
-        print_usage(&args[0]);
-        process::exit(0);
-    }
-    
-    if args.len() < 2 {
-        error!("Missing required input path argument");
-        print_usage(&args[0]);
-        process::exit(1);
-    }
-    
-    let mut options = CommandLineOptions {
-        input_path: PathBuf::new(),
-        force_overwrite: false,
-        provider: None,
-        model: None,
-        source_language: None,
-        target_language: None,
-        config_path: "conf.json".to_string(),
-        log_level: None,
-        // New fields for extraction-only mode
-        extract_only: false,
-        extract_language: None,
-    };
-    
-    // Process in two passes:
-    // First, check for flags with arguments
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "-f" | "--force" => {
-                options.force_overwrite = true;
-                i += 1;
-            },
-            "-e" | "--extract" => {
-                options.extract_only = true;
-                
-                // Check if the next argument is a language code
-                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                    options.extract_language = Some(args[i + 1].clone());
-                    i += 2;
-                } else {
-                    // If no language specified, we'll determine it later
-                    i += 1;
-                }
-            },
-            "-p" | "--provider" => {
-                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                    let provider_str = &args[i + 1];
-                    options.provider = match provider_str.to_lowercase().as_str() {
-                        "ollama" => Some(TranslationProvider::Ollama),
-                        "openai" => Some(TranslationProvider::OpenAI),
-                        "anthropic" => Some(TranslationProvider::Anthropic),
-                        _ => {
-                            error!("Invalid provider: {}. Valid options are: ollama, openai, anthropic", provider_str);
-                            print_usage(&args[0]);
-                            process::exit(1);
-                        }
-                    };
-                    i += 2;
-                } else {
-                    error!("Missing value for provider option");
-                    print_usage(&args[0]);
-                    process::exit(1);
-                }
-            },
-            "-m" | "--model" => {
-                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                    options.model = Some(args[i + 1].clone());
-                    i += 2;
-                } else {
-                    error!("Missing value for model option");
-                    print_usage(&args[0]);
-                    process::exit(1);
-                }
-            },
-            "-s" | "--source" => {
-                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                    options.source_language = Some(args[i + 1].clone());
-                    i += 2;
-                } else {
-                    error!("Missing value for source language option");
-                    print_usage(&args[0]);
-                    process::exit(1);
-                }
-            },
-            "-t" | "--target" => {
-                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                    options.target_language = Some(args[i + 1].clone());
-                    i += 2;
-                } else {
-                    error!("Missing value for target language option");
-                    print_usage(&args[0]);
-                    process::exit(1);
-                }
-            },
-            "-c" | "--config" => {
-                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                    options.config_path = args[i + 1].clone();
-                    i += 2;
-                } else {
-                    error!("Missing value for config option");
-                    print_usage(&args[0]);
-                    process::exit(1);
-                }
-            },
-            "-l" | "--log-level" => {
-                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                    let log_level_str = &args[i + 1].to_lowercase();
-                    options.log_level = match log_level_str.as_str() {
-                        "error" => Some(app_config::LogLevel::Error),
-                        "warn" => Some(app_config::LogLevel::Warn),
-                        "info" => Some(app_config::LogLevel::Info),
-                        "debug" => Some(app_config::LogLevel::Debug),
-                        "trace" => Some(app_config::LogLevel::Trace),
-                        _ => {
-                            error!("Invalid log level: {}. Valid options are: error, warn, info, debug, trace", log_level_str);
-                            print_usage(&args[0]);
-                            process::exit(1);
-                        }
-                    };
-                    i += 2;
-                } else {
-                    error!("Missing value for log level option");
-                    print_usage(&args[0]);
-                    process::exit(1);
-                }
-            },
-            // If it's not an option and we haven't set the input path yet, treat it as the input path
-            arg if !arg.starts_with('-') => {
-                if options.input_path.as_os_str().is_empty() {
-                    options.input_path = PathBuf::from(arg);
-                }
-                i += 1;
-            },
-            // Unknown option
-            _ => {
-                error!("Unknown option: {}", args[i]);
-                print_usage(&args[0]);
-                process::exit(1);
-            }
-        }
-    }
-    
-    // Validate that we have an input path
-    if options.input_path.as_os_str().is_empty() {
-        error!("No input path provided");
-        print_usage(&args[0]);
-        process::exit(1);
-    }
-    
-    Ok(options)
-}
-
-fn print_usage(program_name: &str) {
-    println!("Usage: {} [options] <input-path>", program_name);
-    println!("Options:");
-    println!("  -h, --help              Show this help message");
-    println!("  -f, --force             Force overwrite of existing output files");
-    println!("  -e, --extract [LANG]    Extract subtitle in specified language without translation");
-    println!("                          (LANG is a 2 or 3-letter language code, e.g., 'en', 'fra')");
-    println!("  -p, --provider VALUE    Override the translation provider (ollama, openai, anthropic)");
-    println!("  -m, --model VALUE       Override the model name");
-    println!("  -s, --source VALUE      Override the source language code");
-    println!("  -t, --target VALUE      Override the target language code");
-    println!("  -c, --config VALUE      Specify config file path (default: conf.json)");
-    println!("  -l, --log-level VALUE   Set log level (error, warn, info, debug, trace)");
-    println!();
-    println!("Examples:");
-    println!("  {} movie.mkv", program_name);
-    println!("  {} -f movie.mkv", program_name);
-    println!("  {} -p openai -m gpt-4-turbo movie.mkv", program_name);
-    println!("  {} -s en -t es movie.mkv", program_name);
-    println!("  {} -l debug movie.mkv", program_name);
-}
 
 // Helper function to implement extraction-only mode
 async fn extraction_only_mode(input_file: &Path, output_dir: PathBuf, language_code: Option<&str>, force_overwrite: bool) -> Result<()> {
