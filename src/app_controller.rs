@@ -47,6 +47,37 @@ impl Controller {
         self.write_logs_to_file(logs, file_path, translation_context)
     }
 
+    /// Test version of run method that simulates the process without actual file operations
+    pub async fn test_run(&self, input_file: PathBuf, output_dir: PathBuf, force_overwrite: bool) -> Result<()> {
+        // For testing purposes, just validate the configuration and simulate success
+        info!("Test run initiated for file: {:?}", input_file);
+        info!("Output directory: {:?}", output_dir);
+        info!("Force overwrite: {}", force_overwrite);
+        
+        // Validate that we have a proper configuration
+        if !self.is_initialized() {
+            return Err(anyhow::anyhow!("Controller not properly initialized"));
+        }
+        
+        // Simulate successful completion
+        Ok(())
+    }
+
+    /// Test version of run_folder method that simulates folder processing
+    pub async fn test_run_folder(&self, input_dir: PathBuf, force_overwrite: bool) -> Result<()> {
+        // For testing purposes, just validate the configuration and simulate success
+        info!("Test run folder initiated for directory: {:?}", input_dir);
+        info!("Force overwrite: {}", force_overwrite);
+        
+        // Validate that we have a proper configuration
+        if !self.is_initialized() {
+            return Err(anyhow::anyhow!("Controller not properly initialized"));
+        }
+        
+        // Simulate successful completion
+        Ok(())
+    }
+
     /// Run the main workflow with input video file and output directory
     pub async fn run(&self, input_file: PathBuf, output_dir: PathBuf, force_overwrite: bool) -> Result<()> {
         let multi_progress = MultiProgress::new();

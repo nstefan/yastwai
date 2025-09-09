@@ -2,7 +2,6 @@
  * Tests for application configuration functionality
  */
 
-use anyhow::Result;
 use yastwai::app_config::{Config, TranslationProvider, LogLevel, ProviderConfig, TranslationCommonConfig};
 
 /// Test default configuration values

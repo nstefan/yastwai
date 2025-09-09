@@ -238,8 +238,19 @@ impl AnthropicRequest {
 }
 
 impl Anthropic {
+    /// Create a new Anthropic client with simple configuration
+    pub fn new(api_key: impl Into<String>, endpoint: impl Into<String>) -> Self {
+        Self::new_with_config(api_key, endpoint, 3, 1000, None)
+    }
     
-    
+    /// Create a new Anthropic client with rate limiting
+    pub fn new_with_rate_limit(
+        api_key: impl Into<String>,
+        endpoint: impl Into<String>,
+        requests_per_minute: u32,
+    ) -> Self {
+        Self::new_with_config(api_key, endpoint, 3, 1000, Some(requests_per_minute))
+    }
     
     /// Create a new Anthropic client with combined configuration
     pub fn new_with_config(

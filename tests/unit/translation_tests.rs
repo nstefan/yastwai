@@ -13,13 +13,10 @@ use anyhow::Result;
 use yastwai::app_config::{TranslationConfig, TranslationProvider as ConfigTranslationProvider, TranslationCommonConfig, ProviderConfig};
 use yastwai::subtitle_processor::SubtitleEntry;
 use yastwai::translation::core::{TranslationService, TokenUsageStats};
-use std::time::Duration;
 use std::fs;
 use yastwai::translation::core::LogEntry;
 use tempfile::TempDir;
 use yastwai::app_controller::Controller;
-use yastwai::providers::anthropic::{Anthropic, AnthropicRequest};
-use crate::common::mock_providers::{MockAnthropic, MockErrorType};
 
 /// Helper function to create a test configuration
 fn get_test_config() -> TranslationConfig {

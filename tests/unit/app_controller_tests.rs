@@ -3,13 +3,10 @@
  */
 
 use std::fs;
-use std::path::PathBuf;
 use anyhow::Result;
 use yastwai::app_config::Config;
 use yastwai::app_controller::Controller;
-use yastwai::file_utils::FileManager;
 use yastwai::translation::core::LogEntry;
-use std::time::Duration;
 use tempfile::TempDir;
 
 /// Test creating a controller with the default configuration
