@@ -21,6 +21,8 @@
 
 ## About
 
+Hello !
+
 YASTwAI is a command-line tool that extracts subtitles from videos and translates them using AI. Whether you're watching foreign films, studying languages, or preparing content for international audiences, YASTwAI makes subtitle translation simple and effective.
 
 Built with Rust for performance and reliability, YASTwAI supports multiple AI translation providers and preserves the original subtitle formatting and timing.
