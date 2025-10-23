@@ -470,6 +470,20 @@ mod formatting_tests {
         let final_check = FormatPreserver::fix_doubled_formatting_tags(&result);
         assert!(!final_check.contains("<i><i>"));
     }
+
+        #[test]
+        fn test_preserve_formatting_shouldNotDuplicateExistingTags() {
+            // When translation already contains formatting tags, preservation must not duplicate them
+            let original = "<i>Hello</i>";
+            let translated = "<i>Hello</i>";
+            let result = FormatPreserver::preserve_formatting(original, translated);
+            assert_eq!(result, "<i>Hello</i>");
+
+            let original_bold = "<b>World</b>";
+            let translated_bold = "<b>World</b>";
+            let result_bold = FormatPreserver::preserve_formatting(original_bold, translated_bold);
+            assert_eq!(result_bold, "<b>World</b>");
+        }
 }
 
 // Stage 3 Audit Tests - Config-driven concurrency, retries, and rate limits

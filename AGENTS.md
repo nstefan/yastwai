@@ -52,9 +52,21 @@ cp conf.example.json conf.json
   ```bash
   ./scripts/ai-protect-main.sh --no-auto-branch
   ```
+  Windows:
+  ```powershell
+  pwsh -File scripts/ai-protect-main.ps1 --no-auto-branch
+  # or
+  scripts\ai-protect-main.cmd --no-auto-branch
+  ```
 - If on main branch, **IMMEDIATELY** create a feature branch:
   ```bash
   ./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"
+  ```
+  Windows:
+  ```powershell
+  pwsh -File scripts/ai-protect-main.ps1 --auto-branch "descriptive-feature-name"
+  # or
+  scripts\ai-protect-main.cmd --auto-branch "descriptive-feature-name"
   ```
 
 ### Branch Management
@@ -68,6 +80,18 @@ cp conf.example.json conf.json
 # Update main branch
 ./scripts/ai-update-main.sh
 ```
+Windows equivalents:
+```powershell
+# PowerShell
+pwsh -File scripts/ai-branch.ps1 --check-only
+pwsh -File scripts/ai-branch.ps1 --new-branch "feature-name" --is-related false
+pwsh -File scripts/ai-update-main.ps1
+
+# Or use .cmd shims
+scripts\ai-branch.cmd --check-only
+scripts\ai-branch.cmd --new-branch "feature-name" --is-related false
+scripts\ai-update-main.cmd
+```
 
 ### Commit Process
 ```bash
@@ -76,6 +100,14 @@ git add -A
 
 # Create commit using helper script (required)
 ./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
+```
+Windows equivalents:
+```powershell
+# PowerShell
+pwsh -File scripts/ai-commit.ps1 -Model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
+
+# Or use .cmd shim
+scripts\ai-commit.cmd -Model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
 ```
 
 ## Code Style & Standards
@@ -101,6 +133,12 @@ git add -A
 
 # Auto-fix issues
 ./scripts/ai-clippy.sh --fix
+```
+Windows equivalents:
+```powershell
+pwsh -File scripts/ai-clippy.ps1 --check-only
+pwsh -File scripts/ai-clippy.ps1 --fix
+# Or use .cmd shims: scripts\ai-clippy.cmd --check-only / --fix
 ```
 
 ## Project Structure
@@ -223,6 +261,12 @@ After modifying source files, always:
 - `ai-protect-main.sh` - Branch protection verification
 - `ai-update-main.sh` - Safe main branch updates
 - `ai-readme.sh` - Generate README.md (don't edit README directly)
+
+Windows usage notes:
+- All helper scripts have Windows equivalents: `.ps1` PowerShell scripts and `.cmd` shims in `scripts/`.
+- Prefer PowerShell form when possible (more explicit), e.g. `pwsh -File scripts/ai-pr.ps1 ...`.
+- `.cmd` shims provide convenient invocation from Windows shells: e.g. `scripts\ai-pr.cmd ...`.
+- Model detection on Windows: `pwsh -File scripts/ai-cursor-model.ps1` (or `scripts\ai-cursor-model.cmd`).
 
 ### Script Testing
 - All scripts have corresponding tests in `tests/scripts/`

@@ -14,12 +14,15 @@ alwaysApply: true
 
 ## Mandatory Branch Verification 
 - The VERY FIRST ACTION in every user interaction must be to verify current branch status
-- Run this command: `./scripts/ai-protect-main.sh --no-auto-branch`
+- Unix/macOS: `./scripts/ai-protect-main.sh --no-auto-branch`
+- Windows (PowerShell): `pwsh -File scripts/ai-protect-main.ps1 --no-auto-branch`
+- Windows (CMD shim): `scripts\\ai-protect-main.cmd --no-auto-branch`
 - If this command fails OR shows you're on main branch, immediately create a new branch before any other actions
 
 ## Automatic Branch Creation (when on main)
 - When working with a user and the current branch is "main", IMMEDIATELY run:
-  `./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"`
+  - Unix/macOS: `./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"`
+  - Windows: `pwsh -File scripts/ai-protect-main.ps1 --auto-branch "descriptive-feature-name"`
 - This script will:
   1. Detect that you're on main branch
   2. Create a new feature branch automatically
@@ -28,10 +31,12 @@ alwaysApply: true
 
 ## Branch Update Commands
 - To update main branch from a feature branch:
-  `./scripts/ai-update-main.sh`
+  - Unix/macOS: `./scripts/ai-update-main.sh`
+  - Windows: `pwsh -File scripts/ai-update-main.ps1`
 
 - To update feature branch with main branch changes:
-  `./scripts/ai-branch.sh --update-feature-branch`
+  - Unix/macOS: `./scripts/ai-branch.sh --update-feature-branch`
+  - Windows: `pwsh -File scripts/ai-branch.ps1 --update-feature-branch`
 
 ## Prohibited Branch Actions
 - NEVER use raw git branch commands directly:
@@ -41,7 +46,8 @@ alwaysApply: true
 
 ## Verification After Branch Operations
 - After ANY operation that might change branches, re-verify current branch:
-  `./scripts/ai-protect-main.sh --no-auto-branch`
+  - Unix/macOS: `./scripts/ai-protect-main.sh --no-auto-branch`
+  - Windows: `pwsh -File scripts/ai-protect-main.ps1 --no-auto-branch`
 
 ## Error Handling for Branch Operations
 - If any branch command fails, immediately notify the user and stop

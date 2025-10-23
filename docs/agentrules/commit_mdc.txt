@@ -13,7 +13,8 @@ alwaysApply: true
 
 ## Mandatory Branch Verification Before Commits
 - Before initiating ANY commit operation, verify the current branch:
-  `./scripts/ai-protect-main.sh --no-auto-branch`
+  - Unix/macOS: `./scripts/ai-protect-main.sh --no-auto-branch`
+  - Windows: `pwsh -File scripts/ai-protect-main.ps1 --no-auto-branch`
 - If on main branch, STOP and create a feature branch before proceeding:
   `./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"`
 
@@ -33,8 +34,9 @@ alwaysApply: true
    `git diff --cached --stat | cat`
 
 ## Commit Structure
-- Use the ai-commit.sh script for all commits:
-  `./scripts/ai-commit.sh "type(scope): descriptive message"`
+- Use the ai-commit helpers for all commits:
+  - Unix/macOS: `./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thoughts" "Discussion"`
+  - Windows (PowerShell): `pwsh -File scripts/ai-commit.ps1 -Model "model-name" "Title" "Description" "Prompt" "Thoughts" "Discussion"`
 
 - Commit message format must follow:
   - `type`: fix, feat, docs, style, refactor, test, chore

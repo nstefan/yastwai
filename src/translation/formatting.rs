@@ -74,10 +74,7 @@ impl FormatPreserver {
         // Next, try to preserve line breaks
         result = Self::preserve_line_breaks(original, &result);
         
-        // Then, try to preserve formatting tags (and fix doubled tags)
-        result = Self::preserve_formatting_tags(&result);
-        
-        // Fix doubled formatting tags
+        // Finally, normalize any doubled formatting tags that might appear
         result = Self::fix_doubled_formatting_tags(&result);
         
         result
