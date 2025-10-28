@@ -26,6 +26,11 @@ fn test_default_config_withNoParameters_shouldHaveCorrectDefaults() {
     assert_eq!(ollama_config.model, "llama2"); // default_ollama_model()
     
     assert_eq!(config.log_level, LogLevel::Info);
+
+    // Ensure LM Studio provider config exists by default
+    let lmstudio_config = config.translation.get_provider_config(&TranslationProvider::LMStudio)
+        .expect("LMStudio provider config should exist");
+    assert_eq!(lmstudio_config.endpoint, "http://localhost:1234/v1");
 }
 
 /// Test configuration validation
@@ -83,6 +88,16 @@ fn test_config_validation_withVariousConfigs_shouldValidateCorrectly() {
     // Ollama doesn't require API key
     config.translation.provider = TranslationProvider::Ollama;
     assert!(config.validate().is_ok());
+
+    // LM Studio shouldn't require API key
+    config.translation.provider = TranslationProvider::LMStudio;
+    // Ensure available_providers has lmstudio
+    if config.translation.get_provider_config(&TranslationProvider::LMStudio).is_none() {
+        config.translation.available_providers.push(
+            yastwai::app_config::ProviderConfig::new(TranslationProvider::LMStudio)
+        );
+    }
+    assert!(config.validate().is_ok());
 }
 
 /// Test that common configuration provides reasonable default values
@@ -113,4 +128,8 @@ fn test_providerSpecificDefaults_shouldHaveCorrectRateLimits() {
     // Anthropic should have a conservative rate limit (45 < 50 limit)
     let anthropic_config = ProviderConfig::new(TranslationProvider::Anthropic);
     assert_eq!(anthropic_config.rate_limit, Some(45));
+
+    // LM Studio (local) should have no rate limit by default
+    let lmstudio_config = ProviderConfig::new(TranslationProvider::LMStudio);
+    assert_eq!(lmstudio_config.rate_limit, None);
 } 

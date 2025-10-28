@@ -30,6 +30,7 @@ enum CliTranslationProvider {
     Ollama,
     OpenAI,
     Anthropic,
+    LMStudio,
 }
 
 impl From<CliTranslationProvider> for TranslationProvider {
@@ -38,6 +39,7 @@ impl From<CliTranslationProvider> for TranslationProvider {
             CliTranslationProvider::Ollama => TranslationProvider::Ollama,
             CliTranslationProvider::OpenAI => TranslationProvider::OpenAI,
             CliTranslationProvider::Anthropic => TranslationProvider::Anthropic,
+            CliTranslationProvider::LMStudio => TranslationProvider::LMStudio,
         }
     }
 }
@@ -150,7 +152,8 @@ CONFIGURATION:
 SUPPORTED PROVIDERS:
     ollama    - Local Ollama server (default: llama3.2:3b)
     openai    - OpenAI API (requires API key)
-    anthropic - Anthropic Claude API (requires API key)")]
+    anthropic - Anthropic Claude API (requires API key)
+    lmstudio  - LM Studio local server (OpenAI-compatible on http://localhost:1234/v1)")]
 struct CommandLineOptions {
     #[command(subcommand)]
     command: Option<Commands>,

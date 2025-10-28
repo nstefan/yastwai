@@ -33,6 +33,8 @@ pub enum TranslationProvider {
     OpenAI,
     // @provider: Anthropic
     Anthropic,
+    // @provider: LM Studio (OpenAI-compatible local server)
+    LMStudio,
 }
 
 impl TranslationProvider {
@@ -42,6 +44,7 @@ impl TranslationProvider {
             Self::Ollama => "Ollama",
             Self::OpenAI => "OpenAI",
             Self::Anthropic => "Anthropic",
+            Self::LMStudio => "LM Studio",
         }
     }
     
@@ -51,6 +54,7 @@ impl TranslationProvider {
             Self::Ollama => "ollama".to_string(),
             Self::OpenAI => "openai".to_string(),
             Self::Anthropic => "anthropic".to_string(),
+            Self::LMStudio => "lmstudio".to_string(),
         }
     }
 }
@@ -71,6 +75,7 @@ impl std::str::FromStr for TranslationProvider {
             "ollama" => Ok(Self::Ollama),
             "openai" => Ok(Self::OpenAI),
             "anthropic" => Ok(Self::Anthropic),
+            "lmstudio" => Ok(Self::LMStudio),
             _ => Err(anyhow!("Invalid provider type: {}", s)),
         }
     }
@@ -146,6 +151,16 @@ impl ProviderConfig {
                 max_chars_per_request: default_anthropic_max_chars_per_request(),
                 timeout_secs: default_anthropic_timeout_secs(),
                 rate_limit: default_anthropic_rate_limit(),
+            },
+            TranslationProvider::LMStudio => Self {
+                provider_type: "lmstudio".to_string(),
+                model: default_lmstudio_model(),
+                api_key: String::new(),
+                endpoint: default_lmstudio_endpoint(),
+                concurrent_requests: default_concurrent_requests(),
+                max_chars_per_request: default_max_chars_per_request(),
+                timeout_secs: default_timeout_secs(),
+                rate_limit: default_lmstudio_rate_limit(),
             },
         }
     }
@@ -436,6 +451,11 @@ fn default_anthropic_endpoint() -> String {
     "https://api.anthropic.com".to_string()
 }
 
+fn default_lmstudio_endpoint() -> String {
+    // LM Studio default server (OpenAI compatible) runs on port 1234 under /v1
+    "http://localhost:1234/v1".to_string()
+}
+
 fn default_ollama_model() -> String {
     "llama2".to_string()
 }
@@ -446,6 +466,11 @@ fn default_openai_model() -> String {
 
 fn default_anthropic_model() -> String {
     "claude-3-haiku".to_string()
+}
+
+fn default_lmstudio_model() -> String {
+    // Placeholder; users should set to the loaded model name in LM Studio
+    "local-model".to_string()
 }
 
 fn default_system_prompt() -> String {
@@ -467,6 +492,11 @@ fn default_ollama_rate_limit() -> Option<u32> {
 
 fn default_openai_rate_limit() -> Option<u32> {
     Some(60) // 60 requests per minute by default
+}
+
+// LM Studio is local; do not enforce rate limiting by default
+fn default_lmstudio_rate_limit() -> Option<u32> {
+    None
 }
 
 impl Config {
@@ -551,6 +581,7 @@ impl TranslationConfig {
             TranslationProvider::Ollama => default_ollama_model(),
             TranslationProvider::OpenAI => default_openai_model(),
             TranslationProvider::Anthropic => default_anthropic_model(),
+            TranslationProvider::LMStudio => default_lmstudio_model(),
         }
     }
     
@@ -579,6 +610,7 @@ impl TranslationConfig {
             TranslationProvider::Ollama => default_ollama_endpoint(),
             TranslationProvider::OpenAI => default_openai_endpoint(),
             TranslationProvider::Anthropic => default_anthropic_endpoint(),
+            TranslationProvider::LMStudio => default_lmstudio_endpoint(),
         }
     }
     
@@ -608,6 +640,7 @@ impl TranslationConfig {
             TranslationProvider::Ollama => default_ollama_rate_limit(),
             TranslationProvider::OpenAI => default_openai_rate_limit(),
             TranslationProvider::Anthropic => default_anthropic_rate_limit(),
+            TranslationProvider::LMStudio => default_lmstudio_rate_limit(),
         }
     }
 }
@@ -624,6 +657,7 @@ impl Default for TranslationConfig {
         config.available_providers.push(ProviderConfig::new(TranslationProvider::Ollama));
         config.available_providers.push(ProviderConfig::new(TranslationProvider::OpenAI));
         config.available_providers.push(ProviderConfig::new(TranslationProvider::Anthropic));
+        config.available_providers.push(ProviderConfig::new(TranslationProvider::LMStudio));
         
         config
     }

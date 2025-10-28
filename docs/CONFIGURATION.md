@@ -94,6 +94,7 @@ The default AI provider to use for translations.
 - `"ollama"` - Local Ollama server
 - `"openai"` - OpenAI API
 - `"anthropic"` - Anthropic Claude API
+- `"lmstudio"` - LM Studio local server (OpenAI-compatible API)
 
 #### `max_chars_per_request` (integer, optional)
 Maximum number of characters to send in a single translation request. Larger values are more efficient but may hit provider limits.
@@ -179,6 +180,20 @@ Controls randomness in AI responses. Lower values are more deterministic.
 - `gpt-4o-mini` - Cost-effective, good quality
 - `gpt-4o` - Higher quality, more expensive
 - `gpt-3.5-turbo` - Fast and economical
+
+##### LM Studio Provider (OpenAI-compatible)
+```json
+{
+  "provider_type": "lmstudio",
+  "endpoint": "http://localhost:1234/v1",
+  "model": "local-model",
+  "temperature": 0.3
+}
+```
+
+Notes:
+- Uses the same request/response schema as OpenAI Chat Completions.
+- API key is typically not required; if needed, set any string (e.g., "lm-studio").
 
 ##### Anthropic Provider
 ```json
