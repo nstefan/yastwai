@@ -6,10 +6,15 @@ alwaysApply: true
 
 Pull requests creation instructions, ONLY create PRs when EXPLICITLY requested by the user.
     - NEVER create a PR automatically or as part of another task unless directly requested.
-    - ALWAYS use the scripts/ai-pr.sh script as the preferred method for PR creation.
+    - ALWAYS use the scripts/ai-pr.sh script as the preferred method for PR creation on Unix/macOS. On Windows, use the PowerShell equivalent:
+      - Unix/macOS: `./scripts/ai-pr.sh --title "PR Title" --overview "..." --model "cursor-gpt-5"`
+      - Windows (PowerShell): `pwsh -File scripts/ai-pr.ps1 --title "PR Title" --overview "..." --model "cursor-gpt-5"`
+      - Windows (CMD shim): `scripts\\ai-pr.cmd --title "PR Title" --overview "..." --model "cursor-gpt-5"`
     - The helper script avoids multiline command issues and creates well-structured PRs:
         ```bash
         ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
+        # Windows
+        pwsh -File scripts/ai-pr.ps1 --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2" --model "cursor-gpt-5"
         ```
     - Use the `--draft` option to create a draft PR in the following scenarios:
         - When the changes are a work-in-progress and not ready for final review
@@ -19,6 +24,8 @@ Pull requests creation instructions, ONLY create PRs when EXPLICITLY requested b
         - When the user explicitly asks for a draft PR
         ```bash
         ./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --draft
+        # Windows
+        pwsh -File scripts/ai-pr.ps1 --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --draft --model "cursor-gpt-5"
         ```
     - Use the `--no-browser` option only for automation or when explicitly requested
     - Use syntax with comma-separated lists instead of trying to create multiline strings directly.

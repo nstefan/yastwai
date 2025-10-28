@@ -9,9 +9,12 @@ alwaysApply: true
 ## MAIN BRANCH PROTECTION - HIGHEST PRIORITY
 - CRITICAL: Main branch protection is the HIGHEST priority rule in this project
 - ALWAYS run branch verification as the FIRST action in every user interaction:
-  `./scripts/ai-protect-main.sh --no-auto-branch`
+  - Unix/macOS: `./scripts/ai-protect-main.sh --no-auto-branch`
+  - Windows (PowerShell): `pwsh -File scripts/ai-protect-main.ps1 --no-auto-branch`
+  - Windows (CMD shim): `scripts\ai-protect-main.cmd --no-auto-branch`
 - If on main branch, IMMEDIATELY create a feature branch BEFORE any other actions:
-  `./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"`
+  - Unix/macOS: `./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"`
+  - Windows: `pwsh -File scripts/ai-protect-main.ps1 --auto-branch "descriptive-feature-name"`
 - NEVER perform any work directly on the main branch under ANY circumstances
 - ALL operations must ONLY be performed on feature branches
 
@@ -27,13 +30,25 @@ Every command must not be interactive.
 CRITICAL BRANCH PROTECTION RULES
     - ⚠️ MAIN BRANCH PROTECTION: NEVER work directly on the main branch under ANY circumstances.
     - MANDATORY VERIFICATION: At the start of EVERY user interaction, check current branch:
-      ```bash
-      ./scripts/ai-branch.sh --check-only
-      ```
+      - Unix/macOS:
+        ```bash
+        ./scripts/ai-branch.sh --check-only
+        ```
+      - Windows:
+        ```powershell
+        pwsh -File scripts/ai-branch.ps1 --check-only
+        # or scripts\ai-branch.cmd --check-only
+        ```
     - BRANCH CREATION: If on main branch, IMMEDIATELY create a feature branch before proceeding:
-      ```bash
-      ./scripts/ai-branch.sh --new-branch "descriptive-feature-name" --is-related false
-      ```
+      - Unix/macOS:
+        ```bash
+        ./scripts/ai-branch.sh --new-branch "descriptive-feature-name" --is-related false
+        ```
+      - Windows:
+        ```powershell
+        pwsh -File scripts/ai-branch.ps1 --new-branch "descriptive-feature-name" --is-related false
+        # or scripts\ai-branch.cmd --new-branch "descriptive-feature-name" --is-related false
+        ```
     - Always use helper scripts for ALL git branch operations:
       - Use ai-branch.sh for branch management
       - Use ai-update-main.sh for updating main
@@ -73,14 +88,9 @@ IMPORTANT: Never edit .mdc files directly
     - Modifying .mdc files directly will not persist changes and could break the symlink structure.
 
 Model Detection Instructions for AI Agents
-    - Use scripts/ai-cursor-model.sh to retrieve the current AI model information:
-        ```bash
-        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
-        ```
-    - It is recommended to detect the model first, then pass it to the scripts asking for it:
-        ```bash
-        MODEL=$(./scripts/ai-cursor-model.sh --quiet)
-        ```
+    - Unix/macOS: Use `scripts/ai-cursor-model.sh` to retrieve the current AI model information.
+    - Windows: Use `pwsh -File scripts/ai-cursor-model.ps1` (or `scripts\ai-cursor-model.cmd`).
+    - Recommended flow: detect the model, then pass it to scripts that require it.
 
 README File Management
     - The README.md should be dynamically generated using the scripts/ai-readme.sh script.
