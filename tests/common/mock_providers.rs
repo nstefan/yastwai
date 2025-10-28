@@ -109,11 +109,11 @@ impl Provider for MockOpenAI {
                     },
                 }
             ],
-            usage: yastwai::providers::openai::TokenUsage {
+            usage: Some(yastwai::providers::openai::TokenUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
-            },
+            }),
         })
     }
     

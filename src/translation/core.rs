@@ -169,6 +169,12 @@ enum TranslationProviderImpl {
         client: OpenAI,
     },
     
+    /// LM Studio local server (OpenAI-compatible)
+    LMStudio {
+        /// Client instance (OpenAI-compatible)
+        client: OpenAI,
+    },
+    
     /// Anthropic API service
     Anthropic {
         /// Client instance
@@ -246,6 +252,26 @@ impl TranslationService {
                         retry_count,
                         retry_backoff_ms,
                         rate_limit
+                    ),
+                }
+            },
+            ConfigTranslationProvider::LMStudio => {
+                let retry_count = config.common.retry_count;
+                let retry_backoff_ms = config.common.retry_backoff_ms;
+                let rate_limit = config.get_rate_limit();
+                // LM Studio often doesn't require an API key; use a default if empty
+                let api_key = {
+                    let k = config.get_api_key();
+                    if k.is_empty() { "lm-studio".to_string() } else { k }
+                };
+                
+                TranslationProviderImpl::LMStudio {
+                    client: OpenAI::new_with_config(
+                        api_key,
+                        config.get_endpoint(),
+                        retry_count,
+                        retry_backoff_ms,
+                        rate_limit,
                     ),
                 }
             },
@@ -344,6 +370,30 @@ impl TranslationService {
                             });
                         }
                         Err(anyhow!("Failed to connect to OpenAI API: {}", e))
+                    }
+                }
+            },
+            TranslationProviderImpl::LMStudio { client: _ } => {
+                // For LM Studio (OpenAI-compatible), perform a simple test translation
+                let test_result = self.test_translation(source_language, target_language).await;
+                match test_result {
+                    Ok(_) => {
+                        if let Some(log) = &log_capture {
+                            log.lock().await.push(LogEntry {
+                                level: "INFO".to_string(),
+                                message: "Successfully connected to LM Studio".to_string(),
+                            });
+                        }
+                        Ok(())
+                    },
+                    Err(e) => {
+                        if let Some(log) = &log_capture {
+                            log.lock().await.push(LogEntry {
+                                level: "ERROR".to_string(),
+                                message: format!("Failed to connect to LM Studio: {}", e),
+                            });
+                        }
+                        Err(anyhow!("Failed to connect to LM Studio: {}", e))
                     }
                 }
             },
@@ -464,7 +514,7 @@ impl TranslationService {
                     }
                 }
             },
-            TranslationProviderImpl::OpenAI { client } => {
+            TranslationProviderImpl::OpenAI { client } | TranslationProviderImpl::LMStudio { client } => {
                 // Create OpenAI request
                 let request = OpenAIRequest::new(self.config.get_model())
                     .add_message("system", &system_prompt)
@@ -483,7 +533,7 @@ impl TranslationService {
                         if let Some(log) = &log_capture {
                             log.lock().await.push(LogEntry {
                                 level: "INFO".to_string(),
-                                message: format!("OpenAI response received in {:?}", duration),
+                                message: format!("OpenAI-compatible response received in {:?}", duration),
                             });
                         }
                         
@@ -491,12 +541,15 @@ impl TranslationService {
                         let translated_text = if !response.choices.is_empty() {
                             response.choices[0].message.content.clone()
                         } else {
-                            return Err(anyhow!("OpenAI returned empty response"));
+                            return Err(anyhow!("OpenAI-compatible provider returned empty response"));
                         };
                         
                         // Extract token usage
-                        let prompt_tokens = Some(response.usage.prompt_tokens as u64);
-                        let completion_tokens = Some(response.usage.completion_tokens as u64);
+                        let (prompt_tokens, completion_tokens) = if let Some(usage) = response.usage.as_ref() {
+                            (Some(usage.prompt_tokens as u64), Some(usage.completion_tokens as u64))
+                        } else {
+                            (None, None)
+                        };
                         
                         // Store in cache
                         self.cache.store(text, source_language, target_language, &translated_text).await;
@@ -509,11 +562,11 @@ impl TranslationService {
                         if let Some(log) = &log_capture {
                             log.lock().await.push(LogEntry {
                                 level: "ERROR".to_string(),
-                                message: format!("OpenAI translation error: {}", e),
+                                message: format!("OpenAI-compatible translation error: {}", e),
                             });
                         }
                         
-                        Err(anyhow!("OpenAI translation error: {}", e))
+                        Err(anyhow!("OpenAI-compatible translation error: {}", e))
                     }
                 }
             },
