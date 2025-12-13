@@ -4,12 +4,11 @@
 
 use anyhow::Result;
 use std::env;
-use tokio_test;
 use yastwai::providers::Provider;
-use yastwai::providers::openai::{OpenAI, OpenAIRequest};
+use yastwai::providers::openai::OpenAIRequest;
 use yastwai::providers::anthropic::{Anthropic, AnthropicRequest};
-use yastwai::providers::ollama::{Ollama, GenerationRequest, ChatRequest, ChatMessage};
-use crate::common::mock_providers::{MockOpenAI, MockAnthropic, MockOllama, MockErrorType};
+use yastwai::providers::ollama::{GenerationRequest, ChatRequest, ChatMessage};
+use crate::common::mock_providers::{MockOpenAI, MockAnthropic, MockOllama};
 
 /// Test that we can handle missing API keys gracefully
 #[test]

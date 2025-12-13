@@ -36,7 +36,8 @@ pub struct SubtitleEntry {
 }
 
 impl SubtitleEntry {
-    // @creates: New subtitle entry
+    /// Creates a new subtitle entry - used by tests and external consumers
+    #[allow(dead_code)]
     pub fn new(seq_num: usize, start_time_ms: u64, end_time_ms: u64, text: String) -> Self {
         SubtitleEntry {
             seq_num,
@@ -71,7 +72,8 @@ impl SubtitleEntry {
         })
     }
     
-    /// Parse an SRT timestamp to milliseconds for testing
+    /// Parse an SRT timestamp to milliseconds - used by tests
+    #[allow(dead_code)]
     pub fn parse_timestamp(timestamp: &str) -> Result<u64> {
         // Parse HH:MM:SS,mmm format
         let parts: Vec<&str> = timestamp.split(&[':', ',', '.'][..]).collect();

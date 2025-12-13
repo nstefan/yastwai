@@ -1,65 +1,7 @@
 use anyhow::{Result, anyhow};
 use isolang::Language;
 
-/// Language utilities for ISO language code handling
-/// 
-/// This module provides functions for validating, normalizing, and
-/// matching ISO 639-1 (2-letter) and ISO 639-2 (3-letter) language codes.
-/// Language code type
-pub enum LanguageCodeType {
-    /// ISO 639-1 (2-letter) code
-    Part1,
-    /// ISO 639-2/T (3-letter) code
-    Part2T,
-    /// ISO 639-2/B (3-letter) code
-    Part2B,
-}
-
-/// Validate if a language code is a valid ISO 639-1 or ISO 639-2 code
-pub fn validate_language_code(code: &str) -> Result<LanguageCodeType> {
-    let normalized_code = code.trim().to_lowercase();
-    
-    // Check for ISO 639-1 (2-letter) code
-    if normalized_code.len() == 2 {
-        if Language::from_639_1(&normalized_code).is_some() {
-            return Ok(LanguageCodeType::Part1);
-        }
-    } 
-    // Check for ISO 639-2 (3-letter) code
-    else if normalized_code.len() == 3 {
-        // Try to parse as ISO 639-2/T code
-        if Language::from_639_3(&normalized_code).is_some() {
-            return Ok(LanguageCodeType::Part2T);
-        }
-        
-        // Check if it's a ISO 639-2/B code that differs from ISO 639-2/T
-        match normalized_code.as_str() {
-            "fre" => return Ok(LanguageCodeType::Part2B), // French (fra in 639-2/T)
-            "ger" => return Ok(LanguageCodeType::Part2B), // German (deu in 639-2/T)
-            "dut" => return Ok(LanguageCodeType::Part2B), // Dutch (nld in 639-2/T)
-            "gre" => return Ok(LanguageCodeType::Part2B), // Greek (ell in 639-2/T)
-            "chi" => return Ok(LanguageCodeType::Part2B), // Chinese (zho in 639-2/T)
-            "cze" => return Ok(LanguageCodeType::Part2B), // Czech (ces in 639-2/T)
-            "ice" => return Ok(LanguageCodeType::Part2B), // Icelandic (isl in 639-2/T)
-            "alb" => return Ok(LanguageCodeType::Part2B), // Albanian (sqi in 639-2/T)
-            "arm" => return Ok(LanguageCodeType::Part2B), // Armenian (hye in 639-2/T)
-            "baq" => return Ok(LanguageCodeType::Part2B), // Basque (eus in 639-2/T)
-            "bur" => return Ok(LanguageCodeType::Part2B), // Burmese (mya in 639-2/T)
-            "per" => return Ok(LanguageCodeType::Part2B), // Persian (fas in 639-2/T)
-            "geo" => return Ok(LanguageCodeType::Part2B), // Georgian (kat in 639-2/T)
-            "may" => return Ok(LanguageCodeType::Part2B), // Malay (msa in 639-2/T)
-            "mac" => return Ok(LanguageCodeType::Part2B), // Macedonian (mkd in 639-2/T)
-            "rum" => return Ok(LanguageCodeType::Part2B), // Romanian (ron in 639-2/T)
-            "slo" => return Ok(LanguageCodeType::Part2B), // Slovak (slk in 639-2/T)
-            "wel" => return Ok(LanguageCodeType::Part2B), // Welsh (cym in 639-2/T)
-            _ => {}
-        }
-    }
-    
-    Err(anyhow!("Invalid language code: {}", code))
-}
-
-/// Normalize a language code to ISO 639-2/T (3-letter) format
+/// Normalize a language code to ISO 639-2/T (3-letter) format.
 pub fn normalize_to_part2t(code: &str) -> Result<String> {
     let normalized_code = code.trim().to_lowercase();
     

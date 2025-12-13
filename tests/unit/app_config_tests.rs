@@ -4,6 +4,18 @@
 
 use yastwai::app_config::{Config, TranslationProvider, LogLevel, ProviderConfig, TranslationCommonConfig};
 
+/// Helper function to find provider config by type
+fn find_provider_config<'a>(config: &'a Config, provider: &TranslationProvider) -> Option<&'a ProviderConfig> {
+    let provider_str = match provider {
+        TranslationProvider::Ollama => "ollama",
+        TranslationProvider::OpenAI => "openai",
+        TranslationProvider::Anthropic => "anthropic",
+        TranslationProvider::LMStudio => "lmstudio",
+    };
+    config.translation.available_providers.iter()
+        .find(|p| p.provider_type == provider_str)
+}
+
 /// Test default configuration values
 #[test]
 fn test_default_config_withNoParameters_shouldHaveCorrectDefaults() {
@@ -15,11 +27,10 @@ fn test_default_config_withNoParameters_shouldHaveCorrectDefaults() {
     assert_eq!(config.translation.provider, TranslationProvider::Ollama);
     
     // Test provider config values
-    let ollama_config = config.translation.get_provider_config(&TranslationProvider::Ollama)
+    let ollama_config = find_provider_config(&config, &TranslationProvider::Ollama)
         .expect("Ollama provider config should exist");
     
     // Check default values using the same functions used in the Config implementation
-    // These are internal functions in the app_config module
     assert_eq!(ollama_config.concurrent_requests, 4); // default_concurrent_requests()
     assert_eq!(ollama_config.max_chars_per_request, 1000); // default_max_chars_per_request()
     assert_eq!(ollama_config.timeout_secs, 30); // default_timeout_secs()
@@ -28,7 +39,7 @@ fn test_default_config_withNoParameters_shouldHaveCorrectDefaults() {
     assert_eq!(config.log_level, LogLevel::Info);
 
     // Ensure LM Studio provider config exists by default
-    let lmstudio_config = config.translation.get_provider_config(&TranslationProvider::LMStudio)
+    let lmstudio_config = find_provider_config(&config, &TranslationProvider::LMStudio)
         .expect("LMStudio provider config should exist");
     assert_eq!(lmstudio_config.endpoint, "http://localhost:1234/v1");
 }
@@ -92,7 +103,7 @@ fn test_config_validation_withVariousConfigs_shouldValidateCorrectly() {
     // LM Studio shouldn't require API key
     config.translation.provider = TranslationProvider::LMStudio;
     // Ensure available_providers has lmstudio
-    if config.translation.get_provider_config(&TranslationProvider::LMStudio).is_none() {
+    if find_provider_config(&config, &TranslationProvider::LMStudio).is_none() {
         config.translation.available_providers.push(
             yastwai::app_config::ProviderConfig::new(TranslationProvider::LMStudio)
         );
@@ -132,4 +143,4 @@ fn test_providerSpecificDefaults_shouldHaveCorrectRateLimits() {
     // LM Studio (local) should have no rate limit by default
     let lmstudio_config = ProviderConfig::new(TranslationProvider::LMStudio);
     assert_eq!(lmstudio_config.rate_limit, None);
-} 
+}

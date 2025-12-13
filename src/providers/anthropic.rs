@@ -193,6 +193,8 @@ impl Default for AnthropicRequest {
     }
 }
 
+/// Builder methods for AnthropicRequest - API surface for library consumers
+#[allow(dead_code)]
 impl AnthropicRequest {
     /// Create a new Anthropic request
     pub fn new(model: impl Into<String>, max_tokens: u32) -> Self {
@@ -237,6 +239,8 @@ impl AnthropicRequest {
     }
 }
 
+/// Anthropic client implementation - some methods are API surface for library consumers
+#[allow(dead_code)]
 impl Anthropic {
     /// Create a new Anthropic client with simple configuration
     pub fn new(api_key: impl Into<String>, endpoint: impl Into<String>) -> Self {
@@ -396,16 +400,6 @@ impl Provider for Anthropic {
     async fn complete(&self, request: Self::Request) -> Result<Self::Response, ProviderError> {
         self.send_request_with_retry(&request).await
     }
-    
-    /// Test the connection to the Anthropic API
-    async fn test_connection(&self) -> Result<(), ProviderError> {
-        let request = AnthropicRequest::new("claude-3-haiku-20240307", 10)
-            .add_message("user", "Hello");
-        
-        self.complete(request).await?;
-        Ok(())
-    }
-    
     /// Extract text from Anthropic response
     fn extract_text(response: &Self::Response) -> String {
         response.content.iter()

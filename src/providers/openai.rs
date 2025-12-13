@@ -83,7 +83,8 @@ pub struct TokenUsage {
     pub prompt_tokens: u32,
     /// Number of completion tokens
     pub completion_tokens: u32,
-    /// Total number of tokens
+    /// Total number of tokens - required by API response format
+    #[allow(dead_code)]
     pub total_tokens: u32,
 }
 
@@ -125,6 +126,8 @@ impl Default for OpenAIRequest {
     }
 }
 
+/// Builder methods for OpenAIRequest - API surface for library consumers
+#[allow(dead_code)]
 impl OpenAIRequest {
     /// Create a new OpenAI request
     pub fn new(model: impl Into<String>) -> Self {
@@ -188,6 +191,8 @@ impl OpenAIRequest {
     }
 }
 
+/// OpenAI client implementation - some methods are API surface for library consumers
+#[allow(dead_code)]
 impl OpenAI {
     /// Create a new OpenAI client
     pub fn new(api_key: impl Into<String>, endpoint: impl Into<String>) -> Self {
@@ -302,16 +307,5 @@ impl OpenAI {
         
         // If we get here, all retries failed
         Err(last_error.unwrap_or_else(|| anyhow!("OpenAI API request failed after {} attempts", self.max_retries + 1)))
-    }
-    
-    /// Test the connection to the OpenAI API
-    pub async fn test_connection(&self, model: &str) -> Result<()> {
-        let request = OpenAIRequest::new(model)
-            .add_message("system", "You are a helpful assistant.")
-            .add_message("user", "Say hello!")
-            .max_tokens(5);
-        
-        let _response = self.complete(request).await?;
-        Ok(())
     }
 } 

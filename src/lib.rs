@@ -59,5 +59,5 @@ pub mod errors;
 pub use app_config::Config;
 pub use subtitle_processor::{SubtitleCollection, SubtitleEntry};
 pub use translation::TranslationService;
-pub use language_utils::{language_codes_match, normalize_to_part2t, get_language_name, validate_language_code, LanguageCodeType};
+pub use language_utils::{language_codes_match, normalize_to_part2t, get_language_name};
 pub use errors::{AppError, ProviderError, SubtitleError, TranslationError}; 

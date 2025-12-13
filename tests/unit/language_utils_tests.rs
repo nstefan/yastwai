@@ -2,36 +2,8 @@
  * Tests for language utility functions
  */
 
-use anyhow::Result;
-use yastwai::language_utils::{validate_language_code, normalize_to_part2t, language_codes_match, get_language_name, LanguageCodeType};
+use yastwai::language_utils::{normalize_to_part2t, language_codes_match, get_language_name};
 use yastwai::app_config::SubtitleInfo;
-
-/// Test validation of language codes
-#[test]
-fn test_validate_language_code_withValidCodes_shouldReturnCorrectType() {
-    // ISO 639-1 tests
-    assert!(matches!(validate_language_code("en").unwrap(), LanguageCodeType::Part1));
-    assert!(matches!(validate_language_code("fr").unwrap(), LanguageCodeType::Part1));
-    assert!(matches!(validate_language_code("de").unwrap(), LanguageCodeType::Part1));
-    
-    // ISO 639-2/T tests
-    assert!(matches!(validate_language_code("eng").unwrap(), LanguageCodeType::Part2T));
-    assert!(matches!(validate_language_code("fra").unwrap(), LanguageCodeType::Part2T));
-    assert!(matches!(validate_language_code("deu").unwrap(), LanguageCodeType::Part2T));
-    
-    // ISO 639-2/B tests
-    assert!(matches!(validate_language_code("fre").unwrap(), LanguageCodeType::Part2B));
-    assert!(matches!(validate_language_code("ger").unwrap(), LanguageCodeType::Part2B));
-    
-    // Whitespace and case tests
-    assert!(matches!(validate_language_code(" EN ").unwrap(), LanguageCodeType::Part1));
-    assert!(matches!(validate_language_code("ENG").unwrap(), LanguageCodeType::Part2T));
-    
-    // Invalid codes
-    assert!(validate_language_code("xyz").is_err());
-    assert!(validate_language_code("123").is_err());
-    assert!(validate_language_code("e").is_err());
-}
 
 /// Test normalization of language codes to ISO 639-2/T format
 #[test]
@@ -178,4 +150,4 @@ fn test_subtitle_track_selection_withIsoCodes_shouldMatchCorrectly() {
         .collect::<Vec<_>>();
     
     assert_eq!(track_matches, vec![2]);  // Should match "de" with "deu"
-} 
+}

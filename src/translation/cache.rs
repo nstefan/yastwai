@@ -113,55 +113,6 @@ impl TranslationCache {
                source_language, 
                target_language);
     }
-    
-    /// Get cache statistics
-    pub async fn stats(&self) -> (usize, usize, f64) {
-        let hits = *self.hits.read().await;
-        let misses = *self.misses.read().await;
-        let total = hits + misses;
-        
-        let hit_rate = if total > 0 {
-            hits as f64 / total as f64
-        } else {
-            0.0
-        };
-        
-        (hits, misses, hit_rate)
-    }
-    
-    /// Clear the cache
-    pub async fn clear(&self) {
-        let mut cache = self.cache.write().await;
-        cache.clear();
-        
-        let mut hits = self.hits.write().await;
-        *hits = 0;
-        
-        let mut misses = self.misses.write().await;
-        *misses = 0;
-        
-        debug!("Translation cache cleared");
-    }
-    
-    /// Get the number of entries in the cache
-    pub async fn len(&self) -> usize {
-        self.cache.read().await.len()
-    }
-    
-    /// Check if the cache is empty
-    pub async fn is_empty(&self) -> bool {
-        self.cache.read().await.is_empty()
-    }
-    
-    /// Enable or disable the cache
-    pub fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
-    }
-    
-    /// Check if the cache is enabled
-    pub fn is_enabled(&self) -> bool {
-        self.enabled
-    }
 }
 
 impl Default for TranslationCache {

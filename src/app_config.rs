@@ -561,13 +561,6 @@ impl TranslationConfig {
             .find(|p| p.provider_type == provider_str)
     }
     
-    /// Get a specific provider configuration by type for testing
-    pub fn get_provider_config(&self, provider_type: &TranslationProvider) -> Option<&ProviderConfig> {
-        let provider_str = provider_type.to_lowercase_string();
-        self.available_providers.iter()
-            .find(|p| p.provider_type == provider_str)
-    }
-    
     /// Get the model for the active provider
     pub fn get_model(&self) -> String {
         if let Some(provider_config) = self.get_active_provider_config() {

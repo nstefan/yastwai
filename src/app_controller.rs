@@ -23,6 +23,7 @@ pub struct Controller {
 
 impl Controller {
     /// Create a new controller for test purposes with default configuration
+    #[allow(dead_code)]
     pub fn new_for_test() -> Result<Self> {
         Self::with_config(Config::default())
     }
@@ -37,17 +38,20 @@ impl Controller {
         Ok(controller)
     }
     
-    /// Check if the controller is properly initialized with configuration
+    /// Check if the controller is properly initialized - used by tests
+    #[allow(dead_code)]
     pub fn is_initialized(&self) -> bool {
         !self.config.source_language.is_empty() && !self.config.target_language.is_empty()
     }
     
-    /// Public method to write logs to a file for testing purposes
+    /// Public method to write logs to a file - used by tests
+    #[allow(dead_code)]
     pub fn write_translation_logs(&self, logs: &[LogEntry], file_path: &str, translation_context: &str) -> Result<()> {
         self.write_logs_to_file(logs, file_path, translation_context)
     }
 
-    /// Test version of run method that simulates the process without actual file operations
+    /// Test version of run method - used by tests
+    #[allow(dead_code)]
     pub async fn test_run(&self, input_file: PathBuf, output_dir: PathBuf, force_overwrite: bool) -> Result<()> {
         // For testing purposes, just validate the configuration and simulate success
         info!("Test run initiated for file: {:?}", input_file);
@@ -63,7 +67,8 @@ impl Controller {
         Ok(())
     }
 
-    /// Test version of run_folder method that simulates folder processing
+    /// Test version of run_folder method - used by tests
+    #[allow(dead_code)]
     pub async fn test_run_folder(&self, input_dir: PathBuf, force_overwrite: bool) -> Result<()> {
         // For testing purposes, just validate the configuration and simulate success
         info!("Test run folder initiated for directory: {:?}", input_dir);
