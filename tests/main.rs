@@ -33,6 +33,8 @@ mod unit {
     pub mod app_controller_tests;
     pub mod language_utils_tests;
     pub mod progress_bar_tests;
+    pub mod errors_tests;
+    pub mod cache_tests;
     
     // Provider tests
     pub mod providers_tests;
