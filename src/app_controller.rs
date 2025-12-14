@@ -1,17 +1,18 @@
-use anyhow::{Result, Context};
-use log::{error, warn, info, debug};
+use anyhow::{Context, Result};
+use log::{debug, error, info, warn};
 use std::path::{Path, PathBuf};
-use crate::app_config::Config;
-use crate::subtitle_processor::SubtitleCollection;
-use crate::translation::{TranslationService, BatchTranslator};
-use crate::translation::core::LogEntry;
-use crate::language_utils;
-use crate::file_utils;
-use std::sync::Once;
-use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use std::sync::Arc;
+use std::sync::Once;
 use tokio::sync::Mutex;
-use crate::file_utils::{FileManager, FileType};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
+use crate::app_config::Config;
+use crate::file_utils::{self, FileManager, FileType};
+use crate::language_utils;
+use crate::session::{SessionCreateParams, SessionManager};
+use crate::subtitle_processor::SubtitleCollection;
+use crate::translation::core::LogEntry;
+use crate::translation::{BatchTranslator, TranslationService};
 
 // @module: Application controller for subtitle processing
 
@@ -19,6 +20,8 @@ use crate::file_utils::{FileManager, FileType};
 pub struct Controller {
     // @field: App configuration
     config: Config,
+    // @field: Session manager for persistence (optional based on config)
+    session_manager: Option<SessionManager>,
 }
 
 impl Controller {
@@ -27,15 +30,36 @@ impl Controller {
     pub fn new_for_test() -> Result<Self> {
         Self::with_config(Config::default())
     }
-    
+
     // @method: Create a new controller with the given configuration
     pub fn with_config(config: Config) -> Result<Self> {
-        // Create translation service from config
+        // Initialize session manager if persistence is enabled
+        let session_manager = if config.session.enabled {
+            match SessionManager::new_default() {
+                Ok(sm) => {
+                    debug!("Session manager initialized");
+                    Some(sm)
+                }
+                Err(e) => {
+                    warn!("Failed to initialize session manager: {}. Continuing without persistence.", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let controller = Self {
             config,
+            session_manager,
         };
-        
+
         Ok(controller)
+    }
+
+    /// Check if session persistence is available
+    pub fn has_session_support(&self) -> bool {
+        self.session_manager.is_some()
     }
     
     /// Check if the controller is properly initialized - used by tests
@@ -241,33 +265,77 @@ impl Controller {
     }
     
     /// Internal method to translate subtitles with a progress bar from the provided MultiProgress
-    async fn translate_subtitles_with_progress(&self, subtitles: SubtitleCollection, multi_progress: &MultiProgress, output_dir: &Path) -> Result<(SubtitleCollection, std::time::Duration)> {
+    async fn translate_subtitles_with_progress(
+        &self,
+        subtitles: SubtitleCollection,
+        multi_progress: &MultiProgress,
+        output_dir: &Path,
+    ) -> Result<(SubtitleCollection, std::time::Duration)> {
         // Start timing the translation process
         let translation_start_time = std::time::Instant::now();
-        
+
         // Log the number of entries we're about to translate
         let total_entries_count = subtitles.entries.len();
-        
+
+        // Create or resume session if session manager is available
+        let session_info = if let Some(ref session_manager) = self.session_manager {
+            let params = SessionCreateParams::new(
+                subtitles.source_file.clone(),
+                self.config.source_language.clone(),
+                self.config.target_language.clone(),
+                self.config.translation.provider.to_lowercase_string(),
+                self.config.translation.get_model(),
+                subtitles.entries.clone(),
+            );
+
+            match session_manager.resume_or_create(params).await {
+                Ok((session, pending)) => {
+                    if pending.len() < total_entries_count {
+                        info!(
+                            "📂 Resuming session {} ({}/{} entries completed)",
+                            &session.id[..8],
+                            total_entries_count - pending.len(),
+                            total_entries_count
+                        );
+                    } else {
+                        debug!("Created new session {}", &session.id[..8]);
+                    }
+                    Some((session, pending.len()))
+                }
+                Err(e) => {
+                    warn!("Failed to create/resume session: {}. Continuing without persistence.", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         // Get max characters per chunk from the config
         let max_chars_per_chunk = self.config.translation.get_max_chars_per_request();
-        
+
         // Split the subtitles into chunks that respect the max characters limit
         let chunks = subtitles.split_into_chunks(max_chars_per_chunk);
-        
+
         // Create a progress bar for translation tracking
         let total_chunks = chunks.len() as u64;
         let progress_bar = multi_progress.add(ProgressBar::new(total_chunks));
         let template_result = ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg} {eta}")
-            .or_else(|_| ProgressStyle::default_bar().template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}"))
+            .or_else(|_| {
+                ProgressStyle::default_bar()
+                    .template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}")
+            })
             .unwrap_or_else(|_| ProgressStyle::default_bar());
         progress_bar.set_style(template_result.progress_chars("█▓▒░"));
-        
+
         // Log that we're starting translation with provider and model info
-        info!("🚀 YASTwAI: {} - {}", 
-            self.config.translation.provider.display_name(), 
-            self.config.translation.get_model());
-        
+        info!(
+            "🚀 YASTwAI: {} - {}",
+            self.config.translation.provider.display_name(),
+            self.config.translation.get_model()
+        );
+
         // Log that we're translating
         info!("Translating, please wait…");
         progress_bar.set_message("Translating");
@@ -358,18 +426,29 @@ impl Controller {
         // Create a new subtitle collection with the translated entries
         let mut translated_collection = SubtitleCollection::new(
             PathBuf::from("translated.srt"),
-            self.config.target_language.clone()
+            self.config.target_language.clone(),
         );
         translated_collection.entries = translated_entries;
-        
+
         // Log translation metrics
         let translation_elapsed = translation_start_time.elapsed();
-        
+
+        // Mark session as complete if we have session support
+        if let Some((ref session, _)) = session_info {
+            if let Some(ref session_manager) = self.session_manager {
+                if let Err(e) = session_manager.complete_session(&session.id).await {
+                    warn!("Failed to mark session as complete: {}", e);
+                } else {
+                    debug!("Session {} marked as complete", &session.id[..8]);
+                }
+            }
+        }
+
         // Only log the token usage information at the end of the translation process
         if token_usage.total_tokens > 0 {
             info!("🔢 {}", token_usage.summary());
         }
-        
+
         Ok((translated_collection, translation_elapsed))
     }
     
