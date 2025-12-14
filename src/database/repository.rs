@@ -942,4 +942,147 @@ mod tests {
         assert_ne!(hash1, hash3);
         assert_eq!(hash1.len(), 64); // SHA256 produces 64 hex chars
     }
+
+    #[tokio::test]
+    async fn test_insertTranslatedEntries_shouldStoreTranslations() {
+        let repo = create_test_repo().await;
+
+        // Create session and source entries first
+        let session = SessionRecord::new(
+            "translated-test".to_string(),
+            "/path/to/video.mkv".to_string(),
+            "hash".to_string(),
+            "en".to_string(),
+            "fr".to_string(),
+            "ollama".to_string(),
+            "llama2".to_string(),
+            2,
+        );
+        repo.create_session(&session).await.unwrap();
+
+        let entries = vec![
+            SourceEntryRecord::new("translated-test".to_string(), 1, 0, 1000, "Hello".to_string()),
+            SourceEntryRecord::new("translated-test".to_string(), 2, 1000, 2000, "World".to_string()),
+        ];
+        repo.insert_source_entries(entries).await.unwrap();
+
+        // Get source entries to get their IDs
+        let source_entries = repo.get_source_entries("translated-test").await.unwrap();
+        assert_eq!(source_entries.len(), 2);
+
+        // Insert translated entries
+        let translated_entries = vec![
+            TranslatedEntryRecord::new(source_entries[0].id, "Bonjour".to_string()),
+            TranslatedEntryRecord::new(source_entries[1].id, "Monde".to_string()),
+        ];
+        repo.insert_translated_entries(translated_entries).await.unwrap();
+
+        // Retrieve and verify
+        let retrieved = repo.get_translated_entries("translated-test").await.unwrap();
+        assert_eq!(retrieved.len(), 2);
+        assert_eq!(retrieved[0].1.translated_text, "Bonjour");
+        assert_eq!(retrieved[1].1.translated_text, "Monde");
+    }
+
+    #[tokio::test]
+    async fn test_getPendingEntries_shouldReturnUntranslated() {
+        let repo = create_test_repo().await;
+
+        // Create session and source entries
+        let session = SessionRecord::new(
+            "pending-test".to_string(),
+            "/path/to/video.mkv".to_string(),
+            "hash".to_string(),
+            "en".to_string(),
+            "fr".to_string(),
+            "ollama".to_string(),
+            "llama2".to_string(),
+            3,
+        );
+        repo.create_session(&session).await.unwrap();
+
+        let entries = vec![
+            SourceEntryRecord::new("pending-test".to_string(), 1, 0, 1000, "One".to_string()),
+            SourceEntryRecord::new("pending-test".to_string(), 2, 1000, 2000, "Two".to_string()),
+            SourceEntryRecord::new("pending-test".to_string(), 3, 2000, 3000, "Three".to_string()),
+        ];
+        repo.insert_source_entries(entries).await.unwrap();
+
+        // Initially all should be pending
+        let pending = repo.get_pending_entries("pending-test").await.unwrap();
+        assert_eq!(pending.len(), 3);
+
+        // Translate one entry
+        let source_entries = repo.get_source_entries("pending-test").await.unwrap();
+        let translated = vec![TranslatedEntryRecord::new(
+            source_entries[0].id,
+            "Un".to_string(),
+        )];
+        repo.insert_translated_entries(translated).await.unwrap();
+
+        // Now only 2 should be pending
+        let pending = repo.get_pending_entries("pending-test").await.unwrap();
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0].source_text, "Two");
+        assert_eq!(pending[1].source_text, "Three");
+    }
+
+    #[tokio::test]
+    async fn test_updateSessionStatus_shouldChangeStatus() {
+        let repo = create_test_repo().await;
+
+        let session = SessionRecord::new(
+            "status-test".to_string(),
+            "/path/to/video.mkv".to_string(),
+            "hash".to_string(),
+            "en".to_string(),
+            "fr".to_string(),
+            "ollama".to_string(),
+            "llama2".to_string(),
+            10,
+        );
+        repo.create_session(&session).await.unwrap();
+
+        // Update to completed
+        repo.update_session_status("status-test", SessionStatus::Completed)
+            .await
+            .unwrap();
+
+        let updated = repo.get_session("status-test").await.unwrap().unwrap();
+        assert_eq!(updated.status, SessionStatus::Completed);
+        assert!(updated.completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_deleteSession_shouldRemoveSessionAndEntries() {
+        let repo = create_test_repo().await;
+
+        let session = SessionRecord::new(
+            "delete-test".to_string(),
+            "/path/to/video.mkv".to_string(),
+            "hash".to_string(),
+            "en".to_string(),
+            "fr".to_string(),
+            "ollama".to_string(),
+            "llama2".to_string(),
+            2,
+        );
+        repo.create_session(&session).await.unwrap();
+
+        let entries = vec![
+            SourceEntryRecord::new("delete-test".to_string(), 1, 0, 1000, "Hello".to_string()),
+        ];
+        repo.insert_source_entries(entries).await.unwrap();
+
+        // Delete session
+        repo.delete_session("delete-test").await.unwrap();
+
+        // Verify session is gone
+        let result = repo.get_session("delete-test").await.unwrap();
+        assert!(result.is_none());
+
+        // Source entries should also be gone (cascade delete)
+        let entries = repo.get_source_entries("delete-test").await.unwrap();
+        assert!(entries.is_empty());
+    }
 }
