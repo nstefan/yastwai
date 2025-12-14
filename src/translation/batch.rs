@@ -1,34 +1,39 @@
 /*!
  * Batch translation processing.
- * 
+ *
  * This module contains functionality for processing translations in batches,
- * with support for concurrency, progress tracking, and error handling.
+ * with support for concurrency, progress tracking, error handling, and
+ * quality validation.
  */
 
-use anyhow::{Result, anyhow};
-use log::error;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use anyhow::{anyhow, Result};
+use log::{debug, error};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
 use tokio::sync::Semaphore;
 use futures::stream::{self, StreamExt};
-use std::time::{Instant, Duration};
 
 use crate::subtitle_processor::SubtitleEntry;
+use crate::validation::{MarkerValidator, ValidationService, ValidationConfig};
 
-use super::core::{TranslationService, TokenUsageStats, LogEntry};
+use super::core::{LogEntry, TokenUsageStats, TranslationService};
 use super::formatting::FormatPreserver;
 
 /// Batch translator for processing subtitle entries in batches
 pub struct BatchTranslator {
     /// The translation service to use
     service: TranslationService,
-    
+
     /// Maximum number of concurrent requests
     max_concurrent_requests: usize,
-    
+
     /// Whether to retry individual entries on batch failure
     retry_individual_entries: bool,
+
+    /// Validation service for quality checks
+    validation_service: Option<ValidationService>,
 }
 
 impl BatchTranslator {
@@ -38,6 +43,18 @@ impl BatchTranslator {
             max_concurrent_requests: service.options.max_concurrent_requests,
             retry_individual_entries: service.options.retry_individual_entries,
             service,
+            validation_service: None,
+        }
+    }
+
+    /// Create a new batch translator with validation
+    pub fn with_validation(service: TranslationService, validation_config: ValidationConfig) -> Self {
+        let validation_service = ValidationService::with_config(validation_config.into());
+        Self {
+            max_concurrent_requests: service.options.max_concurrent_requests,
+            retry_individual_entries: service.options.retry_individual_entries,
+            service,
+            validation_service: Some(validation_service),
         }
     }
     
@@ -264,45 +281,87 @@ impl TranslationService {
         batch: &[SubtitleEntry],
         source_language: &str,
         target_language: &str,
-        log_capture: Arc<Mutex<Vec<LogEntry>>>
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
     ) -> Result<(Vec<SubtitleEntry>, Option<(Option<u64>, Option<u64>, Option<Duration>)>)> {
         // Skip empty batches
         if batch.is_empty() {
             return Ok((Vec::new(), None));
         }
-        
+
         // Combine all entries into a single text for translation
         let mut combined_text = String::new();
         let mut entry_indices = Vec::new();
-        
+
         for (idx, entry) in batch.iter().enumerate() {
             // Add a marker before each entry
             combined_text.push_str(&format!("<<ENTRY_{}>>", idx));
             combined_text.push('\n');
-            
+
             // Add the entry text
             combined_text.push_str(&entry.text);
             combined_text.push('\n');
-            
+
             // Store the entry index
             entry_indices.push(idx);
         }
-        
+
         // Add a final marker
         combined_text.push_str("<<END>>");
-        
+
         // Translate the combined text
-        let (translated_text, token_usage) = self.translate_text_with_usage(
-            &combined_text,
-            source_language,
-            target_language,
-            Some(log_capture.clone())
-        ).await?;
-        
+        let (translated_text, token_usage) = self
+            .translate_text_with_usage(
+                &combined_text,
+                source_language,
+                target_language,
+                Some(log_capture.clone()),
+            )
+            .await?;
+
+        // Validate markers in the response
+        let marker_validation = MarkerValidator::validate(&translated_text, batch.len());
+
+        if !marker_validation.passed() {
+            // Log validation failure
+            {
+                let mut logs = log_capture.lock().await;
+                logs.push(LogEntry {
+                    level: "WARN".to_string(),
+                    message: format!(
+                        "Marker validation failed: {}",
+                        marker_validation.error_message.as_deref().unwrap_or("Unknown error")
+                    ),
+                });
+
+                if !marker_validation.missing_indices.is_empty() {
+                    logs.push(LogEntry {
+                        level: "DEBUG".to_string(),
+                        message: format!(
+                            "Missing markers for entries: {:?}",
+                            marker_validation.missing_indices
+                        ),
+                    });
+                }
+            }
+
+            // Try to recover partial results
+            if marker_validation.found_indices.is_empty() {
+                return Err(anyhow!(
+                    "No valid markers found in response. Translation may be truncated."
+                ));
+            }
+
+            debug!(
+                "Attempting partial recovery: {}/{} markers found",
+                marker_validation.found_indices.len(),
+                batch.len()
+            );
+        }
+
         // Split the translated text back into entries
         let mut translated_entries = Vec::with_capacity(batch.len());
         let mut current_idx = 0;
-        
+
         for idx in entry_indices {
             let start_marker = format!("<<ENTRY_{}>>", idx);
             let end_marker = if idx == batch.len() - 1 {
@@ -310,35 +369,70 @@ impl TranslationService {
             } else {
                 format!("<<ENTRY_{}>>", idx + 1)
             };
-            
+
             // Find the start and end positions
-            let start_pos = translated_text[current_idx..].find(&start_marker)
-                .map(|pos| pos + current_idx + start_marker.len())
-                .ok_or_else(|| anyhow!("Could not find start marker for entry {}", idx))?;
-            
-            let end_pos = translated_text[start_pos..].find(&end_marker)
-                .map(|pos| pos + start_pos)
-                .ok_or_else(|| anyhow!("Could not find end marker for entry {}", idx))?;
-            
+            let start_pos = translated_text[current_idx..]
+                .find(&start_marker)
+                .map(|pos| pos + current_idx + start_marker.len());
+
+            let start_pos = match start_pos {
+                Some(pos) => pos,
+                None => {
+                    // Marker not found - use original text as fallback
+                    {
+                        let mut logs = log_capture.lock().await;
+                        logs.push(LogEntry {
+                            level: "WARN".to_string(),
+                            message: format!(
+                                "Entry {} marker not found, using original text",
+                                idx
+                            ),
+                        });
+                    }
+                    translated_entries.push(batch[idx].clone());
+                    continue;
+                }
+            };
+
+            let end_pos = translated_text[start_pos..].find(&end_marker).map(|pos| pos + start_pos);
+
+            let end_pos = match end_pos {
+                Some(pos) => pos,
+                None => {
+                    // End marker not found - try to use remaining text
+                    {
+                        let mut logs = log_capture.lock().await;
+                        logs.push(LogEntry {
+                            level: "WARN".to_string(),
+                            message: format!(
+                                "End marker for entry {} not found, using remaining text",
+                                idx
+                            ),
+                        });
+                    }
+                    translated_text.len()
+                }
+            };
+
             // Extract the translated text for this entry
             let mut entry_text = translated_text[start_pos..end_pos].trim().to_string();
-            
+
             // Apply format preservation if enabled
             if self.options.preserve_formatting {
                 entry_text = FormatPreserver::preserve_formatting(&batch[idx].text, &entry_text);
             }
-            
+
             // Create a new entry with the translated text
             let mut translated_entry = batch[idx].clone();
             translated_entry.text = entry_text;
-            
+
             // Add the translated entry
             translated_entries.push(translated_entry);
-            
+
             // Update the current position
             current_idx = end_pos;
         }
-        
+
         Ok((translated_entries, token_usage))
     }
     
