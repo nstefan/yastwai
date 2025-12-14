@@ -58,6 +58,31 @@ impl BatchTranslator {
         }
     }
     
+    /// Translate batches of subtitle entries with optional batch completion callback
+    pub async fn translate_batches_with_callback<F, C>(
+        &self,
+        batches: &[Vec<SubtitleEntry>],
+        source_language: &str,
+        target_language: &str,
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
+        progress_callback: F,
+        batch_complete_callback: Option<C>,
+    ) -> Result<(Vec<SubtitleEntry>, TokenUsageStats)>
+    where
+        F: Fn(usize, usize) + Clone + Send + 'static,
+        C: Fn(Vec<SubtitleEntry>) + Clone + Send + Sync + 'static,
+    {
+        self.translate_batches_internal(
+            batches,
+            source_language,
+            target_language,
+            log_capture,
+            progress_callback,
+            batch_complete_callback,
+        )
+        .await
+    }
+
     /// Translate batches of subtitle entries
     pub async fn translate_batches(
         &self,
@@ -65,8 +90,33 @@ impl BatchTranslator {
         source_language: &str,
         target_language: &str,
         log_capture: Arc<Mutex<Vec<LogEntry>>>,
-        progress_callback: impl Fn(usize, usize) + Clone + Send + 'static
+        progress_callback: impl Fn(usize, usize) + Clone + Send + 'static,
     ) -> Result<(Vec<SubtitleEntry>, TokenUsageStats)> {
+        self.translate_batches_internal::<_, fn(Vec<SubtitleEntry>)>(
+            batches,
+            source_language,
+            target_language,
+            log_capture,
+            progress_callback,
+            None,
+        )
+        .await
+    }
+
+    /// Internal implementation for batch translation
+    async fn translate_batches_internal<F, C>(
+        &self,
+        batches: &[Vec<SubtitleEntry>],
+        source_language: &str,
+        target_language: &str,
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
+        progress_callback: F,
+        batch_complete_callback: Option<C>,
+    ) -> Result<(Vec<SubtitleEntry>, TokenUsageStats)>
+    where
+        F: Fn(usize, usize) + Clone + Send + 'static,
+        C: Fn(Vec<SubtitleEntry>) + Clone + Send + Sync + 'static,
+    {
         // Initialize token usage stats
         let mut token_stats = TokenUsageStats::with_provider_info(
             self.service.config.provider.to_lowercase_string(),
@@ -80,6 +130,9 @@ impl BatchTranslator {
         let total_batches = batches.len();
         let processed_batches = Arc::new(AtomicUsize::new(0));
         
+        // Wrap callback in Arc for sharing across async tasks
+        let batch_callback = batch_complete_callback.map(Arc::new);
+
         // Process batches concurrently
         let results = stream::iter(batches.iter().enumerate())
             .map(|(batch_index, batch)| {
@@ -88,10 +141,11 @@ impl BatchTranslator {
                 let log_capture = log_capture.clone();
                 let processed_batches = processed_batches.clone();
                 let progress_callback = progress_callback.clone();
+                let batch_callback = batch_callback.clone();
                 let source_language = source_language.to_string();
                 let target_language = target_language.to_string();
                 let retry_individual_entries = self.retry_individual_entries;
-                
+
                 async move {
                     // Acquire a permit from the semaphore
                     let _permit = match semaphore.acquire().await {
@@ -130,17 +184,26 @@ impl BatchTranslator {
                     let current = processed_batches.fetch_add(1, Ordering::SeqCst) + 1;
                     progress_callback(current, total_batches);
                     
-                    // Log batch processing completion
+                    // Log batch processing completion and invoke callback
                     {
                         let mut logs = log_capture.lock().await;
                         let duration = start_time.elapsed();
                         match &result {
-                            Ok(_) => {
+                            Ok((entries, _)) => {
                                 logs.push(LogEntry {
                                     level: "INFO".to_string(),
-                                    message: format!("Batch {} completed in {:?}", batch_index + 1, duration),
+                                    message: format!(
+                                        "Batch {} completed in {:?}",
+                                        batch_index + 1,
+                                        duration
+                                    ),
                                 });
-                            },
+
+                                // Invoke batch complete callback if provided
+                                if let Some(ref callback) = batch_callback {
+                                    callback(entries.clone());
+                                }
+                            }
                             Err(e) => {
                                 logs.push(LogEntry {
                                     level: "ERROR".to_string(),
@@ -149,7 +212,7 @@ impl BatchTranslator {
                             }
                         }
                     }
-                    
+
                     (batch_index, result)
                 }
             })

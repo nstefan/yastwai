@@ -1,18 +1,20 @@
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Once;
-use tokio::sync::Mutex;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use tokio::sync::Mutex;
 
 use crate::app_config::Config;
 use crate::file_utils::{self, FileManager, FileType};
 use crate::language_utils;
-use crate::session::{SessionCreateParams, SessionManager};
+use crate::session::{PendingEntry, SessionCreateParams, SessionInfo, SessionManager};
 use crate::subtitle_processor::SubtitleCollection;
 use crate::translation::core::LogEntry;
 use crate::translation::{BatchTranslator, TranslationService};
+use crate::subtitle_processor::SubtitleEntry;
 
 // @module: Application controller for subtitle processing
 
@@ -278,44 +280,54 @@ impl Controller {
         let total_entries_count = subtitles.entries.len();
 
         // Create or resume session if session manager is available
-        let session_info = if let Some(ref session_manager) = self.session_manager {
-            let params = SessionCreateParams::new(
-                subtitles.source_file.clone(),
-                self.config.source_language.clone(),
+        let (session_info, pending_entries, seq_to_source_id) =
+            self.setup_session(&subtitles).await;
+
+        // Determine which entries need translation
+        let (entries_to_translate, already_translated) = self
+            .filter_entries_for_translation(&subtitles.entries, &pending_entries, &session_info)
+            .await;
+
+        // If we have already translated entries from a resumed session, collect them
+        let mut translated_entries: Vec<SubtitleEntry> = already_translated;
+
+        // If nothing to translate, we're done (fully resumed session)
+        if entries_to_translate.is_empty() {
+            info!("All entries already translated from previous session");
+
+            // Create result collection
+            let mut translated_collection = SubtitleCollection::new(
+                PathBuf::from("translated.srt"),
                 self.config.target_language.clone(),
-                self.config.translation.provider.to_lowercase_string(),
-                self.config.translation.get_model(),
-                subtitles.entries.clone(),
             );
 
-            match session_manager.resume_or_create(params).await {
-                Ok((session, pending)) => {
-                    if pending.len() < total_entries_count {
-                        info!(
-                            "📂 Resuming session {} ({}/{} entries completed)",
-                            &session.id[..8],
-                            total_entries_count - pending.len(),
-                            total_entries_count
-                        );
-                    } else {
-                        debug!("Created new session {}", &session.id[..8]);
-                    }
-                    Some((session, pending.len()))
-                }
-                Err(e) => {
-                    warn!("Failed to create/resume session: {}. Continuing without persistence.", e);
-                    None
+            // Sort and renumber
+            translated_entries.sort_by_key(|entry| entry.start_time_ms);
+            for (i, entry) in translated_entries.iter_mut().enumerate() {
+                entry.seq_num = i + 1;
+            }
+            translated_collection.entries = translated_entries;
+
+            // Mark session complete
+            if let Some(ref session) = session_info {
+                if let Some(ref session_manager) = self.session_manager {
+                    let _ = session_manager.complete_session(&session.id).await;
                 }
             }
-        } else {
-            None
-        };
+
+            return Ok((translated_collection, translation_start_time.elapsed()));
+        }
 
         // Get max characters per chunk from the config
         let max_chars_per_chunk = self.config.translation.get_max_chars_per_request();
 
-        // Split the subtitles into chunks that respect the max characters limit
-        let chunks = subtitles.split_into_chunks(max_chars_per_chunk);
+        // Split the entries to translate into chunks
+        let temp_collection = SubtitleCollection {
+            source_file: subtitles.source_file.clone(),
+            entries: entries_to_translate,
+            source_language: subtitles.source_language.clone(),
+        };
+        let chunks = temp_collection.split_into_chunks(max_chars_per_chunk);
 
         // Create a progress bar for translation tracking
         let total_chunks = chunks.len() as u64;
@@ -337,30 +349,75 @@ impl Controller {
         );
 
         // Log that we're translating
-        info!("Translating, please wait…");
+        let pending_count = chunks.iter().map(|c| c.len()).sum::<usize>();
+        if pending_count < total_entries_count {
+            info!(
+                "Translating {} remaining entries ({} already done)…",
+                pending_count,
+                total_entries_count - pending_count
+            );
+        } else {
+            info!("Translating, please wait…");
+        }
         progress_bar.set_message("Translating");
 
         // Create log capture for storing warnings during translation
         let log_capture = Arc::new(Mutex::new(Vec::new()));
         let log_capture_clone = Arc::clone(&log_capture);
-        
+
         // Use the translation service to translate all chunks
         let translation_service = TranslationService::new(self.config.translation.clone())?;
         let batch_translator = BatchTranslator::new(translation_service);
-        
+
         // Clone the progress_bar for use in the callback
         let pb = progress_bar.clone();
-        
-        // Pass a callback to update the progress bar for each completed chunk
-        let (mut translated_entries, token_usage) = batch_translator.translate_batches(
-            &chunks, 
-            &self.config.source_language, 
-            &self.config.target_language,
-            log_capture_clone,
-            move |completed, _total| {
-                pb.set_position(completed as u64);
+
+        // Setup batch complete callback for incremental recording
+        let session_manager_clone = self.session_manager.clone();
+        let session_id_clone = session_info.as_ref().map(|s| s.id.clone());
+        let seq_to_source_id_clone = seq_to_source_id.clone();
+
+        let batch_complete_callback = move |entries: Vec<SubtitleEntry>| {
+            // Record translations to database if we have a session
+            if let (Some(sm), Some(session_id)) = (&session_manager_clone, &session_id_clone) {
+                let translations: Vec<(i64, String)> = entries
+                    .iter()
+                    .filter_map(|e| {
+                        seq_to_source_id_clone
+                            .get(&(e.seq_num as i64))
+                            .map(|id| (*id, e.text.clone()))
+                    })
+                    .collect();
+
+                if !translations.is_empty() {
+                    let sm = sm.clone();
+                    let session_id = session_id.clone();
+                    // Spawn a task to record translations (fire-and-forget)
+                    tokio::spawn(async move {
+                        if let Err(e) = sm.record_translations(&session_id, translations).await {
+                            debug!("Failed to record translations: {}", e);
+                        }
+                    });
+                }
             }
-        ).await?;
+        };
+
+        // Pass a callback to update the progress bar for each completed chunk
+        let (mut new_translated_entries, token_usage) = batch_translator
+            .translate_batches_with_callback(
+                &chunks,
+                &self.config.source_language,
+                &self.config.target_language,
+                log_capture_clone,
+                move |completed, _total| {
+                    pb.set_position(completed as u64);
+                },
+                Some(batch_complete_callback),
+            )
+            .await?;
+
+        // Combine already translated with newly translated
+        translated_entries.append(&mut new_translated_entries);
         
         // Finish and clear the progress bar instead of just finishing it
         // This ensures only the folder progress bar remains visible when processing multiple files
@@ -434,7 +491,7 @@ impl Controller {
         let translation_elapsed = translation_start_time.elapsed();
 
         // Mark session as complete if we have session support
-        if let Some((ref session, _)) = session_info {
+        if let Some(ref session) = session_info {
             if let Some(ref session_manager) = self.session_manager {
                 if let Err(e) = session_manager.complete_session(&session.id).await {
                     warn!("Failed to mark session as complete: {}", e);
@@ -714,21 +771,131 @@ impl Controller {
     }
 
     /// Write translation logs to a log file
-    fn write_logs_to_file(&self, logs: &[LogEntry], file_path: &str, translation_context: &str) -> Result<()> {
+    fn write_logs_to_file(
+        &self,
+        logs: &[LogEntry],
+        file_path: &str,
+        translation_context: &str,
+    ) -> Result<()> {
         let mut log_content = String::new();
-        
+
         // Add header
-        log_content.push_str(&format!("Translation Log - {}\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
+        log_content.push_str(&format!(
+            "Translation Log - {}\n",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        ));
         log_content.push_str(&format!("Context: {}\n\n", translation_context));
-        
+
         // Add each log entry
         for entry in logs {
             log_content.push_str(&format!("[{}] {}\n", entry.level, entry.message));
         }
-        
+
         // Write to file
         FileManager::write_to_file(file_path, &log_content)?;
-        
+
         Ok(())
+    }
+
+    // =========================================================================
+    // Session Management Helpers
+    // =========================================================================
+
+    /// Setup session for translation, returning session info and pending entries
+    async fn setup_session(
+        &self,
+        subtitles: &SubtitleCollection,
+    ) -> (
+        Option<SessionInfo>,
+        Vec<PendingEntry>,
+        HashMap<i64, i64>,
+    ) {
+        let total_entries_count = subtitles.entries.len();
+
+        if let Some(ref session_manager) = self.session_manager {
+            let params = SessionCreateParams::new(
+                subtitles.source_file.clone(),
+                self.config.source_language.clone(),
+                self.config.target_language.clone(),
+                self.config.translation.provider.to_lowercase_string(),
+                self.config.translation.get_model(),
+                subtitles.entries.clone(),
+            );
+
+            match session_manager.resume_or_create(params).await {
+                Ok((session, pending)) => {
+                    let is_resume = pending.len() < total_entries_count;
+
+                    if is_resume {
+                        info!(
+                            "📂 Resuming session {} ({}/{} entries completed)",
+                            &session.id[..8],
+                            total_entries_count - pending.len(),
+                            total_entries_count
+                        );
+                    } else {
+                        debug!("Created new session {}", &session.id[..8]);
+                    }
+
+                    // Build seq_num -> source_entry_id mapping
+                    let seq_to_source_id: HashMap<i64, i64> = pending
+                        .iter()
+                        .map(|p| (p.seq_num, p.source_entry_id))
+                        .collect();
+
+                    (Some(session), pending, seq_to_source_id)
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to create/resume session: {}. Continuing without persistence.",
+                        e
+                    );
+                    (None, vec![], HashMap::new())
+                }
+            }
+        } else {
+            (None, vec![], HashMap::new())
+        }
+    }
+
+    /// Filter entries based on what's already translated in the session
+    async fn filter_entries_for_translation(
+        &self,
+        all_entries: &[SubtitleEntry],
+        pending_entries: &[PendingEntry],
+        session_info: &Option<SessionInfo>,
+    ) -> (Vec<SubtitleEntry>, Vec<SubtitleEntry>) {
+        // If no session, translate everything
+        if session_info.is_none() || pending_entries.is_empty() {
+            return (all_entries.to_vec(), vec![]);
+        }
+
+        // Build set of pending seq_nums
+        let pending_seq_nums: std::collections::HashSet<i64> =
+            pending_entries.iter().map(|p| p.seq_num).collect();
+
+        let mut to_translate = Vec::new();
+        let mut already_done = Vec::new();
+
+        // Get already translated entries from session if we have a session manager
+        if let (Some(sm), Some(session)) = (&self.session_manager, session_info) {
+            match sm.get_translated_entries(&session.id).await {
+                Ok(translated) => {
+                    already_done = translated;
+                }
+                Err(e) => {
+                    debug!("Failed to get translated entries: {}", e);
+                }
+            }
+        }
+
+        // Filter entries: only translate those that are pending
+        for entry in all_entries {
+            if pending_seq_nums.contains(&(entry.seq_num as i64)) {
+                to_translate.push(entry.clone());
+            }
+        }
+
+        (to_translate, already_done)
     }
 } 
