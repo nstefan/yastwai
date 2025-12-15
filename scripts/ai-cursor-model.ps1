@@ -50,19 +50,33 @@ function Get-ModelFromDbContent {
     
     $str = [System.Text.Encoding]::UTF8.GetString($bytes)
     
-    # Try modelConfig.modelName pattern (most reliable for current model)
-    $matches = [regex]::Matches($str, '"modelConfig"\s*:\s*\{\s*"modelName"\s*:\s*"([^"]+)"')
+    # Prioritize matches from the end of the file (most recent data)
+    # Check last 2MB of file for most recent modelConfig entries
+    $searchLength = [Math]::Min(2000000, $str.Length)
+    $lastChunk = $str.Substring([Math]::Max(0, $str.Length - $searchLength))
+    
+    # Try modelConfig.modelName pattern in the last chunk (most reliable for current model)
+    $matches = [regex]::Matches($lastChunk, '"modelConfig"\s*:\s*\{\s*"modelName"\s*:\s*"([^"]+)"')
     if ($matches.Count -gt 0) {
+        # Take the last match from the chunk (most recent)
         $model = $matches[-1].Groups[1].Value
-        Log "Found model from modelConfig: $model"
+        Log "Found model from modelConfig (last chunk): $model"
         return $model
     }
     
-    # Try modelInfo.modelName pattern
-    $matches = [regex]::Matches($str, '"modelInfo"\s*:\s*\{\s*"modelName"\s*:\s*"([^"]+)"')
+    # Fallback: search entire file for modelConfig
+    $matches = [regex]::Matches($str, '"modelConfig"\s*:\s*\{\s*"modelName"\s*:\s*"([^"]+)"')
     if ($matches.Count -gt 0) {
         $model = $matches[-1].Groups[1].Value
-        Log "Found model from modelInfo: $model"
+        Log "Found model from modelConfig (full file): $model"
+        return $model
+    }
+    
+    # Try modelInfo.modelName pattern in last chunk
+    $matches = [regex]::Matches($lastChunk, '"modelInfo"\s*:\s*\{\s*"modelName"\s*:\s*"([^"]+)"')
+    if ($matches.Count -gt 0) {
+        $model = $matches[-1].Groups[1].Value
+        Log "Found model from modelInfo (last chunk): $model"
         return $model
     }
     
@@ -99,14 +113,24 @@ if ($env:HOME) {
     $dbPaths += Join-Path $env:HOME '.config/Cursor/User/globalStorage/state.vscdb.backup'
 }
 
+# Collect all available database files with their modification times
+$availableDbs = @()
 foreach ($dbPath in $dbPaths) {
     if (Test-Path $dbPath -PathType Leaf -ErrorAction SilentlyContinue) {
-        Log "Found database at: $dbPath"
-        $model = Get-ModelFromDbContent -dbPath $dbPath
-        if ($model) {
-            Write-Output $model
-            exit 0
-        }
+        $lastWrite = (Get-Item $dbPath).LastWriteTime
+        $availableDbs += [PSCustomObject]@{ Path = $dbPath; LastWrite = $lastWrite }
+    }
+}
+
+# Sort by modification time (most recent first) to prioritize freshest data
+$availableDbs = $availableDbs | Sort-Object LastWrite -Descending
+
+foreach ($db in $availableDbs) {
+    Log "Checking database at: $($db.Path) (modified: $($db.LastWrite))"
+    $model = Get-ModelFromDbContent -dbPath $db.Path
+    if ($model) {
+        Write-Output $model
+        exit 0
     }
 }
 
