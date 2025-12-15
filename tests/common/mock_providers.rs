@@ -356,6 +356,8 @@ pub fn create_mock_translation_service() -> Result<yastwai::translation::core::T
             retry_count: 1,
             retry_backoff_ms: 1,
             temperature: 0.3,
+            parallel_mode: true,
+            entries_per_request: 3,
         },
         available_providers: vec![
             ProviderConfig {

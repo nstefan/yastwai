@@ -197,7 +197,7 @@ fn create_all_tables(conn: &Connection) -> Result<()> {
 
 /// Migrate the schema from one version to another
 fn migrate_schema(conn: &Connection, from_version: i32) -> Result<()> {
-    let mut current = from_version;
+    let current = from_version;
 
     while current < SCHEMA_VERSION {
         match current {

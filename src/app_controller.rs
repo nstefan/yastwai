@@ -348,8 +348,14 @@ impl Controller {
             self.config.translation.get_model()
         );
 
-        // Log that we're translating
+        // Calculate parallel config early so we can log it before the progress bar
         let pending_count = chunks.iter().map(|c| c.len()).sum::<usize>();
+        let entries_per_request = self.config.translation.common.entries_per_request.max(1);
+        let max_concurrent = self.config.translation.optimal_concurrent_requests().max(5);
+        let total_work_items = (pending_count + entries_per_request - 1) / entries_per_request;
+        let use_parallel = self.config.translation.common.parallel_mode;
+
+        // Log translation info including parallel mode before progress bar starts
         if pending_count < total_entries_count {
             info!(
                 "Translating {} remaining entries ({} already done)…",
@@ -359,6 +365,17 @@ impl Controller {
         } else {
             info!("Translating, please wait…");
         }
+        
+        // Log parallel mode info before progress bar is active
+        if use_parallel {
+            info!(
+                "⚡ Parallel mode: {} entries → {} requests ({} concurrent)",
+                pending_count,
+                total_work_items,
+                max_concurrent
+            );
+        }
+        
         progress_bar.set_message("Translating");
 
         // Create log capture for storing warnings during translation
@@ -367,7 +384,15 @@ impl Controller {
 
         // Use the translation service to translate all chunks
         let translation_service = TranslationService::new(self.config.translation.clone())?;
-        let batch_translator = BatchTranslator::new(translation_service);
+        
+        // Configure parallel translation for better performance
+        let parallel_config = crate::translation::batch::ParallelTranslationConfig {
+            max_concurrent_requests: max_concurrent,
+            entries_per_request,
+            use_legacy_batch_mode: !use_parallel,
+        };
+        
+        let batch_translator = BatchTranslator::with_parallel_config(translation_service, parallel_config);
 
         // Clone the progress_bar for use in the callback
         let pb = progress_bar.clone();

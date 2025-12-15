@@ -351,6 +351,17 @@ pub struct TranslationCommonConfig {
     /// Lower values make output more deterministic, higher values more creative
     #[serde(default = "default_temperature")]
     pub temperature: f32,
+    
+    /// Enable parallel translation mode (default: true)
+    /// When enabled, uses multiple concurrent API requests for faster translation
+    #[serde(default = "default_true")]
+    pub parallel_mode: bool,
+    
+    /// Number of entries to include in each parallel request (1-10 recommended)
+    /// Lower values = more requests but better parallelism
+    /// Higher values = fewer requests but less parallelism
+    #[serde(default = "default_entries_per_request")]
+    pub entries_per_request: usize,
 }
 
 impl Default for TranslationCommonConfig {
@@ -361,6 +372,8 @@ impl Default for TranslationCommonConfig {
             retry_count: default_retry_count(),
             retry_backoff_ms: default_retry_backoff_ms(),
             temperature: default_temperature(),
+            parallel_mode: true,
+            entries_per_request: default_entries_per_request(),
         }
     }
 }
@@ -582,6 +595,10 @@ fn default_retry_backoff_ms() -> u64 {
 
 fn default_temperature() -> f32 {
     0.3
+}
+
+fn default_entries_per_request() -> usize {
+    3 // Sweet spot for most LLMs - balances request overhead with parallelism
 }
 
 fn default_true() -> bool {

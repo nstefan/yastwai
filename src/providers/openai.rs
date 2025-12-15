@@ -210,6 +210,9 @@ impl OpenAI {
     }
     
     /// Create a new OpenAI client with configuration
+    /// 
+    /// Uses connection pooling for better performance with concurrent requests.
+    /// Note: We force HTTP/1.1 since many OpenAI-compatible servers (like LM Studio) don't support HTTP/2.
     pub fn new_with_config(
         api_key: impl Into<String>, 
         endpoint: impl Into<String>,
@@ -219,7 +222,14 @@ impl OpenAI {
     ) -> Self {
         Self {
             client: Client::builder()
-                .timeout(Duration::from_secs(60))
+                .timeout(Duration::from_secs(120))
+                // Force HTTP/1.1 only - many local servers don't support HTTP/2
+                .http1_only()
+                // Keep connections alive for better performance with concurrent requests
+                .pool_idle_timeout(Duration::from_secs(90))
+                .pool_max_idle_per_host(20)  // Allow more connections for parallel requests
+                // Enable TCP keepalive
+                .tcp_keepalive(Duration::from_secs(60))
                 .build()
                 .unwrap_or_default(),
             api_key: api_key.into(),

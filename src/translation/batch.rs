@@ -4,6 +4,14 @@
  * This module contains functionality for processing translations in batches,
  * with support for concurrency, progress tracking, error handling, and
  * quality validation.
+ * 
+ * ## Performance Optimization
+ * 
+ * This module uses a parallel entry-level translation strategy:
+ * - Instead of sending many entries in ONE API request, we send multiple smaller
+ *   concurrent requests (each with 1-5 entries)
+ * - This maximizes LLM throughput by keeping multiple inference requests in flight
+ * - Configurable via `parallel_entries_per_request` and `max_concurrent_requests`
  */
 
 use anyhow::{anyhow, Result};
@@ -21,6 +29,27 @@ use crate::validation::{MarkerValidator, ValidationService, ValidationConfig};
 use super::core::{LogEntry, TokenUsageStats, TranslationService};
 use super::formatting::FormatPreserver;
 
+/// Configuration for parallel translation
+#[derive(Clone, Debug)]
+pub struct ParallelTranslationConfig {
+    /// Maximum number of concurrent API requests
+    pub max_concurrent_requests: usize,
+    /// Number of entries to include in each API request (1-10 recommended)
+    pub entries_per_request: usize,
+    /// Whether to use the legacy combined-batch mode (false = use parallel mode)
+    pub use_legacy_batch_mode: bool,
+}
+
+impl Default for ParallelTranslationConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_requests: 5,
+            entries_per_request: 3,
+            use_legacy_batch_mode: false,
+        }
+    }
+}
+
 /// Batch translator for processing subtitle entries in batches
 pub struct BatchTranslator {
     /// The translation service to use
@@ -34,14 +63,36 @@ pub struct BatchTranslator {
 
     /// Validation service for quality checks
     validation_service: Option<ValidationService>,
+    
+    /// Parallel translation configuration
+    parallel_config: ParallelTranslationConfig,
 }
 
 impl BatchTranslator {
     /// Create a new batch translator
     pub fn new(service: TranslationService) -> Self {
+        // Determine optimal parallel config based on service settings
+        let max_concurrent = service.options.max_concurrent_requests.max(5);
+        
         Self {
-            max_concurrent_requests: service.options.max_concurrent_requests,
+            max_concurrent_requests: max_concurrent,
             retry_individual_entries: service.options.retry_individual_entries,
+            parallel_config: ParallelTranslationConfig {
+                max_concurrent_requests: max_concurrent,
+                entries_per_request: 3, // Sweet spot for most LLMs
+                use_legacy_batch_mode: false, // Use new parallel mode by default
+            },
+            service,
+            validation_service: None,
+        }
+    }
+    
+    /// Create a new batch translator with custom parallel configuration
+    pub fn with_parallel_config(service: TranslationService, parallel_config: ParallelTranslationConfig) -> Self {
+        Self {
+            max_concurrent_requests: parallel_config.max_concurrent_requests,
+            retry_individual_entries: service.options.retry_individual_entries,
+            parallel_config,
             service,
             validation_service: None,
         }
@@ -50,9 +101,16 @@ impl BatchTranslator {
     /// Create a new batch translator with validation
     pub fn with_validation(service: TranslationService, validation_config: ValidationConfig) -> Self {
         let validation_service = ValidationService::with_config(validation_config.into());
+        let max_concurrent = service.options.max_concurrent_requests.max(5);
+        
         Self {
-            max_concurrent_requests: service.options.max_concurrent_requests,
+            max_concurrent_requests: max_concurrent,
             retry_individual_entries: service.options.retry_individual_entries,
+            parallel_config: ParallelTranslationConfig {
+                max_concurrent_requests: max_concurrent,
+                entries_per_request: 3,
+                use_legacy_batch_mode: false,
+            },
             service,
             validation_service: Some(validation_service),
         }
@@ -117,6 +175,17 @@ impl BatchTranslator {
         F: Fn(usize, usize) + Clone + Send + 'static,
         C: Fn(Vec<SubtitleEntry>) + Clone + Send + Sync + 'static,
     {
+        // Use parallel mode for better performance unless explicitly disabled
+        if !self.parallel_config.use_legacy_batch_mode {
+            return self.translate_parallel(
+                batches,
+                source_language,
+                target_language,
+                log_capture,
+                progress_callback,
+                batch_complete_callback,
+            ).await;
+        }
         // Initialize token usage stats
         let mut token_stats = TokenUsageStats::with_provider_info(
             self.service.config.provider.to_lowercase_string(),
@@ -257,9 +326,301 @@ impl BatchTranslator {
         // Return all translated entries and token stats
         Ok((all_entries, token_stats))
     }
+    
+    /// High-performance parallel translation
+    /// 
+    /// This method translates entries using multiple concurrent API requests,
+    /// with each request handling a small number of entries. This maximizes
+    /// throughput by keeping multiple LLM inference requests in flight.
+    async fn translate_parallel<F, C>(
+        &self,
+        batches: &[Vec<SubtitleEntry>],
+        source_language: &str,
+        target_language: &str,
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
+        progress_callback: F,
+        batch_complete_callback: Option<C>,
+    ) -> Result<(Vec<SubtitleEntry>, TokenUsageStats)>
+    where
+        F: Fn(usize, usize) + Clone + Send + 'static,
+        C: Fn(Vec<SubtitleEntry>) + Clone + Send + Sync + 'static,
+    {
+        // Flatten all batches into a single list of entries
+        let all_entries: Vec<SubtitleEntry> = batches.iter()
+            .flat_map(|batch| batch.iter().cloned())
+            .collect();
+        
+        let total_entries = all_entries.len();
+        if total_entries == 0 {
+            return Ok((Vec::new(), TokenUsageStats::new()));
+        }
+        
+        // Initialize token usage stats
+        let token_stats = Arc::new(Mutex::new(TokenUsageStats::with_provider_info(
+            self.service.config.provider.to_lowercase_string(),
+            self.service.config.get_model()
+        )));
+        
+        // Create work items: small chunks of entries for parallel processing
+        let entries_per_request = self.parallel_config.entries_per_request.max(1);
+        let work_items: Vec<(usize, Vec<SubtitleEntry>)> = all_entries
+            .chunks(entries_per_request)
+            .enumerate()
+            .map(|(idx, chunk)| (idx, chunk.to_vec()))
+            .collect();
+        
+        let total_work_items = work_items.len();
+        
+        // Log parallel translation start
+        {
+            let mut logs = log_capture.lock().await;
+            logs.push(LogEntry {
+                level: "INFO".to_string(),
+                message: format!(
+                    "Starting parallel translation: {} entries in {} work items ({} concurrent)",
+                    total_entries,
+                    total_work_items,
+                    self.parallel_config.max_concurrent_requests
+                ),
+            });
+        }
+        
+        // Note: Parallel mode info is logged to log_capture only to avoid breaking progress bar
+        // The app_controller logs this info before the progress bar starts
+        
+        // Create a semaphore to limit concurrent requests
+        let semaphore = Arc::new(Semaphore::new(self.parallel_config.max_concurrent_requests));
+        
+        // Track progress
+        let processed_items = Arc::new(AtomicUsize::new(0));
+        
+        // Wrap callback in Arc for sharing across async tasks
+        let batch_callback = batch_complete_callback.map(Arc::new);
+        
+        // Process work items in parallel
+        let results = stream::iter(work_items.into_iter())
+            .map(|(work_idx, entries)| {
+                let service = self.service.clone();
+                let semaphore = semaphore.clone();
+                let log_capture = log_capture.clone();
+                let token_stats = token_stats.clone();
+                let processed_items = processed_items.clone();
+                let progress_callback = progress_callback.clone();
+                let batch_callback = batch_callback.clone();
+                let source_language = source_language.to_string();
+                let target_language = target_language.to_string();
+                let total_batches = batches.len();
+                
+                async move {
+                    // Acquire a permit from the semaphore
+                    let _permit = match semaphore.acquire().await {
+                        Ok(permit) => permit,
+                        Err(e) => {
+                            return (work_idx, Err(anyhow!("Failed to acquire semaphore permit: {}", e)));
+                        }
+                    };
+                    
+                    let start_time = Instant::now();
+                    
+                    // Translate entries individually or as a small batch
+                    let result = if entries.len() == 1 {
+                        // Single entry - translate directly
+                        service.translate_single_entry_parallel(
+                            &entries[0],
+                            &source_language,
+                            &target_language,
+                            log_capture.clone(),
+                        ).await.map(|entry| vec![entry])
+                    } else {
+                        // Small batch - use optimized batch translation
+                        service.translate_small_batch_parallel(
+                            &entries,
+                            &source_language,
+                            &target_language,
+                            log_capture.clone(),
+                        ).await
+                    };
+                    
+                    let duration = start_time.elapsed();
+                    
+                    // Update token stats if we have usage info
+                    if let Ok(ref translated) = result {
+                        let mut stats = token_stats.lock().await;
+                        stats.api_duration += duration;
+                        
+                        // Invoke batch complete callback if provided
+                        if let Some(ref callback) = batch_callback {
+                            callback(translated.clone());
+                        }
+                    }
+                    
+                    // Update progress
+                    let current = processed_items.fetch_add(1, Ordering::SeqCst) + 1;
+                    // Map work item progress to batch progress for UI consistency
+                    let batch_progress = (current * total_batches) / total_work_items.max(1);
+                    progress_callback(batch_progress.min(total_batches), total_batches);
+                    
+                    (work_idx, result.map(|entries| (entries, duration)))
+                }
+            })
+            .buffer_unordered(self.parallel_config.max_concurrent_requests)
+            .collect::<Vec<_>>()
+            .await;
+        
+        // Collect and sort results
+        let mut sorted_results = results;
+        sorted_results.sort_by_key(|(idx, _)| *idx);
+        
+        let mut all_translated = Vec::with_capacity(total_entries);
+        let mut errors = Vec::new();
+        let mut total_duration = Duration::from_secs(0);
+        
+        for (work_idx, result) in sorted_results {
+            match result {
+                Ok((entries, duration)) => {
+                    all_translated.extend(entries);
+                    total_duration += duration;
+                },
+                Err(e) => {
+                    errors.push(format!("Work item {} failed: {}", work_idx + 1, e));
+                }
+            }
+        }
+        
+        // Log completion
+        {
+            let mut logs = log_capture.lock().await;
+            if errors.is_empty() {
+                logs.push(LogEntry {
+                    level: "INFO".to_string(),
+                    message: format!(
+                        "Parallel translation completed: {} entries in {:?}",
+                        all_translated.len(),
+                        total_duration
+                    ),
+                });
+            } else {
+                logs.push(LogEntry {
+                    level: "WARN".to_string(),
+                    message: format!(
+                        "Parallel translation completed with {} errors: {}",
+                        errors.len(),
+                        errors.join("; ")
+                    ),
+                });
+            }
+        }
+        
+        // Get final token stats
+        let final_stats = token_stats.lock().await.clone();
+        
+        if !errors.is_empty() && all_translated.is_empty() {
+            return Err(anyhow!("All translation requests failed: {}", errors.join("; ")));
+        }
+        
+        Ok((all_translated, final_stats))
+    }
 }
 
 impl TranslationService {
+    /// Translate a single entry in parallel mode (no markers needed)
+    async fn translate_single_entry_parallel(
+        &self,
+        entry: &SubtitleEntry,
+        source_language: &str,
+        target_language: &str,
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
+    ) -> Result<SubtitleEntry> {
+        // Skip empty entries
+        if entry.text.trim().is_empty() {
+            return Ok(entry.clone());
+        }
+        
+        // Translate the entry text directly
+        let (translated_text, _) = self.translate_text_with_usage(
+            &entry.text,
+            source_language,
+            target_language,
+            Some(log_capture),
+        ).await?;
+        
+        // Apply format preservation
+        let final_text = if self.options.preserve_formatting {
+            FormatPreserver::preserve_formatting(&entry.text, &translated_text)
+        } else {
+            translated_text
+        };
+        
+        // Create translated entry
+        let mut translated_entry = entry.clone();
+        translated_entry.text = final_text;
+        
+        Ok(translated_entry)
+    }
+    
+    /// Translate a small batch of entries in parallel mode
+    async fn translate_small_batch_parallel(
+        &self,
+        entries: &[SubtitleEntry],
+        source_language: &str,
+        target_language: &str,
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
+    ) -> Result<Vec<SubtitleEntry>> {
+        if entries.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        // For small batches (2-5 entries), use simplified markers
+        let mut combined_text = String::new();
+        for (idx, entry) in entries.iter().enumerate() {
+            combined_text.push_str(&format!("[{}]\n{}\n", idx + 1, entry.text));
+        }
+        
+        // Translate combined text
+        let (translated_text, _) = self.translate_text_with_usage(
+            &combined_text,
+            source_language,
+            target_language,
+            Some(log_capture.clone()),
+        ).await?;
+        
+        // Parse results back into entries
+        let mut translated_entries = Vec::with_capacity(entries.len());
+        
+        for (idx, entry) in entries.iter().enumerate() {
+            // Try to find the translated text for this entry
+            let marker = format!("[{}]", idx + 1);
+            let next_marker = format!("[{}]", idx + 2);
+            
+            let entry_text = if let Some(start_pos) = translated_text.find(&marker) {
+                let text_start = start_pos + marker.len();
+                let text_end = translated_text[text_start..]
+                    .find(&next_marker)
+                    .map(|pos| text_start + pos)
+                    .unwrap_or(translated_text.len());
+                
+                translated_text[text_start..text_end].trim().to_string()
+            } else {
+                // Fallback: if marker not found, try to recover or use original
+                debug!("Marker [{}] not found in response, using fallback", idx + 1);
+                entry.text.clone()
+            };
+            
+            // Apply format preservation
+            let final_text = if self.options.preserve_formatting {
+                FormatPreserver::preserve_formatting(&entry.text, &entry_text)
+            } else {
+                entry_text
+            };
+            
+            let mut translated_entry = entry.clone();
+            translated_entry.text = final_text;
+            translated_entries.push(translated_entry);
+        }
+        
+        Ok(translated_entries)
+    }
+    
     /// Translate a batch of subtitle entries with recovery options
     pub async fn translate_batch_with_recovery(
         &self,

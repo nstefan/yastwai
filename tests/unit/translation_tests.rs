@@ -28,6 +28,8 @@ fn get_test_config() -> TranslationConfig {
             retry_count: 3,
             retry_backoff_ms: 1000,
             temperature: 0.3,
+            parallel_mode: true,
+            entries_per_request: 3,
         },
         available_providers: vec![
             ProviderConfig {
