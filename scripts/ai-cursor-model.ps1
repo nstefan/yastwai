@@ -20,63 +20,51 @@ foreach ($var in @('CURSOR_CURRENT_MODEL','AI_CURSOR_MODEL','AI_MODEL','MODEL_NA
     if (-not [string]::IsNullOrWhiteSpace($val)) { Log "Found model from environment ${var}: $val"; Write-Output $val; exit 0 }
 }
 
-# Function to read file bytes, handling locked files with FileShare.ReadWrite
-function Read-FileBytesSafe {
-    param([string]$path)
+# Function to read last N bytes of file, handling locked files with FileShare.ReadWrite
+function Read-FileTailSafe {
+    param([string]$path, [int]$tailBytes = 2097152)  # Default 2MB
     
     try {
-        # Try reading with ReadWrite sharing to handle locked files (e.g., Cursor has DB open)
         $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
         try {
-            $bytes = New-Object byte[] $fs.Length
-            $fs.Read($bytes, 0, $fs.Length) | Out-Null
+            $readLength = [Math]::Min($tailBytes, $fs.Length)
+            $startPos = [Math]::Max(0, $fs.Length - $readLength)
+            $fs.Seek($startPos, [System.IO.SeekOrigin]::Begin) | Out-Null
+            $bytes = New-Object byte[] $readLength
+            $fs.Read($bytes, 0, $readLength) | Out-Null
             return $bytes
         } finally {
             $fs.Close()
         }
     } catch {
-        Log "Could not read file with sharing: $_"
+        Log "Could not read file: $_"
         return $null
     }
 }
 
-# Function to extract model from database content
+# Function to extract model from database content (reads only last 2MB for speed)
 function Get-ModelFromDbContent {
     param([string]$dbPath)
     
-    Log "Reading database file: $dbPath"
-    $bytes = Read-FileBytesSafe -path $dbPath
+    Log "Reading last 2MB of database file: $dbPath"
+    $bytes = Read-FileTailSafe -path $dbPath -tailBytes 2097152
     if (-not $bytes) { return $null }
     
     $str = [System.Text.Encoding]::UTF8.GetString($bytes)
     
-    # Prioritize matches from the end of the file (most recent data)
-    # Check last 2MB of file for most recent modelConfig entries
-    $searchLength = [Math]::Min(2000000, $str.Length)
-    $lastChunk = $str.Substring([Math]::Max(0, $str.Length - $searchLength))
-    
-    # Try modelConfig.modelName pattern in the last chunk (most reliable for current model)
-    $matches = [regex]::Matches($lastChunk, '"modelConfig"\s*:\s*\{\s*"modelName"\s*:\s*"([^"]+)"')
-    if ($matches.Count -gt 0) {
-        # Take the last match from the chunk (most recent)
-        $model = $matches[-1].Groups[1].Value
-        Log "Found model from modelConfig (last chunk): $model"
-        return $model
-    }
-    
-    # Fallback: search entire file for modelConfig
+    # Try modelConfig.modelName pattern (most reliable for current model)
     $matches = [regex]::Matches($str, '"modelConfig"\s*:\s*\{\s*"modelName"\s*:\s*"([^"]+)"')
     if ($matches.Count -gt 0) {
         $model = $matches[-1].Groups[1].Value
-        Log "Found model from modelConfig (full file): $model"
+        Log "Found model from modelConfig: $model"
         return $model
     }
     
-    # Try modelInfo.modelName pattern in last chunk
-    $matches = [regex]::Matches($lastChunk, '"modelInfo"\s*:\s*\{\s*"modelName"\s*:\s*"([^"]+)"')
+    # Try modelInfo.modelName pattern
+    $matches = [regex]::Matches($str, '"modelInfo"\s*:\s*\{\s*"modelName"\s*:\s*"([^"]+)"')
     if ($matches.Count -gt 0) {
         $model = $matches[-1].Groups[1].Value
-        Log "Found model from modelInfo (last chunk): $model"
+        Log "Found model from modelInfo: $model"
         return $model
     }
     
@@ -88,7 +76,7 @@ function Get-ModelFromDbContent {
         return $model
     }
     
-    Log "No model pattern found in database"
+    Log "No model pattern found in database tail"
     return $null
 }
 
