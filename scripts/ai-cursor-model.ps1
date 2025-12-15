@@ -1,10 +1,10 @@
-$ErrorActionPreference = 'Stop'
-
 param(
     [switch] $Verbose,
     [switch] $Quiet,
     [switch] $Help
 )
+
+$ErrorActionPreference = 'Stop'
 
 function Show-Usage {
     Write-Host "Usage: pwsh -File scripts/ai-cursor-model.ps1 [--verbose|-v] [--quiet|-q] [--help|-h]"
@@ -17,7 +17,7 @@ function Log([string]$msg) { if ($Verbose -and -not $Quiet) { $ts = Get-Date -Fo
 # Environment variables
 foreach ($var in @('CURSOR_CURRENT_MODEL','AI_CURSOR_MODEL','AI_MODEL','MODEL_NAME')) {
     $val = [Environment]::GetEnvironmentVariable($var)
-    if (-not [string]::IsNullOrWhiteSpace($val)) { Log "Found model from environment $var: $val"; Write-Output $val; exit 0 }
+    if (-not [string]::IsNullOrWhiteSpace($val)) { Log "Found model from environment ${var}: $val"; Write-Output $val; exit 0 }
 }
 
 # Try to read Cursor database on Windows
