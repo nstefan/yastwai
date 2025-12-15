@@ -22,7 +22,7 @@ foreach ($var in @('CURSOR_CURRENT_MODEL','AI_CURSOR_MODEL','AI_MODEL','MODEL_NA
 
 # Function to read last N bytes of file, handling locked files with FileShare.ReadWrite
 function Read-FileTailSafe {
-    param([string]$path, [int]$tailBytes = 2097152)  # Default 2MB
+    param([string]$path, [int]$tailBytes = 5242880)  # Default 5MB for better coverage
     
     try {
         $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
@@ -46,8 +46,8 @@ function Read-FileTailSafe {
 function Get-ModelFromDbContent {
     param([string]$dbPath)
     
-    Log "Reading last 2MB of database file: $dbPath"
-    $bytes = Read-FileTailSafe -path $dbPath -tailBytes 2097152
+    Log "Reading last 5MB of database file: $dbPath"
+    $bytes = Read-FileTailSafe -path $dbPath -tailBytes 5242880
     if (-not $bytes) { return $null }
     
     $str = [System.Text.Encoding]::UTF8.GetString($bytes)
