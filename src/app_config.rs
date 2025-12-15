@@ -17,6 +17,18 @@ pub struct Config {
     /// Translation config
     pub translation: TranslationConfig,
     
+    /// Session and persistence configuration
+    #[serde(default)]
+    pub session: SessionConfig,
+    
+    /// Cache configuration
+    #[serde(default)]
+    pub cache: CacheConfig,
+    
+    /// Validation configuration
+    #[serde(default)]
+    pub validation: ValidationConfig,
+    
     /// Log level
     #[serde(default)]
     pub log_level: LogLevel,
@@ -387,6 +399,143 @@ impl Default for SubtitleConfig {
     }
 }
 
+/// Session and persistence configuration
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SessionConfig {
+    /// Path to the database file (empty = default location)
+    #[serde(default)]
+    pub database_path: String,
+    
+    /// Whether to automatically resume interrupted sessions
+    #[serde(default = "default_true")]
+    pub auto_resume: bool,
+    
+    /// Number of days to keep session data (0 = forever)
+    #[serde(default = "default_session_retention_days")]
+    pub keep_sessions_days: u32,
+    
+    /// Whether session persistence is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_session_retention_days() -> u32 {
+    30
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        Self {
+            database_path: String::new(),
+            auto_resume: true,
+            keep_sessions_days: default_session_retention_days(),
+            enabled: true,
+        }
+    }
+}
+
+/// Cache configuration
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CacheConfig {
+    /// Whether caching is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    
+    /// Maximum in-memory cache size in MB (0 = unlimited)
+    #[serde(default = "default_cache_size_mb")]
+    pub in_memory_size_mb: u32,
+    
+    /// Whether to use cross-session database caching
+    #[serde(default = "default_true")]
+    pub cross_session: bool,
+}
+
+fn default_cache_size_mb() -> u32 {
+    50
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            in_memory_size_mb: default_cache_size_mb(),
+            cross_session: true,
+        }
+    }
+}
+
+/// Validation configuration
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ValidationConfig {
+    /// Whether validation is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    
+    /// Whether to validate markers in batch responses
+    #[serde(default = "default_true")]
+    pub marker_validation: bool,
+    
+    /// Whether to validate timecodes
+    #[serde(default = "default_true")]
+    pub timecode_validation: bool,
+    
+    /// Whether to validate format preservation
+    #[serde(default = "default_true")]
+    pub format_validation: bool,
+    
+    /// Minimum acceptable length ratio (translated / source)
+    #[serde(default = "default_length_ratio_min")]
+    pub length_ratio_min: f64,
+    
+    /// Maximum acceptable length ratio (translated / source)
+    #[serde(default = "default_length_ratio_max")]
+    pub length_ratio_max: f64,
+    
+    /// Maximum characters per second for readability
+    #[serde(default = "default_max_chars_per_second")]
+    pub max_chars_per_second: f64,
+    
+    /// Whether to retry translations that fail validation
+    #[serde(default = "default_true")]
+    pub retry_on_validation_failure: bool,
+    
+    /// Maximum number of retries for failed validations
+    #[serde(default = "default_validation_max_retries")]
+    pub max_retries: u32,
+}
+
+fn default_length_ratio_min() -> f64 {
+    0.3
+}
+
+fn default_length_ratio_max() -> f64 {
+    3.0
+}
+
+fn default_max_chars_per_second() -> f64 {
+    25.0
+}
+
+fn default_validation_max_retries() -> u32 {
+    3
+}
+
+impl Default for ValidationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            marker_validation: true,
+            timecode_validation: true,
+            format_validation: true,
+            length_ratio_min: default_length_ratio_min(),
+            length_ratio_max: default_length_ratio_max(),
+            max_chars_per_second: default_max_chars_per_second(),
+            retry_on_validation_failure: true,
+            max_retries: default_validation_max_retries(),
+        }
+    }
+}
+
 /// Log verbosity level
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -537,6 +686,9 @@ impl Default for Config {
             source_language: "en".to_string(),
             target_language: "fr".to_string(),
             translation: TranslationConfig::default(),
+            session: SessionConfig::default(),
+            cache: CacheConfig::default(),
+            validation: ValidationConfig::default(),
             log_level: LogLevel::default(),
         }
     }
@@ -557,13 +709,6 @@ impl TranslationConfig {
     /// Get the active provider configuration from the available_providers array
     pub fn get_active_provider_config(&self) -> Option<&ProviderConfig> {
         let provider_str = self.provider.to_lowercase_string();
-        self.available_providers.iter()
-            .find(|p| p.provider_type == provider_str)
-    }
-    
-    /// Get a specific provider configuration by type for testing
-    pub fn get_provider_config(&self, provider_type: &TranslationProvider) -> Option<&ProviderConfig> {
-        let provider_str = provider_type.to_lowercase_string();
         self.available_providers.iter()
             .find(|p| p.provider_type == provider_str)
     }

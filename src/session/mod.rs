@@ -1,0 +1,20 @@
+/*!
+ * Session management module for translation sessions.
+ *
+ * This module provides:
+ * - Session creation and tracking
+ * - Resume capability for interrupted translations
+ * - Progress tracking and state management
+ *
+ * # Architecture
+ *
+ * - `manager`: SessionManager for orchestrating session lifecycle
+ * - `models`: Session-specific DTOs and helper types
+ */
+
+pub mod manager;
+pub mod models;
+
+// Re-export main types
+pub use manager::SessionManager;
+pub use models::{PendingEntry, ResumeResult, SessionCreateParams, SessionInfo};

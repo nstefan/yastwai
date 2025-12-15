@@ -2,8 +2,6 @@
  * Tests for the provider implementations
  */
 
-use anyhow::Result;
-use std::env;
 use yastwai::providers::Provider;
 use yastwai::providers::openai::{OpenAI, OpenAIRequest};
 use yastwai::providers::anthropic::{Anthropic, AnthropicRequest};

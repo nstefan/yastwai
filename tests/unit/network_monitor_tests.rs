@@ -3,7 +3,6 @@
  */
 
 use anyhow::Result;
-use std::sync::{Arc, Mutex};
 use yastwai::providers::Provider;
 
 // Testing that our mock OpenAI provider correctly implements the Provider trait
@@ -26,10 +25,6 @@ async fn test_mock_openai_provider_correctly_implements_provider_trait() -> Resu
     // Test extract_text
     let text = MockOpenAI::extract_text(&response);
     assert!(!text.is_empty());
-    
-    // Test test_connection
-    let conn_result = provider.test_connection().await;
-    assert!(conn_result.is_ok());
     
     Ok(())
 }
@@ -54,10 +49,6 @@ async fn test_mock_anthropic_provider_correctly_implements_provider_trait() -> R
     // Test extract_text
     let text = MockAnthropic::extract_text(&response);
     assert!(!text.is_empty());
-    
-    // Test test_connection
-    let conn_result = provider.test_connection().await;
-    assert!(conn_result.is_ok());
     
     Ok(())
 }

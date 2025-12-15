@@ -14,12 +14,14 @@ use regex::Regex;
 pub struct FileManager;
 
 impl FileManager {
-    // @checks: File existence
+    /// Checks file existence - used by tests
+    #[allow(dead_code)]
     pub fn file_exists<P: AsRef<Path>>(path: P) -> bool {
         path.as_ref().exists() && path.as_ref().is_file()
     }
     
-    // @checks: Directory existence
+    /// Checks directory existence - used by tests
+    #[allow(dead_code)]
     pub fn dir_exists<P: AsRef<Path>>(path: P) -> bool {
         path.as_ref().exists() && path.as_ref().is_dir()
     }
@@ -33,8 +35,8 @@ impl FileManager {
         Ok(())
     }
     
-    // @generates: Output path for translated subtitle
-    // @params: input_file, output_dir, target_language, extension
+    /// Generates output path for translated subtitle - used by tests
+    #[allow(dead_code)]
     pub fn generate_output_path<P1: AsRef<Path>, P2: AsRef<Path>>(
         input_file: P1,
         output_dir: P2,
@@ -103,7 +105,8 @@ impl FileManager {
         Ok(())
     }
     
-    /// Copy a file from one location to another, ensuring the target directory exists
+    /// Copy a file from one location to another - used by tests
+    #[allow(dead_code)]
     pub fn copy_file<P1: AsRef<Path>, P2: AsRef<Path>>(from: P1, to: P2) -> Result<()> {
         let from = from.as_ref();
         let to = to.as_ref();
@@ -123,7 +126,8 @@ impl FileManager {
         Ok(())
     }
     
-    /// Append content to a log file with timestamp
+    /// Append content to a log file with timestamp - utility method
+    #[allow(dead_code)]
     pub fn append_to_log_file<P: AsRef<Path>>(path: P, content: &str) -> Result<()> {
         // Get current timestamp
         let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();

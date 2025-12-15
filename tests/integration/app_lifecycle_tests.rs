@@ -6,10 +6,6 @@ use anyhow::Result;
 use tokio_test;
 use yastwai::app_controller::Controller;
 use yastwai::app_config::Config;
-use yastwai::file_utils::FileManager;
-use std::env;
-use std::path::{Path, PathBuf};
-use std::fs;
 use crate::common;
 
 /// Test the controller initialization with default config

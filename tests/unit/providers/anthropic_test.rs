@@ -1,4 +1,3 @@
-use std::time::Duration;
 use yastwai::providers::anthropic::{Anthropic, AnthropicRequest, AnthropicResponse, AnthropicContent, TokenUsage};
 use yastwai::providers::Provider;
 use yastwai::errors::ProviderError;
@@ -96,7 +95,7 @@ async fn test_anthropic_api_error_handling() {
 async fn test_anthropic_retry_logic() {
     // Use the mock provider for testing retry logic
     use crate::common::mock_providers::{MockAnthropic, MockErrorType};
-    use std::time::{Instant, Duration};
+    use std::time::Instant;
     
     // Create a mock Anthropic provider
     let anthropic = MockAnthropic::new();
@@ -164,13 +163,9 @@ async fn test_integration_with_real_api() {
     let api_key = std::env::var("ANTHROPIC_API_KEY")
         .expect("ANTHROPIC_API_KEY environment variable not set");
     
-    let anthropic = Anthropic::new(api_key, "");
+    let anthropic = Anthropic::new(api_key, "https://api.anthropic.com");
     
-    // Test the connection
-    let result = anthropic.test_connection().await;
-    assert!(result.is_ok(), "API connection test failed: {:?}", result.err());
-    
-    // Make a simple completion request
+    // Make a simple completion request to test connectivity
     let request = AnthropicRequest::new("claude-3-haiku-20240307", 50)
         .add_message("user", "Say hello in French")
         .temperature(0.0); // Use deterministic output for testing
@@ -190,7 +185,7 @@ async fn test_integration_with_real_api() {
 #[tokio::test]
 async fn test_anthropic_rate_limiter() {
     use yastwai::providers::anthropic::{Anthropic, AnthropicRequest};
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
     // Create a client with a very low rate limit (2 requests per minute)
     let client = Anthropic::new_with_rate_limit(

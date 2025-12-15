@@ -33,12 +33,6 @@ pub trait Provider: Send + Sync + Debug {
     /// * `Result<Self::Response, ProviderError>` - The response from the provider or an error
     async fn complete(&self, request: Self::Request) -> Result<Self::Response, ProviderError>;
     
-    /// Test the connection to the provider
-    /// 
-    /// # Returns
-    /// * `Result<(), ProviderError>` - Ok if the connection is successful, or an error
-    async fn test_connection(&self) -> Result<(), ProviderError>;
-    
     /// Extract text from the provider response
     /// 
     /// # Arguments
@@ -51,4 +45,7 @@ pub trait Provider: Send + Sync + Debug {
 
 pub mod ollama;
 pub mod openai;
-pub mod anthropic; 
+pub mod anthropic;
+
+#[cfg(test)]
+pub mod mock; 

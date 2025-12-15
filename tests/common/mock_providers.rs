@@ -117,26 +117,6 @@ impl Provider for MockOpenAI {
         })
     }
     
-    async fn test_connection(&self) -> Result<(), ProviderError> {
-        let mut tracker = self.tracker.lock().unwrap();
-        tracker.call_count += 1;
-        
-        if tracker.should_fail {
-            tracker.should_fail = false; // Reset for next call
-            return match tracker.error_type {
-                MockErrorType::Auth => Err(ProviderError::AuthenticationError("Invalid API key".into())),
-                MockErrorType::Connection => Err(ProviderError::ConnectionError("Connection failed".into())),
-                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded("Rate limit exceeded".into())),
-                MockErrorType::Api => Err(ProviderError::ApiError { 
-                    status_code: 400, 
-                    message: "Bad request".into() 
-                }),
-            };
-        }
-        
-        Ok(())
-    }
-    
     fn extract_text(response: &Self::Response) -> String {
         if let Some(choice) = response.choices.first() {
             choice.message.content.clone()
@@ -209,26 +189,6 @@ impl Provider for MockAnthropic {
                 output_tokens: 20,
             },
         })
-    }
-    
-    async fn test_connection(&self) -> Result<(), ProviderError> {
-        let mut tracker = self.tracker.lock().unwrap();
-        tracker.call_count += 1;
-        
-        if tracker.should_fail {
-            tracker.should_fail = false; // Reset for next call
-            return match tracker.error_type {
-                MockErrorType::Auth => Err(ProviderError::AuthenticationError("Invalid API key".into())),
-                MockErrorType::Connection => Err(ProviderError::ConnectionError("Connection failed".into())),
-                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded("Rate limit exceeded".into())),
-                MockErrorType::Api => Err(ProviderError::ApiError { 
-                    status_code: 400, 
-                    message: "Bad request".into() 
-                }),
-            };
-        }
-        
-        Ok(())
     }
     
     fn extract_text(response: &Self::Response) -> String {

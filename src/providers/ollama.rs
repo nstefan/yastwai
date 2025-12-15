@@ -188,6 +188,8 @@ pub struct EmbeddingResponse {
     pub embedding: Vec<f32>,
 }
 
+/// Builder methods for GenerationRequest - API surface for library consumers
+#[allow(dead_code)]
 impl GenerationRequest {
     /// Create a new generation request
     pub fn new(model: impl Into<String>, prompt: impl Into<String>) -> Self {
@@ -245,6 +247,8 @@ impl GenerationRequest {
     }
 }
 
+/// Builder methods for ChatRequest - API surface for library consumers
+#[allow(dead_code)]
 impl ChatRequest {
     /// Create a new chat request
     pub fn new(model: impl Into<String>, messages: Vec<ChatMessage>) -> Self {
@@ -300,6 +304,8 @@ impl ChatRequest {
     }
 }
 
+/// Ollama client implementation - some methods are API surface for library consumers
+#[allow(dead_code)]
 impl Ollama {
     /// Create a new Ollama client with the specified base URL
     pub fn new(host: impl Into<String>, port: u16) -> Self {

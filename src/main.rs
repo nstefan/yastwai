@@ -23,6 +23,9 @@ mod app_controller;
 mod language_utils;
 mod providers;
 mod errors;
+mod database;
+mod session;
+mod validation;
 
 /// CLI Wrapper for TranslationProvider to implement ValueEnum
 #[derive(Debug, Clone, ValueEnum)]
@@ -71,13 +74,59 @@ enum Commands {
     /// Translate video subtitles using AI providers (default command)
     #[command(alias = "translate")]
     Translate(TranslateArgs),
-    
+
+    /// Manage translation sessions
+    #[command(subcommand)]
+    Sessions(SessionCommands),
+
     /// Generate shell completions for yastwai
     Completions {
         /// Shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
     },
+}
+
+#[derive(Subcommand, Debug)]
+enum SessionCommands {
+    /// List all translation sessions
+    List {
+        /// Filter by status (in_progress, paused, completed, failed)
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+
+    /// Resume a paused or in-progress session
+    Resume {
+        /// Session ID to resume
+        session_id: String,
+    },
+
+    /// Show details of a specific session
+    Info {
+        /// Session ID to show
+        session_id: String,
+    },
+
+    /// Delete a session and its data
+    Delete {
+        /// Session ID to delete
+        session_id: String,
+
+        /// Force deletion without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Clean up old sessions
+    Clean {
+        /// Delete sessions older than this many days
+        #[arg(long, default_value = "30")]
+        older_than: u32,
+    },
+
+    /// Show database statistics
+    Stats,
 }
 
 #[derive(Parser, Debug)]
@@ -89,6 +138,14 @@ struct TranslateArgs {
     /// Force overwrite of existing output files
     #[arg(short, long)]
     force_overwrite: bool,
+
+    /// Resume an interrupted session if available
+    #[arg(short = 'R', long)]
+    resume: bool,
+
+    /// Force new session (ignore existing resumable sessions)
+    #[arg(long)]
+    force_new_session: bool,
 
     /// Translation provider to use
     #[arg(short, long, value_enum)]
@@ -102,7 +159,7 @@ struct TranslateArgs {
     #[arg(short, long)]
     source_language: Option<String>,
 
-    /// Target language code (e.g., 'en', 'es', 'fr')  
+    /// Target language code (e.g., 'en', 'es', 'fr')
     #[arg(short, long)]
     target_language: Option<String>,
 
@@ -310,15 +367,20 @@ async fn main() -> Result<()> {
             // Use the explicit translate subcommand args
             return run_translate(args).await;
         }
+        Some(Commands::Sessions(session_cmd)) => {
+            return run_session_command(session_cmd).await;
+        }
         None => {
             // Default behavior - use top-level args for backwards compatibility
             let input_path = cli.input_path.ok_or_else(|| {
                 anyhow!("INPUT_PATH is required when no subcommand is specified")
             })?;
-            
+
             let translate_args = TranslateArgs {
                 input_path,
                 force_overwrite: cli.force_overwrite,
+                resume: false,
+                force_new_session: false,
                 provider: cli.provider,
                 model: cli.model,
                 source_language: cli.source_language,
@@ -331,6 +393,113 @@ async fn main() -> Result<()> {
             return run_translate(translate_args).await;
         }
     }
+}
+
+/// Handle session management commands
+async fn run_session_command(cmd: SessionCommands) -> Result<()> {
+    use session::SessionManager;
+    use database::models::SessionStatus;
+
+    let session_manager = SessionManager::new_default()
+        .context("Failed to initialize session manager")?;
+
+    match cmd {
+        SessionCommands::List { status } => {
+            let status_filter = status.and_then(|s| s.parse::<SessionStatus>().ok());
+
+            let sessions = session_manager.list_sessions(status_filter).await?;
+
+            if sessions.is_empty() {
+                println!("No sessions found.");
+            } else {
+                println!("Translation Sessions:");
+                println!("{:-<80}", "");
+                for session in &sessions {
+                    println!(
+                        "{} | {} -> {} | {:.1}% | {} | {}",
+                        &session.id[..8],
+                        session.source_language,
+                        session.target_language,
+                        session.completion_percentage(),
+                        session.status_display(),
+                        session.source_file_path.split('/').last().unwrap_or(&session.source_file_path)
+                    );
+                }
+                println!("{:-<80}", "");
+                println!("Total: {} session(s)", sessions.len());
+            }
+        }
+
+        SessionCommands::Info { session_id } => {
+            // Try to find the session by ID prefix
+            let sessions = session_manager.list_sessions(None).await?;
+            let session = sessions.iter().find(|s| s.id.starts_with(&session_id));
+
+            match session {
+                Some(s) => {
+                    println!("Session Details:");
+                    println!("{:-<40}", "");
+                    println!("ID:               {}", s.id);
+                    println!("Source File:      {}", s.source_file_path);
+                    println!("Languages:        {} -> {}", s.source_language, s.target_language);
+                    println!("Provider:         {} / {}", s.provider, s.model);
+                    println!("Progress:         {}/{} ({:.1}%)", s.completed_entries, s.total_entries, s.completion_percentage());
+                    println!("Status:           {}", s.status_display());
+                    println!("Created:          {}", s.created_at);
+                    println!("Updated:          {}", s.updated_at);
+                    if let Some(ref completed_at) = s.completed_at {
+                        println!("Completed:        {}", completed_at);
+                    }
+                }
+                None => {
+                    return Err(anyhow!("Session not found: {}", session_id));
+                }
+            }
+        }
+
+        SessionCommands::Resume { session_id } => {
+            info!("Resume functionality is integrated into the translate command.");
+            info!("Use: yastwai -R <input_file> to auto-resume sessions");
+            info!("Session ID {} would be resumed.", session_id);
+            // Full resume implementation would go here
+        }
+
+        SessionCommands::Delete { session_id, force } => {
+            if !force {
+                println!("Are you sure you want to delete session {}? Use --force to confirm.", session_id);
+                return Ok(());
+            }
+
+            // Find full session ID from prefix
+            let sessions = session_manager.list_sessions(None).await?;
+            let session = sessions.iter().find(|s| s.id.starts_with(&session_id));
+
+            match session {
+                Some(s) => {
+                    session_manager.delete_session(&s.id).await?;
+                    println!("Session {} deleted.", &s.id[..8]);
+                }
+                None => {
+                    return Err(anyhow!("Session not found: {}", session_id));
+                }
+            }
+        }
+
+        SessionCommands::Clean { older_than } => {
+            let deleted = session_manager.cleanup_old_sessions(older_than as i64).await?;
+            println!("Cleaned up {} session(s) older than {} days.", deleted, older_than);
+        }
+
+        SessionCommands::Stats => {
+            let db = database::DatabaseConnection::new_default()?;
+            let stats = db.stats()?;
+            println!("Database Statistics:");
+            println!("{:-<40}", "");
+            println!("{}", stats);
+        }
+    }
+
+    Ok(())
 }
 
 async fn run_translate(options: TranslateArgs) -> Result<()> {

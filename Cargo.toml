@@ -44,6 +44,14 @@ isolang = { version = "2.4.0", features = ["local_names", "english_names"] }
 thiserror = "1.0.50" 
 parking_lot = "0.12.3"
 
+# Database and persistence
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+uuid = { version = "1.0", features = ["v4"] }
+
+# Directory management
+dirs = "5.0"
+
 [dev-dependencies]
 tokio-test = "0.4.3"
 env_logger = "0.10"

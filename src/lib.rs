@@ -54,10 +54,16 @@ pub mod app_controller;
 pub mod language_utils;
 pub mod providers;
 pub mod errors;
+pub mod database;
+pub mod session;
+pub mod validation;
 
 // Re-export main types for easier usage
-pub use app_config::Config;
+pub use app_config::{Config, SessionConfig, CacheConfig, ValidationConfig};
 pub use subtitle_processor::{SubtitleCollection, SubtitleEntry};
 pub use translation::TranslationService;
-pub use language_utils::{language_codes_match, normalize_to_part2t, get_language_name, validate_language_code, LanguageCodeType};
-pub use errors::{AppError, ProviderError, SubtitleError, TranslationError}; 
+pub use language_utils::{language_codes_match, normalize_to_part2t, get_language_name};
+pub use errors::{AppError, ProviderError, SubtitleError, TranslationError};
+pub use database::{DatabaseConnection, Repository};
+pub use session::{SessionManager, SessionInfo};
+pub use validation::{ValidationService, ValidationConfig as ValidationServiceConfig}; 

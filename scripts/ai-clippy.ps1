@@ -33,9 +33,9 @@ if (-not $CheckOnly -and -not $Fix) {
 
 if ($CheckOnly) {
     Write-Host "Running Clippy checks..."
-    $lints = "-A clippy::uninlined_format_args -A clippy::redundant_closure_for_method_calls"
-    if ($Verbose) { Write-Host "Using lint exceptions: $lints" }
-    & cargo clippy -- -D warnings $lints
+    $lints = @('-A', 'clippy::uninlined_format_args', '-A', 'clippy::redundant_closure_for_method_calls')
+    if ($Verbose) { Write-Host "Using lint exceptions: $($lints -join ' ')" }
+    & cargo clippy -- -D warnings @lints
     if ($LASTEXITCODE -ne 0) { Write-Host "Clippy check failed with exit code $LASTEXITCODE"; exit $LASTEXITCODE } else { Write-Host "Clippy check passed successfully." }
 }
 
