@@ -386,10 +386,12 @@ impl Controller {
         let translation_service = TranslationService::new(self.config.translation.clone())?;
         
         // Configure parallel translation for better performance
+        let context_entries_count = self.config.translation.common.context_entries_count;
         let parallel_config = crate::translation::batch::ParallelTranslationConfig {
             max_concurrent_requests: max_concurrent,
             entries_per_request,
             use_legacy_batch_mode: !use_parallel,
+            context_entries_count,
         };
         
         let batch_translator = BatchTranslator::with_parallel_config(translation_service, parallel_config);

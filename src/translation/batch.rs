@@ -38,6 +38,8 @@ pub struct ParallelTranslationConfig {
     pub entries_per_request: usize,
     /// Whether to use the legacy combined-batch mode (false = use parallel mode)
     pub use_legacy_batch_mode: bool,
+    /// Number of previous entries to include as context for consistency (0 = disabled)
+    pub context_entries_count: usize,
 }
 
 impl Default for ParallelTranslationConfig {
@@ -46,6 +48,7 @@ impl Default for ParallelTranslationConfig {
             max_concurrent_requests: 5,
             entries_per_request: 3,
             use_legacy_batch_mode: false,
+            context_entries_count: 3,
         }
     }
 }
@@ -81,6 +84,7 @@ impl BatchTranslator {
                 max_concurrent_requests: max_concurrent,
                 entries_per_request: 3, // Sweet spot for most LLMs
                 use_legacy_batch_mode: false, // Use new parallel mode by default
+                context_entries_count: 3, // Default: include 3 previous entries as context
             },
             service,
             validation_service: None,
@@ -110,6 +114,7 @@ impl BatchTranslator {
                 max_concurrent_requests: max_concurrent,
                 entries_per_request: 3,
                 use_legacy_batch_mode: false,
+                context_entries_count: 3,
             },
             service,
             validation_service: Some(validation_service),
@@ -362,11 +367,33 @@ impl BatchTranslator {
         )));
         
         // Create work items: small chunks of entries for parallel processing
+        // Each work item includes context entries from previous chunks for consistency
         let entries_per_request = self.parallel_config.entries_per_request.max(1);
-        let work_items: Vec<(usize, Vec<SubtitleEntry>)> = all_entries
+        let context_count = self.parallel_config.context_entries_count;
+        
+        // First, create the basic chunks
+        let chunks: Vec<Vec<SubtitleEntry>> = all_entries
             .chunks(entries_per_request)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+        
+        // Now create work items with context from previous entries
+        // Work item format: (index, entries_to_translate, context_entries)
+        let work_items: Vec<(usize, Vec<SubtitleEntry>, Vec<SubtitleEntry>)> = chunks
+            .iter()
             .enumerate()
-            .map(|(idx, chunk)| (idx, chunk.to_vec()))
+            .map(|(idx, chunk)| {
+                // Calculate context: get entries from the end of previous chunks
+                let context = if context_count > 0 && idx > 0 {
+                    // Calculate start position in all_entries for context
+                    let chunk_start = idx * entries_per_request;
+                    let context_start = chunk_start.saturating_sub(context_count);
+                    all_entries[context_start..chunk_start].to_vec()
+                } else {
+                    Vec::new()
+                };
+                (idx, chunk.clone(), context)
+            })
             .collect();
         
         let total_work_items = work_items.len();
@@ -374,13 +401,19 @@ impl BatchTranslator {
         // Log parallel translation start
         {
             let mut logs = log_capture.lock().await;
+            let context_msg = if context_count > 0 {
+                format!(" with {} context entries", context_count)
+            } else {
+                String::new()
+            };
             logs.push(LogEntry {
                 level: "INFO".to_string(),
                 message: format!(
-                    "Starting parallel translation: {} entries in {} work items ({} concurrent)",
+                    "Starting parallel translation: {} entries in {} work items ({} concurrent){}",
                     total_entries,
                     total_work_items,
-                    self.parallel_config.max_concurrent_requests
+                    self.parallel_config.max_concurrent_requests,
+                    context_msg
                 ),
             });
         }
@@ -399,7 +432,7 @@ impl BatchTranslator {
         
         // Process work items in parallel
         let results = stream::iter(work_items.into_iter())
-            .map(|(work_idx, entries)| {
+            .map(|(work_idx, entries, context_entries)| {
                 let service = self.service.clone();
                 let semaphore = semaphore.clone();
                 let log_capture = log_capture.clone();
@@ -424,17 +457,19 @@ impl BatchTranslator {
                     
                     // Translate entries individually or as a small batch
                     let result = if entries.len() == 1 {
-                        // Single entry - translate directly
-                        service.translate_single_entry_parallel(
+                        // Single entry - translate directly with context
+                        service.translate_single_entry_with_context(
                             &entries[0],
+                            &context_entries,
                             &source_language,
                             &target_language,
                             log_capture.clone(),
                         ).await.map(|entry| vec![entry])
                     } else {
-                        // Small batch - use optimized batch translation
-                        service.translate_small_batch_parallel(
+                        // Small batch - use optimized batch translation with context
+                        service.translate_small_batch_with_context(
                             &entries,
+                            &context_entries,
                             &source_language,
                             &target_language,
                             log_capture.clone(),
@@ -681,6 +716,219 @@ impl TranslationService {
         
         // Extract just the entries
         Ok(translated_entries.into_iter().map(|(_, entry)| entry).collect())
+    }
+    
+    /// Translate a single entry with context from previous entries
+    /// 
+    /// Context entries are included in the prompt to help maintain consistency
+    /// (formal/informal address, character genders, tone) but are NOT translated.
+    async fn translate_single_entry_with_context(
+        &self,
+        entry: &SubtitleEntry,
+        context_entries: &[SubtitleEntry],
+        source_language: &str,
+        target_language: &str,
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
+    ) -> Result<SubtitleEntry> {
+        // Skip empty entries
+        if entry.text.trim().is_empty() {
+            return Ok(entry.clone());
+        }
+        
+        // If no context, use the regular method
+        if context_entries.is_empty() {
+            return self.translate_single_entry_parallel(entry, source_language, target_language, log_capture).await;
+        }
+        
+        // Build prompt with context
+        let mut prompt = String::new();
+        prompt.push_str("=== CONTEXT (already translated, for reference only) ===\n");
+        for ctx_entry in context_entries {
+            prompt.push_str(&format!("{}\n", ctx_entry.text));
+        }
+        prompt.push_str("\n=== TRANSLATE THIS ===\n");
+        prompt.push_str(&entry.text);
+        
+        // Translate with context
+        let (translated_text, _) = self.translate_text_with_usage(
+            &prompt,
+            source_language,
+            target_language,
+            Some(log_capture),
+        ).await?;
+        
+        // Extract only the translated part (remove any context that might have been included)
+        let final_translated = Self::extract_translated_portion(&translated_text, &entry.text);
+        
+        // Apply format preservation
+        let final_text = if self.options.preserve_formatting {
+            FormatPreserver::preserve_formatting(&entry.text, &final_translated)
+        } else {
+            final_translated
+        };
+        
+        // Create translated entry
+        let mut translated_entry = entry.clone();
+        translated_entry.text = final_text;
+        
+        Ok(translated_entry)
+    }
+    
+    /// Translate a small batch of entries with context from previous entries
+    /// 
+    /// Context entries are included in the prompt to help maintain consistency
+    /// (formal/informal address, character genders, tone) but are NOT translated.
+    async fn translate_small_batch_with_context(
+        &self,
+        entries: &[SubtitleEntry],
+        context_entries: &[SubtitleEntry],
+        source_language: &str,
+        target_language: &str,
+        log_capture: Arc<Mutex<Vec<LogEntry>>>,
+    ) -> Result<Vec<SubtitleEntry>> {
+        if entries.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        // If no context, use the regular method
+        if context_entries.is_empty() {
+            return self.translate_small_batch_parallel(entries, source_language, target_language, log_capture).await;
+        }
+        
+        // Build prompt with context section and entries to translate
+        let mut combined_text = String::new();
+        
+        // Add context section (marked as already translated, for reference only)
+        combined_text.push_str("=== CONTEXT (already translated, for reference only - DO NOT include in output) ===\n");
+        for ctx_entry in context_entries {
+            combined_text.push_str(&format!("{}\n", ctx_entry.text));
+        }
+        combined_text.push_str("\n=== TRANSLATE THESE ENTRIES (use markers [1], [2], etc.) ===\n");
+        
+        // Add entries to translate with markers
+        for (idx, entry) in entries.iter().enumerate() {
+            combined_text.push_str(&format!("[{}]\n{}\n", idx + 1, entry.text));
+        }
+        
+        // Translate combined text
+        let (translated_text, _) = self.translate_text_with_usage(
+            &combined_text,
+            source_language,
+            target_language,
+            Some(log_capture.clone()),
+        ).await?;
+        
+        // Parse results back into entries (same logic as translate_small_batch_parallel)
+        let mut translated_entries = Vec::with_capacity(entries.len());
+        let mut entries_needing_retry: Vec<(usize, &SubtitleEntry)> = Vec::new();
+        
+        for (idx, entry) in entries.iter().enumerate() {
+            let marker = format!("[{}]", idx + 1);
+            let next_marker = format!("[{}]", idx + 2);
+            
+            let entry_text = if let Some(start_pos) = translated_text.find(&marker) {
+                let text_start = start_pos + marker.len();
+                let text_end = translated_text[text_start..]
+                    .find(&next_marker)
+                    .map(|pos| text_start + pos)
+                    .unwrap_or(translated_text.len());
+                
+                let extracted = translated_text[text_start..text_end].trim().to_string();
+                
+                if extracted.is_empty() || extracted.starts_with('[') || extracted.starts_with("===") {
+                    debug!("Marker [{}] found but extracted text is invalid, will retry individually", idx + 1);
+                    entries_needing_retry.push((idx, entry));
+                    None
+                } else {
+                    Some(extracted)
+                }
+            } else {
+                debug!("Marker [{}] not found in response, will retry individually", idx + 1);
+                entries_needing_retry.push((idx, entry));
+                None
+            };
+            
+            if let Some(text) = entry_text {
+                let final_text = if self.options.preserve_formatting {
+                    FormatPreserver::preserve_formatting(&entry.text, &text)
+                } else {
+                    text
+                };
+                
+                let mut translated_entry = entry.clone();
+                translated_entry.text = final_text;
+                translated_entries.push((idx, translated_entry));
+            }
+        }
+        
+        // Retry failed entries individually with context
+        if !entries_needing_retry.is_empty() {
+            {
+                let mut logs = log_capture.lock().await;
+                logs.push(LogEntry {
+                    level: "WARN".to_string(),
+                    message: format!(
+                        "Retrying {} entries individually due to marker parsing failures",
+                        entries_needing_retry.len()
+                    ),
+                });
+            }
+            
+            for (idx, entry) in entries_needing_retry {
+                match self.translate_single_entry_with_context(
+                    entry,
+                    context_entries,
+                    source_language,
+                    target_language,
+                    log_capture.clone(),
+                ).await {
+                    Ok(translated_entry) => {
+                        translated_entries.push((idx, translated_entry));
+                    }
+                    Err(e) => {
+                        {
+                            let mut logs = log_capture.lock().await;
+                            logs.push(LogEntry {
+                                level: "ERROR".to_string(),
+                                message: format!(
+                                    "Failed to translate entry {} individually: {}. Using original text.",
+                                    idx + 1, e
+                                ),
+                            });
+                        }
+                        translated_entries.push((idx, entry.clone()));
+                    }
+                }
+            }
+        }
+        
+        translated_entries.sort_by_key(|(idx, _)| *idx);
+        Ok(translated_entries.into_iter().map(|(_, entry)| entry).collect())
+    }
+    
+    /// Extract the translated portion from a response that may include context
+    fn extract_translated_portion(response: &str, _original: &str) -> String {
+        // Try to find the "TRANSLATE THIS" section marker
+        if let Some(pos) = response.find("=== TRANSLATE") {
+            // Find the end of the marker line
+            if let Some(newline_pos) = response[pos..].find('\n') {
+                return response[pos + newline_pos..].trim().to_string();
+            }
+        }
+        
+        // If no marker found, try to detect and skip any context echoing
+        // Look for patterns that indicate context was echoed
+        let lines: Vec<&str> = response.lines().collect();
+        
+        // If the response has "===" markers, try to extract after them
+        for (i, line) in lines.iter().enumerate() {
+            if line.starts_with("===") && line.contains("TRANSLATE") {
+                return lines[i + 1..].join("\n").trim().to_string();
+            }
+        }
+        
+        // Otherwise return the full response
+        response.trim().to_string()
     }
     
     /// Translate a batch of subtitle entries with recovery options

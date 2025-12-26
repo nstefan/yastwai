@@ -7,7 +7,6 @@
 <div align="center">
   <h1>YASTwAI</h1>
   <p><strong>Y</strong>et <strong>A</strong>nother <strong>S</strong>ub<strong>t</strong>itle translator <strong>w</strong>ith <strong>AI</strong></p>
-  
   <p>
     <a href="#about">About</a> •
     <a href="#key-features">Features</a> •
@@ -21,16 +20,14 @@
 
 ## About
 
-YASTwAI is a command-line tool that extracts subtitles from videos and translates them using AI. Whether you're watching foreign films, studying languages, or preparing content for international audiences, YASTwAI makes subtitle translation simple and effective.
-
-Built with Rust for performance and reliability, YASTwAI supports multiple AI translation providers and preserves the original subtitle formatting and timing.
+YASTwAI is a command-line tool that extracts subtitles from videos and translates them using AI. Built with Rust for performance, it preserves formatting and timing, and supports multiple translation providers.
 
 ## Key Features
-
 - 🎯 **Extract & Translate** - Pull subtitles from videos and translate in one step
-- 🌐 **Multiple AI Providers** - Support for Ollama, OpenAI, Anthropic
-- ⚡ **Concurrent Processing** - Efficient batch translation for faster results
-- 🧠 **Smart Processing** - Preserves formatting and timing of your subtitles
+- 🌐 **Multiple AI Providers** - Support for Ollama, OpenAI, Anthropic, LM Studio (including vLLM and OpenAI-compatible servers)
+- ⚡ **Parallel Processing** - Fast concurrent batch translation with configurable parallelism
+- 🧠 **Context-Aware Translation** - Includes previous entries as context for consistency (tu/vous, genders)
+- 💾 **Session Persistence** - Resume interrupted translations automatically
 - 🔄 **Direct Translation** - Translate existing SRT files without needing video
 - 📊 **Progress Tracking** - See real-time progress for lengthy translations
 
@@ -39,72 +36,28 @@ Built with Rust for performance and reliability, YASTwAI supports multiple AI tr
 ### Prerequisites
 
 * Rust and Cargo (1.85.0 or newer)
-  ```sh
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
-* FFmpeg installed on your system (for subtitle extraction)
-  ```sh
-  # On Ubuntu/Debian
-  sudo apt install ffmpeg
-  
-  # On macOS with Homebrew
-  brew install ffmpeg
-  
-  # On Windows with Chocolatey
-  choco install ffmpeg
-  ```
+* FFmpeg installed on your system
 * GitHub CLI (gh) for pull request operations
-  ```sh
-  # On Ubuntu/Debian
-  sudo apt install gh
-  
-  # On macOS with Homebrew
-  brew install gh
-  
-  # On Windows with Chocolatey
-  choco install gh
-  ```
 
 ### Build from Source
 
 ```sh
-# Clone the repository
 git clone https://github.com/nstefan/yastwai.git
 cd yastwai
-
-# Build the application
 cargo build --release
-
-# The executable will be in target/release/yastwai
 ```
 
 ## Quick Start
 
-1. **Copy the example config** (or let YASTwAI create one for you):
-   ```sh
-   cp conf.example.json conf.json
-   ```
-
-2. **Run YASTwAI**:
-   ```sh
-   # Translate subtitles from a video file
-   ./target/release/yastwai video.mkv
-
-   # Process an entire directory
-   ./target/release/yastwai videos/
-
-   # Translate an SRT file directly
-   ./target/release/yastwai subtitles.srt
-
-   # Force overwrite existing translations
-   ./target/release/yastwai -f video.mkv
-   ```
-
-3. **Find your translations** next to the original files as `original_name.{target_language}.srt`
+```sh
+cp conf.example.json conf.json
+./target/release/yastwai video.mkv
+./target/release/yastwai videos/
+./target/release/yastwai subtitles.srt
+./target/release/yastwai -f video.mkv
+```
 
 ## Configuration
-
-YASTwAI uses a JSON configuration file with these settings:
 
 ```json
 {
@@ -131,6 +84,15 @@ YASTwAI uses a JSON configuration file with these settings:
         "timeout_secs": 60
       },
       {
+        "type": "lmstudio",
+        "model": "local-model",
+        "api_key": "lm-studio",
+        "endpoint": "http://localhost:1234/v1",
+        "concurrent_requests": 4,
+        "max_chars_per_request": 1000,
+        "timeout_secs": 60
+      },
+      {
         "type": "anthropic",
         "model": "claude-3-haiku-20240307",
         "api_key": "your_api_key",
@@ -142,57 +104,40 @@ YASTwAI uses a JSON configuration file with these settings:
       }
     ],
     "common": {
-      "system_prompt": "You are an expert subtitle translator specializing in {source_language} to {target_language} translation. Your task is to translate subtitle text PRECISELY while following these CRITICAL RULES:\n\n1. TRANSLATE EVERY SINGLE SUBTITLE - never skip any line or leave anything untranslated.\n2. PRESERVE EXACT FORMATTING - keep ALL special tags (like \{\\an8}), line breaks, and punctuation in the EXACT SAME POSITION as the original.\n3. MAINTAIN EXACT NUMBER OF LINES - your output MUST have the SAME number of lines as the input.\n4. PRESERVE TIMING CONSIDERATIONS - keep translations concise enough to be read in the same timeframe.\n5. PRESERVE MEANING AND CONTEXT - capture cultural nuances accurately.\n6. MAINTAIN TONE AND REGISTER - preserve formality level, slang, humor, and emotional tone.\n7. KEEP SPECIAL CHARACTERS INTACT - never modify or remove format codes like \{\\an8} or any other technical markers.\n8. RESPECT SUBTITLE LENGTH - translations should ideally be similar in length to maintain readability.\n\nFor each subtitle I send you, you MUST return a complete translation. Missing translations are NOT acceptable under any circumstances.",
-      "rate_limit_delay_ms": 3000,
+      "system_prompt": "You are an expert subtitle translator specializing in {source_language} to {target_language} translation. Translate precisely while preserving formatting, line breaks, and special tags. Maintain consistency in formal/informal address and character genders throughout.",
+      "rate_limit_delay_ms": 500,
       "retry_count": 3,
-      "retry_backoff_ms": 3000,
-      "temperature": 0.3
+      "retry_backoff_ms": 1000,
+      "temperature": 0.3,
+      "parallel_mode": true,
+      "entries_per_request": 3,
+      "context_entries_count": 3
     }
   },
-  "log_level": "info",
-  "batch_size": 1000
+  "session": {
+    "enabled": true,
+    "auto_resume": true
+  },
+  "log_level": "info"
 }
 ```
 
 ### Translation Providers
 
-#### Ollama (Default, Local)
-- 🏠 Free, runs locally on your machine
-- 🔗 Install from [ollama.ai](https://ollama.ai/)
-- 🧩 Pull your model: `ollama pull mixtral:8x7b`
-
-#### OpenAI
-- 🔑 Requires API key from [platform.openai.com](https://platform.openai.com/)
-- 🧠 Models: gpt-4o-mini, gpt-4o, etc.
-
-#### Anthropic
-- 🔑 Requires API key from [anthropic.com](https://www.anthropic.com/)
-- 🧠 Models: claude-3-haiku, claude-3-sonnet, etc.
-
-See the example configuration file for more detailed options.
+- **Ollama** - Local LLM server (default, free)
+- **OpenAI** - GPT models via API
+- **Anthropic** - Claude models via API
+- **LM Studio** - Local OpenAI-compatible server
+- **vLLM** - High-performance inference server (use lmstudio provider type)
 
 ## Contributing
 
-Contributions are welcome! If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also open an issue with the tag "enhancement".
-
-Several helper scripts are available in the `scripts/` directory to assist contributors:
-- `ai-commit.sh` - Create well-structured commit messages
-- `ai-update-main.sh` - Safely update the main branch without interactive prompts
-- `ai-pr.sh` - Generate formatted pull requests
-- `ai-clippy.sh` - Run Rust code linting
-
-Don't forget to give the project a star! Thanks!
+Helper scripts in `scripts/`: `ai-commit`, `ai-update-main`, `ai-pr`, `ai-clippy`
 
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the MIT License. See `LICENSE` for details.
 
-## Acknowledgments
-
-* [Cursor Editor](https://cursor.sh/) for making AI-powered development possible
-* [FFmpeg](https://ffmpeg.org/) for the powerful media processing capabilities
-
-<!-- MARKDOWN LINKS & IMAGES -->
 [contributors-shield]: https://img.shields.io/github/contributors/nstefan/yastwai.svg?style=for-the-badge
 [contributors-url]: https://github.com/nstefan/yastwai/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/nstefan/yastwai.svg?style=for-the-badge
@@ -203,6 +148,3 @@ Distributed under the MIT License. See `LICENSE` for more information.
 [issues-url]: https://github.com/nstefan/yastwai/issues
 [license-shield]: https://img.shields.io/github/license/nstefan/yastwai.svg?style=for-the-badge
 [license-url]: https://github.com/nstefan/yastwai/blob/master/LICENSE
-
-<!-- NOTE: This README is automatically generated. Do not edit directly. -->
-<!-- If you need to make changes, modify the generation script at scripts/ai-readme.sh instead. -->

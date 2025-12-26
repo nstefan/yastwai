@@ -362,6 +362,16 @@ pub struct TranslationCommonConfig {
     /// Higher values = fewer requests but less parallelism
     #[serde(default = "default_entries_per_request")]
     pub entries_per_request: usize,
+    
+    /// Number of previous entries to include as context for translation consistency
+    /// This helps maintain consistency in formal/informal address, character genders, etc.
+    /// Set to 0 to disable context. Default: 3
+    #[serde(default = "default_context_entries_count")]
+    pub context_entries_count: usize,
+}
+
+fn default_context_entries_count() -> usize {
+    3 // Include 3 previous entries as context by default
 }
 
 impl Default for TranslationCommonConfig {
@@ -374,6 +384,7 @@ impl Default for TranslationCommonConfig {
             temperature: default_temperature(),
             parallel_mode: true,
             entries_per_request: default_entries_per_request(),
+            context_entries_count: default_context_entries_count(),
         }
     }
 }
