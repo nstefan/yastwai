@@ -8,8 +8,6 @@
  * - Punctuation normalization
  */
 
-use std::collections::HashMap;
-
 use crate::translation::document::{DocumentEntry, FormattingTag, Glossary};
 
 /// Types of repairs that can be applied.

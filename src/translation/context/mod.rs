@@ -14,13 +14,8 @@ pub mod summary;
 pub mod window;
 
 // Re-export main types
-pub use glossary::{ConsistencyIssue, ExtractionConfig, GlossaryEnforcer, GlossaryExtractor};
-pub use scenes::{SceneDetectionConfig, SceneDetector};
-pub use summary::{HistorySummarizer, HistorySummary, SummarizationConfig};
+pub use glossary::{ConsistencyIssue, ExtractionConfig, GlossaryEnforcer, GlossaryExtractor, GlossaryExtractionExt};
+pub use scenes::{SceneDetectionConfig, SceneDetector, SceneDetectionExt};
+pub use summary::{HistorySummarizer, HistorySummary, SummarizationConfig, SummarizationExt};
 pub use window::{ContextWindow, ContextWindowConfig, ContextWindowExt, WindowEntry};
-
-// Re-export extension traits
-pub use glossary::GlossaryExtractionExt;
-pub use scenes::SceneDetectionExt;
-pub use summary::SummarizationExt;
 

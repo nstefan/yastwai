@@ -442,8 +442,7 @@ impl BatchTranslator {
                 let batch_callback = batch_callback.clone();
                 let source_language = source_language.to_string();
                 let target_language = target_language.to_string();
-                let _total_batches = batches.len();
-                
+
                 async move {
                     // Acquire a permit from the semaphore
                     let _permit = match semaphore.acquire().await {

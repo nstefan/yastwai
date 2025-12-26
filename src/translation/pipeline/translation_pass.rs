@@ -13,7 +13,7 @@ use crate::translation::context::{ContextWindow, ContextWindowConfig};
 use crate::translation::core::TranslationService;
 use crate::translation::document::{DocumentEntry, Glossary, SubtitleDocument};
 use crate::translation::prompts::{
-    TranslatedEntry, TranslatedEntryContext, TranslationPromptBuilder, TranslationResponse,
+    TranslatedEntry, TranslationPromptBuilder, TranslationResponse,
 };
 
 /// Configuration for the translation pass.
@@ -169,8 +169,8 @@ impl TranslationPass {
                     // Process glossary updates
                     if self.config.accept_glossary_updates {
                         if let Some(notes) = response.notes {
-                            for (source, target) in notes.glossary_updates {
-                                result.glossary_updates.add_term(&source, &target, None);
+                            for (source, target) in notes.glossary_updates.iter() {
+                                result.glossary_updates.add_term(source, target, None);
                             }
                         }
                     }

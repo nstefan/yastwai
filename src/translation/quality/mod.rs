@@ -18,8 +18,6 @@ pub mod repair;
 
 // Re-export main types
 pub use consistency::{ConsistencyChecker, ConsistencyConfig, ConsistencyReport, StyleIssue};
-pub use errors::{
-    ErrorRecovery, RecoveryAction, RecoveryStrategy, TranslationError, TranslationErrorKind,
-};
+pub use errors::{ErrorRecovery, RecoveryAction, RecoveryStrategy, TranslationError, TranslationErrorKind};
 pub use metrics::{QualityMetrics, QualityScore, QualityThresholds};
 pub use repair::{RepairEngine, RepairStrategy, SmartRepair};

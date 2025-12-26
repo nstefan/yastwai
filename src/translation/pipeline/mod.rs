@@ -19,6 +19,4 @@ pub mod validation_pass;
 pub use analysis_pass::{AnalysisPass, AnalysisResult};
 pub use orchestrator::{PipelineConfig, PipelineProgress, TranslationPipeline};
 pub use translation_pass::{TranslationPass, TranslationPassConfig};
-pub use validation_pass::{
-    RepairAction, RepairResult, ValidationIssue, ValidationPass, ValidationReport,
-};
+pub use validation_pass::{RepairAction, RepairResult, ValidationIssue, ValidationPass, ValidationReport};

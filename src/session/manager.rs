@@ -275,7 +275,7 @@ impl SessionManager {
 
         // Update session progress
         let session = self.repo.get_session(session_id).await?;
-        if let Some(session) = session {
+        if let Some(_session) = session {
             let translated = self.repo.get_translated_entries(session_id).await?;
             let completed_count = translated
                 .iter()

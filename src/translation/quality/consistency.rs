@@ -173,7 +173,7 @@ impl StyleIssue {
 }
 
 /// Formality levels for style checking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FormalityLevel {
     /// Casual/informal language
     Informal,
@@ -486,7 +486,7 @@ impl ConsistencyChecker {
             if let Some(ref translated) = entry.translated_text {
                 // Check quote styles
                 for c in translated.chars() {
-                    if matches!(c, '"' | '"' | '"' | '«' | '»' | '\'' | ''' | ''') {
+                    if matches!(c, '"' | '\u{201C}' | '\u{201D}' | '«' | '»' | '\'' | '\u{2019}' | '\u{2018}') {
                         quote_styles.entry(c).or_default().push(entry.id);
                     }
                 }
@@ -513,11 +513,11 @@ impl ConsistencyChecker {
             let in_e2 = entry2.original_text.contains(term);
 
             if in_e1 && in_e2 {
-                if let (Some(ref t1), Some(ref t2)) = (&entry1.translated_text, &entry2.translated_text) {
+                if let (Some(t1), Some(t2)) = (&entry1.translated_text, &entry2.translated_text) {
                     // Extract how the term was translated in each
                     // This is a simplified check - just verifying both contain similar content
-                    let t1_lower = t1.to_lowercase();
-                    let t2_lower = t2.to_lowercase();
+                    let _t1_lower = t1.to_lowercase();
+                    let _t2_lower = t2.to_lowercase();
 
                     // Very different lengths might indicate inconsistent translation
                     let len_ratio = t1.len() as f32 / t2.len().max(1) as f32;

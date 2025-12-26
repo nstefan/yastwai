@@ -346,7 +346,7 @@ impl TranslationPipeline {
 
         let translation_callback: Option<Box<dyn Fn(f32) + Send>> = progress_callback
             .as_ref()
-            .map(|cb| {
+            .map(|_cb| {
                 let cb_clone = Box::new({
                     let progress = progress.clone();
                     move |p: f32| {

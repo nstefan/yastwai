@@ -488,7 +488,7 @@ mod tests {
             "This is a very long subtitle text that has many chars",
         );
 
-        let result = validator.validate_entry(&entry);
+        let _result = validator.validate_entry(&entry);
 
         // With max_cps=50, this should pass (53 chars / 1 sec = 53 CPS > 50)
         // Actually still fails, let's use a shorter text

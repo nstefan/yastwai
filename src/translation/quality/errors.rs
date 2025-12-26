@@ -12,7 +12,7 @@
 use std::time::Duration;
 
 /// Categories of translation errors.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TranslationErrorKind {
     /// Network connectivity issues
     Network,
