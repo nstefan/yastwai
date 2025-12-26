@@ -442,7 +442,7 @@ impl BatchTranslator {
                 let batch_callback = batch_callback.clone();
                 let source_language = source_language.to_string();
                 let target_language = target_language.to_string();
-                let total_batches = batches.len();
+                let _total_batches = batches.len();
                 
                 async move {
                     // Acquire a permit from the semaphore
@@ -489,11 +489,10 @@ impl BatchTranslator {
                         }
                     }
                     
-                    // Update progress
+                    // Update progress - report actual work items for accurate ETA
                     let current = processed_items.fetch_add(1, Ordering::SeqCst) + 1;
-                    // Map work item progress to batch progress for UI consistency
-                    let batch_progress = (current * total_batches) / total_work_items.max(1);
-                    progress_callback(batch_progress.min(total_batches), total_batches);
+                    // Report work item progress directly for accurate ETA calculation
+                    progress_callback(current, total_work_items);
                     
                     (work_idx, result.map(|entries| (entries, duration)))
                 }
@@ -740,13 +739,13 @@ impl TranslationService {
             return self.translate_single_entry_parallel(entry, source_language, target_language, log_capture).await;
         }
         
-        // Build prompt with context
+        // Build prompt with context (compact format to reduce tokens)
         let mut prompt = String::new();
-        prompt.push_str("=== CONTEXT (already translated, for reference only) ===\n");
+        prompt.push_str("[CONTEXT]\n");
         for ctx_entry in context_entries {
             prompt.push_str(&format!("{}\n", ctx_entry.text));
         }
-        prompt.push_str("\n=== TRANSLATE THIS ===\n");
+        prompt.push_str("[TRANSLATE]\n");
         prompt.push_str(&entry.text);
         
         // Translate with context
@@ -796,18 +795,19 @@ impl TranslationService {
         }
         
         // Build prompt with context section and entries to translate
+        // Use minimal headers to reduce token overhead
         let mut combined_text = String::new();
         
-        // Add context section (marked as already translated, for reference only)
-        combined_text.push_str("=== CONTEXT (already translated, for reference only - DO NOT include in output) ===\n");
+        // Add context section (compact format)
+        combined_text.push_str("[CONTEXT]\n");
         for ctx_entry in context_entries {
             combined_text.push_str(&format!("{}\n", ctx_entry.text));
         }
-        combined_text.push_str("\n=== TRANSLATE THESE ENTRIES (use markers [1], [2], etc.) ===\n");
+        combined_text.push_str("[TRANSLATE]\n");
         
         // Add entries to translate with markers
         for (idx, entry) in entries.iter().enumerate() {
-            combined_text.push_str(&format!("[{}]\n{}\n", idx + 1, entry.text));
+            combined_text.push_str(&format!("[{}] {}\n", idx + 1, entry.text));
         }
         
         // Translate combined text
@@ -908,21 +908,25 @@ impl TranslationService {
     
     /// Extract the translated portion from a response that may include context
     fn extract_translated_portion(response: &str, _original: &str) -> String {
-        // Try to find the "TRANSLATE THIS" section marker
+        // Try to find the [TRANSLATE] marker (compact format)
+        if let Some(pos) = response.find("[TRANSLATE]") {
+            let after_marker = pos + "[TRANSLATE]".len();
+            return response[after_marker..].trim().to_string();
+        }
+        
+        // Fallback: try legacy "=== TRANSLATE" format
         if let Some(pos) = response.find("=== TRANSLATE") {
-            // Find the end of the marker line
             if let Some(newline_pos) = response[pos..].find('\n') {
                 return response[pos + newline_pos..].trim().to_string();
             }
         }
         
         // If no marker found, try to detect and skip any context echoing
-        // Look for patterns that indicate context was echoed
         let lines: Vec<&str> = response.lines().collect();
         
-        // If the response has "===" markers, try to extract after them
+        // Look for any TRANSLATE markers in lines
         for (i, line) in lines.iter().enumerate() {
-            if line.starts_with("===") && line.contains("TRANSLATE") {
+            if line.contains("TRANSLATE") || line.starts_with("[TRANSLATE") {
                 return lines[i + 1..].join("\n").trim().to_string();
             }
         }
