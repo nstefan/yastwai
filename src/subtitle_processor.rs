@@ -526,15 +526,21 @@ impl SubtitleCollection {
             // Extract to a temporary file first
             let temp_filename = format!("extracted_subtitle_{}.srt", track_id);
             let temp_path = std::env::temp_dir().join(&temp_filename);
-            
+
             let result = Self::extract_from_video(video_path, track_id, source_language, &temp_path).await;
-            
+
             // Clean up temporary file
             if temp_path.exists() {
                 let _ = std::fs::remove_file(&temp_path);
             }
-            
-            result
+
+            // Update source_file to point to the original video file (not the deleted temp file)
+            // This is important for session management - the session should be identified by
+            // the source video, not the temporary extracted subtitle file
+            result.map(|mut collection| {
+                collection.source_file = video_path.to_path_buf();
+                collection
+            })
         }
     }
 
