@@ -62,11 +62,7 @@ Use the `scripts/create-commit.sh` script to generate properly formatted commits
 
 ### AI Assistants
 
-AI assistants should use the non-interactive workflow:
-
-```bash
-./scripts/ai-commit.sh "Commit title" "Short description" "Original prompt" "Reasoning process" "Challenges faced"
-```
+AI assistants should create commits using standard git commands with well-structured messages.
 
 Each commit message should follow this structure:
 
@@ -168,7 +164,7 @@ cargo test
 ./scripts/ai-clippy.sh --fix
 
 # 4. Create commit
-./scripts/ai-commit.sh "Add feature X" "Add support for feature X that does Y" "Original request" "First I did this, then I did that" "Had to overcome this issue, resolved by using this approach"
+git add -A && git commit -m "Add feature X: Add support for feature X that does Y"
 
 # 5. Build and test
 cargo build --release
@@ -237,7 +233,6 @@ The repository includes several scripts to help with development:
 - `scripts/run-clippy.sh` - For running the Rust linter (basic)
 
 ### AI-Optimized Scripts
-- `scripts/ai-commit.sh` - Non-interactive commit workflow
 - `scripts/ai-branch.sh` - Branch management with named parameters
 - `scripts/ai-clippy.sh` - Enhanced Clippy with more options
 - `scripts/ai-pr.sh` - PR creation with proper descriptions

@@ -161,7 +161,7 @@ ${tick3}
 
 ## Contributing
 
-Helper scripts in ``scripts/``: ``ai-commit``, ``ai-update-main``, ``ai-pr``, ``ai-clippy``
+Helper scripts in ``scripts/``: ``ai-branch``, ``ai-update-main``, ``ai-pr``, ``ai-clippy``
 
 ## License
 

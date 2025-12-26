@@ -98,16 +98,8 @@ scripts\ai-update-main.cmd
 # Stage changes
 git add -A
 
-# Create commit using helper script (required)
-./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
-```
-Windows equivalents:
-```powershell
-# PowerShell
-pwsh -File scripts/ai-commit.ps1 -Model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
-
-# Or use .cmd shim
-scripts\ai-commit.cmd -Model "model-name" "Title" "Description" "Prompt" "Thought Process" "Discussion"
+# Create commit with well-structured message
+git commit -m "Title: Short description of changes"
 ```
 
 ## Code Style & Standards
@@ -255,7 +247,6 @@ After modifying source files, always:
 
 ### AI-Optimized Scripts (Use These)
 - `ai-branch.sh` - Branch management with named parameters
-- `ai-commit.sh` - Non-interactive commit workflow
 - `ai-clippy.sh` - Enhanced Clippy with fix options
 - `ai-pr.sh` - PR creation with structured descriptions
 - `ai-protect-main.sh` - Branch protection verification
