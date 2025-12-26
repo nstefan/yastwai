@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
-use serde::{Serialize, Deserialize};
-use anyhow::Result;
+use serde::{de::DeserializeOwned, Serialize, Deserialize};
+use anyhow::{Result, Context, anyhow};
 use reqwest::Client;
 use async_trait::async_trait;
 use tokio::time::sleep;
@@ -395,6 +395,141 @@ impl Anthropic {
         
         response.json::<AnthropicResponse>().await
             .map_err(|e| ProviderError::ParseError(e.to_string()))
+    }
+}
+
+/// Anthropic client implementation - JSON completion helper
+#[allow(dead_code)]
+impl Anthropic {
+    /// Complete a request and parse the response as JSON.
+    ///
+    /// Anthropic doesn't have a native JSON mode, but this method helps
+    /// ensure the response is parsed as JSON. The system prompt should
+    /// instruct the model to output valid JSON only.
+    ///
+    /// # Type Parameters
+    /// * `T` - The type to deserialize the JSON response into
+    ///
+    /// # Arguments
+    /// * `model` - The model to use
+    /// * `system_prompt` - System message instructing JSON output format
+    /// * `user_prompt` - The user message (data to process)
+    /// * `temperature` - Temperature for generation (0.0-1.0)
+    /// * `max_tokens` - Maximum tokens to generate
+    ///
+    /// # Returns
+    /// The parsed response of type T, or an error if parsing fails
+    pub async fn complete_json<T: DeserializeOwned>(
+        &self,
+        model: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        temperature: f32,
+        max_tokens: u32,
+    ) -> Result<T> {
+        // Enhance the system prompt to emphasize JSON-only output
+        let json_system_prompt = format!(
+            "{}\n\nIMPORTANT: Respond with valid JSON only. Do not include any text before or after the JSON.",
+            system_prompt
+        );
+
+        let request = AnthropicRequest::new(model, max_tokens)
+            .system(&json_system_prompt)
+            .add_message("user", user_prompt)
+            .temperature(temperature);
+
+        let response = self.send_request_with_retry(&request).await
+            .map_err(|e| anyhow!("Anthropic API error: {:?}", e))?;
+
+        // Extract the text content
+        let content = Self::extract_text(&response);
+
+        // Try to find JSON in the response (in case there's extra text)
+        let json_content = Self::extract_json_from_text(&content)
+            .ok_or_else(|| anyhow!("No valid JSON found in response: {}", content))?;
+
+        // Parse the JSON response
+        serde_json::from_str(&json_content)
+            .with_context(|| format!("Failed to parse JSON response: {}", json_content))
+    }
+
+    /// Extract JSON content from text that may contain non-JSON prefix/suffix.
+    fn extract_json_from_text(text: &str) -> Option<String> {
+        let trimmed = text.trim();
+
+        // If it starts with { or [, try to parse as-is first
+        if trimmed.starts_with('{') || trimmed.starts_with('[') {
+            // Find the matching closing bracket
+            if let Some(json) = Self::find_balanced_json(trimmed) {
+                return Some(json);
+            }
+        }
+
+        // Try to find JSON block in the text
+        if let Some(start) = trimmed.find('{') {
+            let from_start = &trimmed[start..];
+            if let Some(json) = Self::find_balanced_json(from_start) {
+                return Some(json);
+            }
+        }
+
+        if let Some(start) = trimmed.find('[') {
+            let from_start = &trimmed[start..];
+            if let Some(json) = Self::find_balanced_json(from_start) {
+                return Some(json);
+            }
+        }
+
+        None
+    }
+
+    /// Find a balanced JSON object or array starting from the beginning of the string.
+    fn find_balanced_json(text: &str) -> Option<String> {
+        let chars: Vec<char> = text.chars().collect();
+        if chars.is_empty() {
+            return None;
+        }
+
+        let open_char = chars[0];
+        let close_char = match open_char {
+            '{' => '}',
+            '[' => ']',
+            _ => return None,
+        };
+
+        let mut depth = 0;
+        let mut in_string = false;
+        let mut escape_next = false;
+
+        for (i, &c) in chars.iter().enumerate() {
+            if escape_next {
+                escape_next = false;
+                continue;
+            }
+
+            if c == '\\' && in_string {
+                escape_next = true;
+                continue;
+            }
+
+            if c == '"' {
+                in_string = !in_string;
+                continue;
+            }
+
+            if !in_string {
+                if c == open_char {
+                    depth += 1;
+                } else if c == close_char {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(chars[..=i].iter().collect());
+                    }
+                }
+            }
+        }
+
+        None
     }
 }
 

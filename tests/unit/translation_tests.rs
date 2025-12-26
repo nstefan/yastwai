@@ -30,6 +30,7 @@ fn get_test_config() -> TranslationConfig {
             temperature: 0.3,
             parallel_mode: true,
             entries_per_request: 3,
+            context_entries_count: 3,
         },
         available_providers: vec![
             ProviderConfig {

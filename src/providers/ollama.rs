@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow, Context};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::time::Duration;
 use log::error;
 
@@ -855,5 +855,76 @@ impl Ollama {
             .to_string();
         
         Ok(version)
+    }
+
+    /// Generate a response in JSON format and parse it.
+    ///
+    /// This method sets the format to "json" which instructs Ollama to
+    /// return valid JSON output. The system prompt should describe the
+    /// expected JSON schema.
+    ///
+    /// # Type Parameters
+    /// * `T` - The type to deserialize the JSON response into
+    ///
+    /// # Arguments
+    /// * `model` - The model to use
+    /// * `system_prompt` - System message describing the JSON schema
+    /// * `user_prompt` - The user message (data to process)
+    /// * `temperature` - Temperature for generation
+    ///
+    /// # Returns
+    /// The parsed response of type T, or an error if parsing fails
+    pub async fn generate_json<T: DeserializeOwned>(
+        &self,
+        model: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        temperature: f32,
+    ) -> Result<T> {
+        let request = GenerationRequest::new(model, user_prompt)
+            .system(system_prompt)
+            .temperature(temperature)
+            .format("json");
+
+        let response = self.generate(request).await?;
+
+        // Parse the JSON response
+        serde_json::from_str(&response.response)
+            .with_context(|| format!("Failed to parse JSON response: {}", response.response))
+    }
+
+    /// Chat with JSON format output and parse the response.
+    ///
+    /// Similar to generate_json but uses the chat endpoint for multi-turn
+    /// conversations.
+    ///
+    /// # Type Parameters
+    /// * `T` - The type to deserialize the JSON response into
+    ///
+    /// # Arguments
+    /// * `model` - The model to use
+    /// * `system_prompt` - System message describing the JSON schema
+    /// * `messages` - The conversation messages
+    /// * `temperature` - Temperature for generation
+    ///
+    /// # Returns
+    /// The parsed response of type T, or an error if parsing fails
+    pub async fn chat_json<T: DeserializeOwned>(
+        &self,
+        model: &str,
+        system_prompt: &str,
+        messages: Vec<ChatMessage>,
+        temperature: f32,
+    ) -> Result<T> {
+        let request = ChatRequest::new(model, messages)
+            .system(system_prompt)
+            .temperature(temperature)
+            .format("json");
+
+        let response = self.chat(request).await?;
+
+        // Parse the JSON response
+        serde_json::from_str(&response.message.content)
+            .with_context(|| format!("Failed to parse JSON response: {}", response.message.content))
     }
 } 
