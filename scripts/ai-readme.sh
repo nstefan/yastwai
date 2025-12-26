@@ -338,7 +338,7 @@ See the example configuration file for more detailed options.
 Contributions are welcome! If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also open an issue with the tag "enhancement".
 
 Several helper scripts are available in the \`scripts/\` directory to assist contributors:
-- \`ai-commit.sh\` - Create well-structured commit messages
+- \`ai-branch.sh\` - Create and manage feature branches
 - \`ai-update-main.sh\` - Safely update the main branch without interactive prompts
 - \`ai-pr.sh\` - Generate formatted pull requests
 - \`ai-clippy.sh\` - Run Rust code linting

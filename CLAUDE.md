@@ -5,16 +5,14 @@
 - For ALL changes, follow this exact workflow:
   1. Create branch: `./scripts/ai-branch.sh feature_name`
   2. Make changes
-  3. Commit: `./scripts/ai-commit.sh [options]`
-  4. Create PR: `./scripts/ai-pr.sh`
-  5. Only update main with: `./scripts/ai-update-main.sh`
+  3. Create PR: `./scripts/ai-pr.sh`
+  4. Only update main with: `./scripts/ai-update-main.sh`
 - Never edit README.md directly, use ai-readme.sh
 
 ## Commands
 ```bash
 # Branch Workflow (ALWAYS USE THESE)
 ./scripts/ai-branch.sh feature_name  # Create feature branch FIRST
-./scripts/ai-commit.sh --model "model-name" "Title" "Description" "Prompt" "Process" "Discussion"
 ./scripts/ai-pr.sh  # Create pull request, NEVER push directly to main
 ./scripts/ai-update-main.sh  # Update main branch
 

@@ -49,11 +49,10 @@ CRITICAL BRANCH PROTECTION RULES
         pwsh -File scripts/ai-branch.ps1 --new-branch "descriptive-feature-name" --is-related false
         # or scripts\ai-branch.cmd --new-branch "descriptive-feature-name" --is-related false
         ```
-    - Always use helper scripts for ALL git branch operations:
+    - Always use helper scripts for git branch operations:
       - Use ai-branch.sh for branch management
       - Use ai-update-main.sh for updating main
-      - Use ai-commit.sh for committing changes
-    - NEVER directly use raw 'git checkout', 'git branch', or 'git commit' commands
+    - NEVER directly use raw 'git checkout' or 'git branch' commands
     - After ANY git operation that could change branches, RE-VERIFY current branch
 
 Git Command Safety Guidelines
@@ -145,7 +144,6 @@ Script Testing Requirements
   `./scripts/ai-protect-main.sh --no-auto-branch`
 - NEVER use raw git commands for branch management - use helper scripts:
   - For branch operations: `./scripts/ai-branch.sh`
-  - For committing changes: `./scripts/ai-commit.sh`
   - For updating main: `./scripts/ai-update-main.sh`
 - ALWAYS re-verify branch status after ANY operation that might change branches
 - If ANY branch-related script fails, STOP and provide clear instructions to the user

@@ -45,24 +45,7 @@ This guide is specifically designed for AI agents working with the YASTwAI codeb
 **Trigger Phrases:**
 When the user requests to "update main" or similar phrases (e.g., "pull latest", "fetch main", "update from origin"), automatically run this script. Always check for uncommitted changes first.
 
-### 3. Commit Management (`ai-commit.sh`)
-```bash
-./scripts/ai-commit.sh <title> <description> <prompt> <thought-process> <discussion>
-```
-**Required Parameters:**
-- `title` - Concise summary
-- `description` - Brief description
-- `prompt` - Original user request
-- `thought-process` - AI reasoning process
-- `discussion` - Challenges and solutions
-
-**Usage Pattern:**
-```bash
-# Create commit
-./scripts/ai-commit.sh "Title" "Description" "Prompt" "Thought Process" "Discussion"
-```
-
-### 4. Pull Request Creation (`ai-pr.sh`)
+### 3. Pull Request Creation (`ai-pr.sh`)
 ```bash
 ./scripts/ai-pr.sh [options]
 ```

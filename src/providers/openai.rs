@@ -1,5 +1,5 @@
 use std::time::Duration;
-use serde::{Serialize, Deserialize};
+use serde::{de::DeserializeOwned, Serialize, Deserialize};
 use anyhow::{Result, anyhow, Context};
 use reqwest::Client;
 use log::error;
@@ -317,5 +317,52 @@ impl OpenAI {
         
         // If we get here, all retries failed
         Err(last_error.unwrap_or_else(|| anyhow!("OpenAI API request failed after {} attempts", self.max_retries + 1)))
+    }
+
+    /// Complete a chat request with JSON mode and parse the response.
+    ///
+    /// This method enables JSON mode in the request and parses the response
+    /// into the specified type. The system message should instruct the model
+    /// to output valid JSON matching the expected schema.
+    ///
+    /// # Type Parameters
+    /// * `T` - The type to deserialize the JSON response into
+    ///
+    /// # Arguments
+    /// * `model` - The model to use
+    /// * `system_prompt` - System message instructing JSON output format
+    /// * `user_prompt` - The user message (typically containing the data to process)
+    /// * `temperature` - Temperature for generation (0.0-2.0)
+    /// * `max_tokens` - Maximum tokens to generate
+    ///
+    /// # Returns
+    /// The parsed response of type T, or an error if parsing fails
+    pub async fn complete_json<T: DeserializeOwned>(
+        &self,
+        model: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        temperature: f32,
+        max_tokens: u32,
+    ) -> Result<T> {
+        let request = OpenAIRequest::new(model)
+            .add_message("system", system_prompt)
+            .add_message("user", user_prompt)
+            .temperature(temperature)
+            .max_tokens(max_tokens)
+            .json_response_format();
+
+        let response = self.complete(request).await?;
+
+        // Extract the content from the response
+        let content = response
+            .choices
+            .first()
+            .map(|choice| choice.message.content.as_str())
+            .ok_or_else(|| anyhow!("Empty response from OpenAI API"))?;
+
+        // Parse the JSON response
+        serde_json::from_str(content)
+            .with_context(|| format!("Failed to parse JSON response: {}", content))
     }
 } 

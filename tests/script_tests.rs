@@ -76,12 +76,6 @@ fn test_ai_cursor_model_script() {
 }
 
 #[test]
-fn test_ai_commit_script() {
-    let script = project_root().join("tests/scripts/test_ai_commit.sh");
-    assert!(run_script(&script), "ai-commit.sh test failed");
-}
-
-#[test]
 fn test_ai_clippy_script() {
     let script = project_root().join("tests/scripts/test_ai_clippy.sh");
     assert!(run_script(&script), "ai-clippy.sh test failed");

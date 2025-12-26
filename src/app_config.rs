@@ -368,10 +368,23 @@ pub struct TranslationCommonConfig {
     /// Set to 0 to disable context. Default: 3
     #[serde(default = "default_context_entries_count")]
     pub context_entries_count: usize,
+
+    /// Pipeline mode for translation processing
+    /// Options: "legacy" (default), "fast", "standard", "quality"
+    /// - legacy: Use traditional batch translator (backwards compatible)
+    /// - fast: Use new pipeline with minimal analysis, no validation
+    /// - standard: Use new pipeline with default settings
+    /// - quality: Use new pipeline with thorough analysis and validation
+    #[serde(default = "default_pipeline_mode")]
+    pub pipeline_mode: String,
 }
 
 fn default_context_entries_count() -> usize {
     3 // Include 3 previous entries as context by default
+}
+
+fn default_pipeline_mode() -> String {
+    "legacy".to_string()
 }
 
 impl Default for TranslationCommonConfig {
@@ -385,6 +398,7 @@ impl Default for TranslationCommonConfig {
             parallel_mode: true,
             entries_per_request: default_entries_per_request(),
             context_entries_count: default_context_entries_count(),
+            pipeline_mode: default_pipeline_mode(),
         }
     }
 }

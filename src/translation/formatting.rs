@@ -201,7 +201,7 @@ impl FormatPreserver {
         
         // Calculate split points based on the proportion of characters in each original line
         let mut current_pos = 0;
-        for (_i, &char_count) in original_chars.iter().enumerate().take(original_lines.len() - 1) {
+        for &char_count in original_chars.iter().take(original_lines.len() - 1) {
             let proportion = char_count as f64 / total_original_chars as f64;
             let chars_in_translated = translated.chars().count();
             let split_point = (proportion * chars_in_translated as f64).round() as usize;
