@@ -329,18 +329,6 @@ impl Controller {
         };
         let chunks = temp_collection.split_into_chunks(max_chars_per_chunk);
 
-        // Create a progress bar for translation tracking
-        let total_chunks = chunks.len() as u64;
-        let progress_bar = multi_progress.add(ProgressBar::new(total_chunks));
-        let template_result = ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({percent}%) {msg} {eta}")
-            .or_else(|_| {
-                ProgressStyle::default_bar()
-                    .template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}")
-            })
-            .unwrap_or_else(|_| ProgressStyle::default_bar());
-        progress_bar.set_style(template_result.progress_chars("█▓▒░"));
-
         // Log that we're starting translation with provider and model info
         info!(
             "🚀 YASTwAI: {} - {}",
@@ -348,8 +336,31 @@ impl Controller {
             self.config.translation.get_model()
         );
 
-        // Log that we're translating
+        // Calculate parallel config early so we can log it before the progress bar
         let pending_count = chunks.iter().map(|c| c.len()).sum::<usize>();
+        let entries_per_request = self.config.translation.common.entries_per_request.max(1);
+        let max_concurrent = self.config.translation.optimal_concurrent_requests().max(5);
+        let total_work_items = (pending_count + entries_per_request - 1) / entries_per_request;
+        let use_parallel = self.config.translation.common.parallel_mode;
+
+        // Create a progress bar for translation tracking - use work items for accurate ETA
+        let progress_total = if use_parallel { total_work_items as u64 } else { chunks.len() as u64 };
+        let progress_bar = multi_progress.add(ProgressBar::new(progress_total));
+        let progress_label = if use_parallel { "requests" } else { "chunks" };
+        let template = format!(
+            "{{spinner:.green}} [{{elapsed_precise}}] [{{bar:40.cyan/blue}}] {{pos}}/{{len}} {} ({{percent}}%) {{msg}} {{eta}}",
+            progress_label
+        );
+        let template_result = ProgressStyle::default_bar()
+            .template(&template)
+            .or_else(|_| {
+                ProgressStyle::default_bar()
+                    .template("{spinner} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) {msg}")
+            })
+            .unwrap_or_else(|_| ProgressStyle::default_bar());
+        progress_bar.set_style(template_result.progress_chars("█▓▒░"));
+
+        // Log translation info including parallel mode before progress bar starts
         if pending_count < total_entries_count {
             info!(
                 "Translating {} remaining entries ({} already done)…",
@@ -359,6 +370,17 @@ impl Controller {
         } else {
             info!("Translating, please wait…");
         }
+        
+        // Log parallel mode info before progress bar is active
+        if use_parallel {
+            info!(
+                "⚡ Parallel mode: {} entries → {} requests ({} concurrent)",
+                pending_count,
+                total_work_items,
+                max_concurrent
+            );
+        }
+        
         progress_bar.set_message("Translating");
 
         // Create log capture for storing warnings during translation
@@ -367,7 +389,17 @@ impl Controller {
 
         // Use the translation service to translate all chunks
         let translation_service = TranslationService::new(self.config.translation.clone())?;
-        let batch_translator = BatchTranslator::new(translation_service);
+        
+        // Configure parallel translation for better performance
+        let context_entries_count = self.config.translation.common.context_entries_count;
+        let parallel_config = crate::translation::batch::ParallelTranslationConfig {
+            max_concurrent_requests: max_concurrent,
+            entries_per_request,
+            use_legacy_batch_mode: !use_parallel,
+            context_entries_count,
+        };
+        
+        let batch_translator = BatchTranslator::with_parallel_config(translation_service, parallel_config);
 
         // Clone the progress_bar for use in the callback
         let pb = progress_bar.clone();

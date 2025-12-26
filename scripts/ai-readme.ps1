@@ -1,10 +1,10 @@
-$ErrorActionPreference = 'Stop'
-
 param(
     [switch] $Quiet,
     [switch] $DryRun,
     [switch] $Help
 )
+
+$ErrorActionPreference = 'Stop'
 
 function Show-Usage {
     Write-Host "Usage: pwsh -File scripts/ai-readme.ps1 [--quiet] [--dry-run] [--help]"
@@ -21,8 +21,9 @@ Log "Starting README generator..."
 
 function Get-FirstTomlString($path, $key, $fallback) {
     if (-not (Test-Path $path)) { return $fallback }
-    $line = Select-String -Path $path -Pattern "^\s*$key\s*=\s*\"(.*)\"" -SimpleMatch:$false -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($line -and $line.Matches[0].Groups[1].Value) { return $line.Matches[0].Groups[1].Value } else { return $fallback }
+    $pattern = '^\s*' + $key + '\s*=\s*"(.*)"'
+    $line = Select-String -Path $path -Pattern $pattern -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($line -and $line.Matches -and $line.Matches[0].Groups[1].Value) { return $line.Matches[0].Groups[1].Value } else { return $fallback }
 }
 
 $cargoToml = Join-Path $ProjectRoot 'Cargo.toml'
@@ -36,22 +37,27 @@ $providerConfig = Join-Path $ProjectRoot 'src/app_config.rs'
 $providersPretty = ''
 if (Test-Path $providerConfig) {
     $content = Get-Content $providerConfig -Raw
-    $enumStart = [regex]::Match($content, 'pub\s+enum\s+TranslationProvider').Index
-    if ($enumStart -ge 0) {
+    $enumMatch = [regex]::Match($content, 'pub\s+enum\s+TranslationProvider')
+    if ($enumMatch.Success) {
+        $enumStart = $enumMatch.Index
         $after = $content.Substring($enumStart)
-        $enumEnd = [regex]::Match($after, "\n}\").Index
-        if ($enumEnd -gt 0) {
+        $enumEndMatch = [regex]::Match($after, '\r?\n\}')
+        if ($enumEndMatch.Success) {
+            $enumEnd = $enumEndMatch.Index
             $enumBody = $after.Substring(0, $enumEnd)
             $variants = [regex]::Matches($enumBody, '([A-Za-z]+),') | ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne '' }
-            $dispStart = [regex]::Match($content, 'pub\s+fn\s+display_name').Index
-            if ($dispStart -ge 0) {
+            $dispMatch = [regex]::Match($content, 'pub\s+fn\s+display_name')
+            if ($dispMatch.Success) {
+                $dispStart = $dispMatch.Index
                 $dispAfter = $content.Substring($dispStart)
-                $dispEnd = [regex]::Match($dispAfter, "\n\s*}\").Index
-                if ($dispEnd -gt 0) {
+                $dispEndMatch = [regex]::Match($dispAfter, '\r?\n\s*\}')
+                if ($dispEndMatch.Success) {
+                    $dispEnd = $dispEndMatch.Index
                     $dispBody = $dispAfter.Substring(0, $dispEnd)
                     $names = @()
                     foreach ($v in $variants) {
-                        $m = [regex]::Match($dispBody, "Self::$v\s*=>\s*\"([^\"]*)\"")
+                        $pattern = 'Self::' + $v + '\s*=>\s*"([^"]*)"'
+                        $m = [regex]::Match($dispBody, $pattern)
                         if ($m.Success) { $names += $m.Groups[1].Value }
                     }
                     if ($names.Count -gt 0) { $providersPretty = ($names -join ', ') }
@@ -72,14 +78,18 @@ if (Test-Path $exampleConfig) { $exampleJson = Get-Content $exampleConfig -Raw }
 $exampleJsonForMd = $exampleJson
 
 $features = @()
-if (Select-String -Path (Join-Path $ProjectRoot 'src') -Pattern 'ffmpeg' -SimpleMatch -Quiet) { $features += '- 🎯 **Extract & Translate** - Pull subtitles from videos and translate in one step' }
-if (-not [string]::IsNullOrWhiteSpace($providersPretty)) { $features += "- 🌐 **Multiple AI Providers** - Support for $providersPretty" } else { $features += '- 🌐 **Multiple AI Providers** - Support for various AI translation backends' }
-if (Select-String -Path (Join-Path $ProjectRoot 'src') -Pattern 'tokio::spawn|async' -Quiet) { $features += '- ⚡ **Concurrent Processing** - Efficient batch translation for faster results' }
-$features += '- 🧠 **Smart Processing** - Preserves formatting and timing of your subtitles'
+$features += '- 🎯 **Extract & Translate** - Pull subtitles from videos and translate in one step'
+if (-not [string]::IsNullOrWhiteSpace($providersPretty)) { $features += "- 🌐 **Multiple AI Providers** - Support for $providersPretty (including vLLM and OpenAI-compatible servers)" } else { $features += '- 🌐 **Multiple AI Providers** - Support for various AI translation backends' }
+$features += '- ⚡ **Parallel Processing** - Fast concurrent batch translation with configurable parallelism'
+$features += '- 🧠 **Context-Aware Translation** - Includes previous entries as context for consistency (tu/vous, genders)'
+$features += '- 💾 **Session Persistence** - Resume interrupted translations automatically'
 $features += '- 🔄 **Direct Translation** - Translate existing SRT files without needing video'
 $features += '- 📊 **Progress Tracking** - See real-time progress for lengthy translations'
 
 $featuresMd = ($features -join "`n")
+
+# Use triple-tick variable to avoid PowerShell escape interpretation
+$tick3 = '```'
 
 $readme = @"
 [![Contributors][contributors-shield]][contributors-url]
@@ -119,41 +129,43 @@ $featuresMd
 
 ### Build from Source
 
-```sh
+${tick3}sh
 git clone https://github.com/nstefan/yastwai.git
 cd yastwai
 cargo build --release
-```
+${tick3}
 
 ## Quick Start
 
-```sh
+${tick3}sh
 cp conf.example.json conf.json
 ./target/release/yastwai video.mkv
 ./target/release/yastwai videos/
 ./target/release/yastwai subtitles.srt
 ./target/release/yastwai -f video.mkv
-```
+${tick3}
 
 ## Configuration
 
-```json
+${tick3}json
 $exampleJsonForMd
-```
+${tick3}
 
 ### Translation Providers
 
-- Ollama (Default, Local)
-- OpenAI
-- Anthropic
+- **Ollama** - Local LLM server (default, free)
+- **OpenAI** - GPT models via API
+- **Anthropic** - Claude models via API
+- **LM Studio** - Local OpenAI-compatible server
+- **vLLM** - High-performance inference server (use lmstudio provider type)
 
 ## Contributing
 
-Helper scripts in `scripts/`: `ai-commit`, `ai-update-main`, `ai-pr`, `ai-clippy`
+Helper scripts in ``scripts/``: ``ai-commit``, ``ai-update-main``, ``ai-pr``, ``ai-clippy``
 
 ## License
 
-Distributed under the $license License. See `LICENSE` for details.
+Distributed under the $license License. See ``LICENSE`` for details.
 
 [contributors-shield]: https://img.shields.io/github/contributors/nstefan/yastwai.svg?style=for-the-badge
 [contributors-url]: https://github.com/nstefan/yastwai/graphs/contributors

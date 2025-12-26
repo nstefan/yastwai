@@ -17,4 +17,4 @@ pub mod models;
 
 // Re-export main types
 pub use manager::SessionManager;
-pub use models::{PendingEntry, ResumeResult, SessionCreateParams, SessionInfo};
+pub use models::{PendingEntry, SessionCreateParams, SessionInfo};

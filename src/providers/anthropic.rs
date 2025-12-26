@@ -257,6 +257,8 @@ impl Anthropic {
     }
     
     /// Create a new Anthropic client with combined configuration
+    /// 
+    /// Uses connection pooling for better performance with concurrent requests.
     pub fn new_with_config(
         api_key: impl Into<String>,
         endpoint: impl Into<String>,
@@ -271,6 +273,11 @@ impl Anthropic {
         Self {
             client: Client::builder()
                 .timeout(Duration::from_secs(120))
+                // Keep connections alive for better performance with concurrent requests
+                .pool_idle_timeout(Duration::from_secs(90))
+                .pool_max_idle_per_host(20)  // Allow more connections for parallel requests
+                // Enable TCP keepalive
+                .tcp_keepalive(Duration::from_secs(60))
                 .build()
                 .unwrap_or_default(),
             api_key: api_key.into(),

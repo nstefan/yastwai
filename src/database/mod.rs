@@ -22,8 +22,3 @@ pub mod models;
 // Re-export main types
 pub use connection::DatabaseConnection;
 pub use repository::Repository;
-pub use models::{
-    SessionRecord, SessionStatus,
-    SourceEntryRecord, TranslatedEntryRecord, TranslationStatus,
-    CacheRecord, ValidationResultRecord, ValidationType, ValidationSeverity,
-};
