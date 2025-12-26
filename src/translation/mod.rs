@@ -12,6 +12,7 @@
  * - `prompts`: Prompt templates and builders for translation
  * - `context`: Context management (sliding window, scenes, glossary)
  * - `pipeline`: Multi-pass translation pipeline (analysis, translation, validation)
+ * - `quality`: Quality assurance (metrics, consistency, repair, error handling)
  */
 
 // Re-export main types for easier usage
@@ -42,6 +43,13 @@ pub use self::pipeline::{
     ValidationReport,
 };
 
+// Re-export quality types
+pub use self::quality::{
+    ConsistencyChecker, ConsistencyConfig, ConsistencyReport, ErrorRecovery, QualityMetrics,
+    QualityScore, QualityThresholds, RecoveryAction, RecoveryStrategy, RepairEngine, RepairStrategy,
+    SmartRepair, StyleIssue, TranslationError, TranslationErrorKind,
+};
+
 // Submodules
 pub mod batch;
 pub mod cache;
@@ -50,4 +58,5 @@ pub mod core;
 pub mod document;
 pub mod formatting;
 pub mod pipeline;
-pub mod prompts; 
+pub mod prompts;
+pub mod quality; 
