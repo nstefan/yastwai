@@ -38,9 +38,9 @@ pub use self::context::{
 
 // Re-export pipeline types
 pub use self::pipeline::{
-    AnalysisPass, AnalysisResult, PipelineConfig, PipelineProgress, RepairAction, RepairResult,
-    TranslationPass, TranslationPassConfig, TranslationPipeline, ValidationIssue, ValidationPass,
-    ValidationReport,
+    AnalysisPass, AnalysisResult, PipelineAdapter, PipelineConfig, PipelineMode, PipelinePhase,
+    PipelineProgress, RepairAction, RepairResult, TranslationPass, TranslationPassConfig,
+    TranslationPipeline, ValidationIssue, ValidationPass, ValidationReport,
 };
 
 // Re-export quality types

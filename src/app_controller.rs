@@ -13,7 +13,7 @@ use crate::language_utils;
 use crate::session::{PendingEntry, SessionCreateParams, SessionInfo, SessionManager};
 use crate::subtitle_processor::SubtitleCollection;
 use crate::translation::core::LogEntry;
-use crate::translation::{BatchTranslator, TranslationService};
+use crate::translation::{BatchTranslator, PipelineAdapter, PipelineMode, TranslationService};
 use crate::subtitle_processor::SubtitleEntry;
 
 // @module: Application controller for subtitle processing
@@ -389,17 +389,6 @@ impl Controller {
 
         // Use the translation service to translate all chunks
         let translation_service = TranslationService::new(self.config.translation.clone())?;
-        
-        // Configure parallel translation for better performance
-        let context_entries_count = self.config.translation.common.context_entries_count;
-        let parallel_config = crate::translation::batch::ParallelTranslationConfig {
-            max_concurrent_requests: max_concurrent,
-            entries_per_request,
-            use_legacy_batch_mode: !use_parallel,
-            context_entries_count,
-        };
-        
-        let batch_translator = BatchTranslator::with_parallel_config(translation_service, parallel_config);
 
         // Clone the progress_bar for use in the callback
         let pb = progress_bar.clone();
@@ -434,19 +423,74 @@ impl Controller {
             }
         };
 
-        // Pass a callback to update the progress bar for each completed chunk
-        let (mut new_translated_entries, token_usage) = batch_translator
-            .translate_batches_with_callback(
-                &chunks,
-                &self.config.source_language,
-                &self.config.target_language,
-                log_capture_clone,
-                move |completed, _total| {
+        // Check pipeline mode configuration
+        let pipeline_mode = PipelineMode::from_str(&self.config.translation.common.pipeline_mode);
+
+        // Translate using either new pipeline or legacy batch translator
+        let (mut new_translated_entries, token_usage) = if pipeline_mode.is_pipeline_enabled() {
+            // Use new multi-pass translation pipeline
+            info!("Using new translation pipeline (mode: {:?})", pipeline_mode);
+
+            let adapter = match pipeline_mode {
+                PipelineMode::Fast => PipelineAdapter::fast(
+                    translation_service,
+                    &self.config.source_language,
+                    &self.config.target_language,
+                ),
+                PipelineMode::Quality => PipelineAdapter::quality(
+                    translation_service,
+                    &self.config.source_language,
+                    &self.config.target_language,
+                ),
+                _ => PipelineAdapter::with_defaults(
+                    translation_service,
+                    &self.config.source_language,
+                    &self.config.target_language,
+                ),
+            };
+
+            let progress_callback = {
+                let pb = pb.clone();
+                move |completed: usize, _total: usize| {
                     pb.set_position(completed as u64);
-                },
-                Some(batch_complete_callback),
-            )
-            .await?;
+                }
+            };
+
+            adapter
+                .translate_chunks(
+                    &chunks,
+                    &self.config.source_language,
+                    &self.config.target_language,
+                    Some(progress_callback),
+                    Some(batch_complete_callback),
+                )
+                .await?
+        } else {
+            // Use legacy batch translator
+            let context_entries_count = self.config.translation.common.context_entries_count;
+            let parallel_config = crate::translation::batch::ParallelTranslationConfig {
+                max_concurrent_requests: max_concurrent,
+                entries_per_request,
+                use_legacy_batch_mode: !use_parallel,
+                context_entries_count,
+            };
+
+            let batch_translator =
+                BatchTranslator::with_parallel_config(translation_service, parallel_config);
+
+            batch_translator
+                .translate_batches_with_callback(
+                    &chunks,
+                    &self.config.source_language,
+                    &self.config.target_language,
+                    log_capture_clone,
+                    move |completed, _total| {
+                        pb.set_position(completed as u64);
+                    },
+                    Some(batch_complete_callback),
+                )
+                .await?
+        };
 
         // Combine already translated with newly translated
         translated_entries.append(&mut new_translated_entries);

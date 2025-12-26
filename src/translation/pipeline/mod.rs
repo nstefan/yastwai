@@ -10,13 +10,15 @@
  * JSON-native communication for reliable, high-quality translations.
  */
 
+pub mod adapter;
 pub mod analysis_pass;
 pub mod orchestrator;
 pub mod translation_pass;
 pub mod validation_pass;
 
 // Re-export main types
+pub use adapter::{PipelineAdapter, PipelineMode};
 pub use analysis_pass::{AnalysisPass, AnalysisResult};
-pub use orchestrator::{PipelineConfig, PipelineProgress, TranslationPipeline};
+pub use orchestrator::{PipelineConfig, PipelinePhase, PipelineProgress, PipelineResult, TranslationPipeline};
 pub use translation_pass::{TranslationPass, TranslationPassConfig};
 pub use validation_pass::{RepairAction, RepairResult, ValidationIssue, ValidationPass, ValidationReport};
