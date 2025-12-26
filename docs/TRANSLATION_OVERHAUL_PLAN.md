@@ -431,23 +431,23 @@ You are an expert subtitle translator specializing in {source_lang} to {target_l
 
 ## Part 5: Implementation Roadmap
 
-### Phase 1: Foundation (Week 1-2)
-- [ ] Create `SubtitleDocument` model and JSON serialization
-- [ ] Implement `Timecode` preservation (never modify timing)
-- [ ] Add JSON mode support to all providers
-- [ ] Create prompt template system
+### Phase 1: Foundation (Week 1-2) ✅ COMPLETED
+- [x] Create `SubtitleDocument` model and JSON serialization
+- [x] Implement `Timecode` preservation (never modify timing)
+- [x] Add JSON mode support to all providers
+- [x] Create prompt template system
 
-### Phase 2: Context System (Week 2-3)
-- [ ] Implement `ContextWindow` with sliding window
-- [ ] Add history summarization capability
-- [ ] Create glossary extraction and enforcement
-- [ ] Implement scene detection based on timing gaps
+### Phase 2: Context System (Week 2-3) ✅ COMPLETED
+- [x] Implement `ContextWindow` with sliding window
+- [x] Add history summarization capability
+- [x] Create glossary extraction and enforcement
+- [x] Implement scene detection based on timing gaps
 
-### Phase 3: Translation Pipeline (Week 3-4)
-- [ ] Build analysis pass (character/term extraction)
-- [ ] Implement main translation pass with JSON I/O
-- [ ] Add validation pass with quality metrics
-- [ ] Create pipeline orchestrator
+### Phase 3: Translation Pipeline (Week 3-4) ✅ COMPLETED
+- [x] Build analysis pass (character/term extraction)
+- [x] Implement main translation pass with JSON I/O
+- [x] Add validation pass with quality metrics
+- [x] Create pipeline orchestrator
 
 ### Phase 4: Quality & Reliability (Week 4-5)
 - [ ] Implement length ratio validation

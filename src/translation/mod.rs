@@ -11,6 +11,7 @@
  * - `document`: Document model for structured subtitle representation
  * - `prompts`: Prompt templates and builders for translation
  * - `context`: Context management (sliding window, scenes, glossary)
+ * - `pipeline`: Multi-pass translation pipeline (analysis, translation, validation)
  */
 
 // Re-export main types for easier usage
@@ -34,6 +35,13 @@ pub use self::context::{
     WindowEntry,
 };
 
+// Re-export pipeline types
+pub use self::pipeline::{
+    AnalysisPass, AnalysisResult, PipelineConfig, PipelineProgress, RepairAction, RepairResult,
+    TranslationPass, TranslationPassConfig, TranslationPipeline, ValidationIssue, ValidationPass,
+    ValidationReport,
+};
+
 // Submodules
 pub mod batch;
 pub mod cache;
@@ -41,4 +49,5 @@ pub mod context;
 pub mod core;
 pub mod document;
 pub mod formatting;
+pub mod pipeline;
 pub mod prompts; 
