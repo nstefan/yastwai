@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio::sync::Semaphore;
 use futures::stream::{self, StreamExt};
+use futures::future::join_all;
 
 use crate::subtitle_processor::SubtitleEntry;
 use crate::validation::{MarkerValidator, ValidationService, ValidationConfig};
@@ -666,31 +667,51 @@ impl TranslationService {
             }
         }
         
-        // Retry failed entries individually
+        // Retry failed entries concurrently (not sequentially)
         if !entries_needing_retry.is_empty() {
             {
                 let mut logs = log_capture.lock().await;
                 logs.push(LogEntry {
                     level: "WARN".to_string(),
                     message: format!(
-                        "Retrying {} entries individually due to marker parsing failures",
+                        "Retrying {} entries concurrently due to marker parsing failures",
                         entries_needing_retry.len()
                     ),
                 });
             }
-            
-            for (idx, entry) in entries_needing_retry {
-                // Try to translate individually
-                match self.translate_single_entry_parallel(
-                    entry,
-                    source_language,
-                    target_language,
-                    log_capture.clone(),
-                ).await {
+
+            // Launch all retry translations concurrently
+            let retry_futures: Vec<_> = entries_needing_retry
+                .into_iter()
+                .map(|(idx, entry)| {
+                    let source_lang = source_language.to_string();
+                    let target_lang = target_language.to_string();
+                    let log_cap = log_capture.clone();
+                    let entry_clone = entry.clone();
+                    async move {
+                        match self.translate_single_entry_parallel(
+                            &entry_clone,
+                            &source_lang,
+                            &target_lang,
+                            log_cap,
+                        ).await {
+                            Ok(translated_entry) => (idx, Ok(translated_entry)),
+                            Err(e) => (idx, Err((e, entry_clone))),
+                        }
+                    }
+                })
+                .collect();
+
+            // Await all retries concurrently
+            let retry_results = join_all(retry_futures).await;
+
+            // Process results
+            for (idx, result) in retry_results {
+                match result {
                     Ok(translated_entry) => {
                         translated_entries.push((idx, translated_entry));
                     }
-                    Err(e) => {
+                    Err((e, original_entry)) => {
                         // Log the error and use original as last resort
                         {
                             let mut logs = log_capture.lock().await;
@@ -702,8 +723,7 @@ impl TranslationService {
                                 ),
                             });
                         }
-                        // Last resort: use original text (this should rarely happen)
-                        translated_entries.push((idx, entry.clone()));
+                        translated_entries.push((idx, original_entry));
                     }
                 }
             }
@@ -860,31 +880,53 @@ impl TranslationService {
             }
         }
         
-        // Retry failed entries individually with context
+        // Retry failed entries concurrently with context
         if !entries_needing_retry.is_empty() {
             {
                 let mut logs = log_capture.lock().await;
                 logs.push(LogEntry {
                     level: "WARN".to_string(),
                     message: format!(
-                        "Retrying {} entries individually due to marker parsing failures",
+                        "Retrying {} entries concurrently due to marker parsing failures",
                         entries_needing_retry.len()
                     ),
                 });
             }
-            
-            for (idx, entry) in entries_needing_retry {
-                match self.translate_single_entry_with_context(
-                    entry,
-                    context_entries,
-                    source_language,
-                    target_language,
-                    log_capture.clone(),
-                ).await {
+
+            // Launch all retry translations concurrently
+            let retry_futures: Vec<_> = entries_needing_retry
+                .into_iter()
+                .map(|(idx, entry)| {
+                    let source_lang = source_language.to_string();
+                    let target_lang = target_language.to_string();
+                    let log_cap = log_capture.clone();
+                    let ctx_entries = context_entries.to_vec();
+                    let entry_clone = entry.clone();
+                    async move {
+                        match self.translate_single_entry_with_context(
+                            &entry_clone,
+                            &ctx_entries,
+                            &source_lang,
+                            &target_lang,
+                            log_cap,
+                        ).await {
+                            Ok(translated_entry) => (idx, Ok(translated_entry)),
+                            Err(e) => (idx, Err((e, entry_clone))),
+                        }
+                    }
+                })
+                .collect();
+
+            // Await all retries concurrently
+            let retry_results = join_all(retry_futures).await;
+
+            // Process results
+            for (idx, result) in retry_results {
+                match result {
                     Ok(translated_entry) => {
                         translated_entries.push((idx, translated_entry));
                     }
-                    Err(e) => {
+                    Err((e, original_entry)) => {
                         {
                             let mut logs = log_capture.lock().await;
                             logs.push(LogEntry {
@@ -895,16 +937,16 @@ impl TranslationService {
                                 ),
                             });
                         }
-                        translated_entries.push((idx, entry.clone()));
+                        translated_entries.push((idx, original_entry));
                     }
                 }
             }
         }
-        
+
         translated_entries.sort_by_key(|(idx, _)| *idx);
         Ok(translated_entries.into_iter().map(|(_, entry)| entry).collect())
     }
-    
+
     /// Extract the translated portion from a response that may include context
     fn extract_translated_portion(response: &str, _original: &str) -> String {
         // Try to find the [TRANSLATE] marker (compact format)
@@ -1187,31 +1229,51 @@ impl TranslationService {
             current_idx = end_pos;
         }
 
-        // Retry failed entries individually
+        // Retry failed entries concurrently
         if !entries_needing_retry.is_empty() {
             {
                 let mut logs = log_capture.lock().await;
                 logs.push(LogEntry {
                     level: "WARN".to_string(),
                     message: format!(
-                        "Retrying {} entries individually due to marker parsing failures",
+                        "Retrying {} entries concurrently due to marker parsing failures",
                         entries_needing_retry.len()
                     ),
                 });
             }
-            
-            for idx in entries_needing_retry {
-                // Try to translate individually
-                match self.translate_single_entry(
-                    &batch[idx],
-                    source_language,
-                    target_language,
-                    log_capture.clone(),
-                ).await {
+
+            // Launch all retry translations concurrently
+            let retry_futures: Vec<_> = entries_needing_retry
+                .into_iter()
+                .map(|idx| {
+                    let entry = batch[idx].clone();
+                    let source_lang = source_language.to_string();
+                    let target_lang = target_language.to_string();
+                    let log_cap = log_capture.clone();
+                    async move {
+                        match self.translate_single_entry(
+                            &entry,
+                            &source_lang,
+                            &target_lang,
+                            log_cap,
+                        ).await {
+                            Ok(translated_entry) => (idx, Ok(translated_entry)),
+                            Err(e) => (idx, Err((e, entry))),
+                        }
+                    }
+                })
+                .collect();
+
+            // Await all retries concurrently
+            let retry_results = join_all(retry_futures).await;
+
+            // Process results
+            for (idx, result) in retry_results {
+                match result {
                     Ok(translated_entry) => {
                         translated_entries.push((idx, translated_entry));
                     }
-                    Err(e) => {
+                    Err((e, original_entry)) => {
                         // Log the error and use original as last resort
                         {
                             let mut logs = log_capture.lock().await;
@@ -1223,8 +1285,7 @@ impl TranslationService {
                                 ),
                             });
                         }
-                        // Last resort: use original text (this should rarely happen)
-                        translated_entries.push((idx, batch[idx].clone()));
+                        translated_entries.push((idx, original_entry));
                     }
                 }
             }
