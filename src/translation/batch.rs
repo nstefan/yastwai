@@ -587,6 +587,9 @@ impl TranslationService {
         // Parse results back into entries
         let mut translated_entries = Vec::with_capacity(entries.len());
         
+        // Track entries that need individual translation due to marker parsing failures
+        let mut entries_needing_retry: Vec<(usize, &SubtitleEntry)> = Vec::new();
+        
         for (idx, entry) in entries.iter().enumerate() {
             // Try to find the translated text for this entry
             let marker = format!("[{}]", idx + 1);
@@ -599,26 +602,85 @@ impl TranslationService {
                     .map(|pos| text_start + pos)
                     .unwrap_or(translated_text.len());
                 
-                translated_text[text_start..text_end].trim().to_string()
+                let extracted = translated_text[text_start..text_end].trim().to_string();
+                
+                // Validate extracted text - if it's empty or looks like a marker, it's invalid
+                if extracted.is_empty() || extracted.starts_with('[') {
+                    debug!("Marker [{}] found but extracted text is invalid, will retry individually", idx + 1);
+                    entries_needing_retry.push((idx, entry));
+                    None
+                } else {
+                    Some(extracted)
+                }
             } else {
-                // Fallback: if marker not found, try to recover or use original
-                debug!("Marker [{}] not found in response, using fallback", idx + 1);
-                entry.text.clone()
+                // Marker not found - need to retry this entry individually
+                debug!("Marker [{}] not found in response, will retry individually", idx + 1);
+                entries_needing_retry.push((idx, entry));
+                None
             };
             
-            // Apply format preservation
-            let final_text = if self.options.preserve_formatting {
-                FormatPreserver::preserve_formatting(&entry.text, &entry_text)
-            } else {
-                entry_text
-            };
-            
-            let mut translated_entry = entry.clone();
-            translated_entry.text = final_text;
-            translated_entries.push(translated_entry);
+            if let Some(text) = entry_text {
+                // Apply format preservation
+                let final_text = if self.options.preserve_formatting {
+                    FormatPreserver::preserve_formatting(&entry.text, &text)
+                } else {
+                    text
+                };
+                
+                let mut translated_entry = entry.clone();
+                translated_entry.text = final_text;
+                translated_entries.push((idx, translated_entry));
+            }
         }
         
-        Ok(translated_entries)
+        // Retry failed entries individually
+        if !entries_needing_retry.is_empty() {
+            {
+                let mut logs = log_capture.lock().await;
+                logs.push(LogEntry {
+                    level: "WARN".to_string(),
+                    message: format!(
+                        "Retrying {} entries individually due to marker parsing failures",
+                        entries_needing_retry.len()
+                    ),
+                });
+            }
+            
+            for (idx, entry) in entries_needing_retry {
+                // Try to translate individually
+                match self.translate_single_entry_parallel(
+                    entry,
+                    source_language,
+                    target_language,
+                    log_capture.clone(),
+                ).await {
+                    Ok(translated_entry) => {
+                        translated_entries.push((idx, translated_entry));
+                    }
+                    Err(e) => {
+                        // Log the error and use original as last resort
+                        {
+                            let mut logs = log_capture.lock().await;
+                            logs.push(LogEntry {
+                                level: "ERROR".to_string(),
+                                message: format!(
+                                    "Failed to translate entry {} individually: {}. Using original text.",
+                                    idx + 1, e
+                                ),
+                            });
+                        }
+                        // Last resort: use original text (this should rarely happen)
+                        translated_entries.push((idx, entry.clone()));
+                    }
+                }
+            }
+        }
+        
+        // Sort by original index to maintain order
+        translated_entries.sort_by_key(|(idx, _)| *idx);
+        
+        // Extract just the entries
+        Ok(translated_entries.into_iter().map(|(_, entry)| entry).collect())
     }
     
     /// Translate a batch of subtitle entries with recovery options
@@ -783,7 +845,8 @@ impl TranslationService {
         }
 
         // Split the translated text back into entries
-        let mut translated_entries = Vec::with_capacity(batch.len());
+        let mut translated_entries: Vec<(usize, SubtitleEntry)> = Vec::with_capacity(batch.len());
+        let mut entries_needing_retry: Vec<usize> = Vec::new();
         let mut current_idx = 0;
 
         for idx in entry_indices {
@@ -802,18 +865,18 @@ impl TranslationService {
             let start_pos = match start_pos {
                 Some(pos) => pos,
                 None => {
-                    // Marker not found - use original text as fallback
+                    // Marker not found - need to retry this entry individually
                     {
                         let mut logs = log_capture.lock().await;
                         logs.push(LogEntry {
                             level: "WARN".to_string(),
                             message: format!(
-                                "Entry {} marker not found, using original text",
+                                "Entry {} marker not found, will retry individually",
                                 idx
                             ),
                         });
                     }
-                    translated_entries.push(batch[idx].clone());
+                    entries_needing_retry.push(idx);
                     continue;
                 }
             };
@@ -841,6 +904,22 @@ impl TranslationService {
             // Extract the translated text for this entry
             let mut entry_text = translated_text[start_pos..end_pos].trim().to_string();
 
+            // Validate extracted text - if empty or looks invalid, retry individually
+            if entry_text.is_empty() || entry_text.starts_with("<<") {
+                {
+                    let mut logs = log_capture.lock().await;
+                    logs.push(LogEntry {
+                        level: "WARN".to_string(),
+                        message: format!(
+                            "Entry {} extracted text is invalid, will retry individually",
+                            idx
+                        ),
+                    });
+                }
+                entries_needing_retry.push(idx);
+                continue;
+            }
+
             // Apply format preservation if enabled
             if self.options.preserve_formatting {
                 entry_text = FormatPreserver::preserve_formatting(&batch[idx].text, &entry_text);
@@ -850,14 +929,65 @@ impl TranslationService {
             let mut translated_entry = batch[idx].clone();
             translated_entry.text = entry_text;
 
-            // Add the translated entry
-            translated_entries.push(translated_entry);
+            // Add the translated entry with its index
+            translated_entries.push((idx, translated_entry));
 
             // Update the current position
             current_idx = end_pos;
         }
 
-        Ok((translated_entries, token_usage))
+        // Retry failed entries individually
+        if !entries_needing_retry.is_empty() {
+            {
+                let mut logs = log_capture.lock().await;
+                logs.push(LogEntry {
+                    level: "WARN".to_string(),
+                    message: format!(
+                        "Retrying {} entries individually due to marker parsing failures",
+                        entries_needing_retry.len()
+                    ),
+                });
+            }
+            
+            for idx in entries_needing_retry {
+                // Try to translate individually
+                match self.translate_single_entry(
+                    &batch[idx],
+                    source_language,
+                    target_language,
+                    log_capture.clone(),
+                ).await {
+                    Ok(translated_entry) => {
+                        translated_entries.push((idx, translated_entry));
+                    }
+                    Err(e) => {
+                        // Log the error and use original as last resort
+                        {
+                            let mut logs = log_capture.lock().await;
+                            logs.push(LogEntry {
+                                level: "ERROR".to_string(),
+                                message: format!(
+                                    "Failed to translate entry {} individually: {}. Using original text.",
+                                    idx, e
+                                ),
+                            });
+                        }
+                        // Last resort: use original text (this should rarely happen)
+                        translated_entries.push((idx, batch[idx].clone()));
+                    }
+                }
+            }
+        }
+
+        // Sort by original index to maintain order
+        translated_entries.sort_by_key(|(idx, _)| *idx);
+
+        // Extract just the entries
+        let final_entries: Vec<SubtitleEntry> = translated_entries.into_iter()
+            .map(|(_, entry)| entry)
+            .collect();
+
+        Ok((final_entries, token_usage))
     }
     
     /// Translate a single subtitle entry
