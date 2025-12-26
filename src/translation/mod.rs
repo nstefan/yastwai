@@ -10,6 +10,7 @@
  * - `formatting`: Format preservation and processing
  * - `document`: Document model for structured subtitle representation
  * - `prompts`: Prompt templates and builders for translation
+ * - `context`: Context management (sliding window, scenes, glossary)
  */
 
 // Re-export main types for easier usage
@@ -25,9 +26,18 @@ pub use self::document::{
 // Re-export prompt types
 pub use self::prompts::{PromptTemplate, TranslationPromptBuilder};
 
+// Re-export context types
+pub use self::context::{
+    ConsistencyIssue, ContextWindow, ContextWindowConfig, ContextWindowExt, ExtractionConfig,
+    GlossaryEnforcer, GlossaryExtractor, GlossaryExtractionExt, HistorySummarizer, HistorySummary,
+    SceneDetectionConfig, SceneDetectionExt, SceneDetector, SummarizationConfig, SummarizationExt,
+    WindowEntry,
+};
+
 // Submodules
 pub mod batch;
 pub mod cache;
+pub mod context;
 pub mod core;
 pub mod document;
 pub mod formatting;

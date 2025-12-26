@@ -10,5 +10,5 @@
 pub mod templates;
 
 // Re-export main types
-pub use templates::{PromptTemplate, TranslationPromptBuilder};
+pub use templates::{PromptTemplate, TranslatedEntryContext, TranslationPromptBuilder};
 
