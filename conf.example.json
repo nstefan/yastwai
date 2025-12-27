@@ -6,20 +6,21 @@
     "available_providers": [
       {
         "type": "ollama",
-        "model": "mixtral:8x7b",
+        "model": "llama2",
         "endpoint": "http://localhost:11434",
-        "concurrent_requests": 2,
+        "concurrent_requests": 4,
         "max_chars_per_request": 1000,
-        "timeout_secs": 60
+        "timeout_secs": 30
       },
       {
         "type": "openai",
         "model": "gpt-4o-mini",
         "api_key": "your_api_key",
         "endpoint": "https://api.openai.com/v1",
-        "concurrent_requests": 10,
-        "max_chars_per_request": 2000,
-        "timeout_secs": 60
+        "concurrent_requests": 4,
+        "max_chars_per_request": 1000,
+        "timeout_secs": 30,
+        "rate_limit": 60
       },
       {
         "type": "lmstudio",
@@ -28,33 +29,52 @@
         "endpoint": "http://localhost:1234/v1",
         "concurrent_requests": 4,
         "max_chars_per_request": 1000,
-        "timeout_secs": 60
+        "timeout_secs": 30
       },
       {
         "type": "anthropic",
-        "model": "claude-3-haiku-20240307",
+        "model": "claude-3-haiku",
         "api_key": "your_api_key",
         "endpoint": "https://api.anthropic.com",
-        "concurrent_requests": 2,
-        "max_chars_per_request": 400,
+        "concurrent_requests": 4,
+        "max_chars_per_request": 8000,
         "timeout_secs": 60,
         "rate_limit": 45
       }
     ],
     "common": {
-      "system_prompt": "You are an expert subtitle translator specializing in {source_language} to {target_language} translation. Translate precisely while preserving formatting, line breaks, and special tags. Maintain consistency in formal/informal address and character genders throughout.",
+      "system_prompt": "You are a professional translator. Translate the following text from {source_language} to {target_language}. Preserve formatting and maintain the original meaning and tone.",
       "rate_limit_delay_ms": 500,
       "retry_count": 3,
       "retry_backoff_ms": 1000,
       "temperature": 0.3,
       "parallel_mode": true,
       "entries_per_request": 3,
-      "context_entries_count": 3
+      "context_entries_count": 3,
+      "pipeline_mode": "legacy"
     }
   },
   "session": {
     "enabled": true,
-    "auto_resume": true
+    "auto_resume": true,
+    "keep_sessions_days": 30,
+    "database_path": ""
+  },
+  "cache": {
+    "enabled": true,
+    "in_memory_size_mb": 50,
+    "cross_session": true
+  },
+  "validation": {
+    "enabled": true,
+    "marker_validation": true,
+    "timecode_validation": true,
+    "format_validation": true,
+    "length_ratio_min": 0.3,
+    "length_ratio_max": 3.0,
+    "max_chars_per_second": 25.0,
+    "retry_on_validation_failure": true,
+    "max_retries": 3
   },
   "log_level": "info"
 }
