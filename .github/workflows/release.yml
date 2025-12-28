@@ -1,17 +1,15 @@
 name: Build Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version tag (e.g., v0.1.0)'
+      tag:
+        description: 'Existing tag to build and release (e.g., v1.0.0)'
         required: true
         type: string
-      create_release:
-        description: 'Create GitHub Release'
-        required: false
-        type: boolean
-        default: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -44,8 +42,20 @@ jobs:
             asset_name: yastwai-windows-x86_64.zip
 
     steps:
+      - name: Determine tag
+        id: get_tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.get_tag.outputs.tag }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -89,16 +99,27 @@ jobs:
           retention-days: 7
 
   release:
-    name: Create Release
+    name: Create/Update Release
     needs: build
     runs-on: ubuntu-latest
-    if: ${{ inputs.create_release }}
     permissions:
       contents: write
 
     steps:
+      - name: Determine tag
+        id: get_tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.get_tag.outputs.tag }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -108,18 +129,18 @@ jobs:
       - name: Display artifacts
         run: ls -la artifacts/*/
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.version }}
-          name: Release ${{ inputs.version }}
-          draft: true
+          tag_name: ${{ steps.get_tag.outputs.tag }}
+          name: Release ${{ steps.get_tag.outputs.tag }}
+          draft: false
           prerelease: false
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
           body: |
-            ## YASTwAI ${{ inputs.version }}
+            ## YASTwAI ${{ steps.get_tag.outputs.tag }}
 
             ### Downloads
 
