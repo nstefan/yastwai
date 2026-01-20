@@ -359,6 +359,7 @@ pub fn create_mock_translation_service() -> Result<yastwai::translation::core::T
             parallel_mode: true,
             entries_per_request: 3,
             context_entries_count: 3,
+            pipeline_mode: "legacy".to_string(),
         },
         available_providers: vec![
             ProviderConfig {
