@@ -196,29 +196,22 @@ fn create_all_tables(conn: &Connection) -> Result<()> {
 }
 
 /// Migrate the schema from one version to another
-fn migrate_schema(conn: &Connection, from_version: i32) -> Result<()> {
-    let current = from_version;
-
-    while current < SCHEMA_VERSION {
-        match current {
-            // Add migration steps here as schema evolves
-            // Example:
-            // 1 => {
-            //     migrate_v1_to_v2(conn)?;
-            //     current = 2;
-            // }
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "Unknown schema version: {}. Cannot migrate.",
-                    current
-                ));
-            }
-        }
-    }
-
-    set_schema_version(conn, SCHEMA_VERSION)?;
-    info!("Schema migration completed to v{}", SCHEMA_VERSION);
-    Ok(())
+fn migrate_schema(_conn: &Connection, from_version: i32) -> Result<()> {
+    // No migrations defined yet - SCHEMA_VERSION is 1, so any older version
+    // is unsupported. When migrations are needed, add match arms here:
+    //
+    // let mut current = from_version;
+    // while current < SCHEMA_VERSION {
+    //     match current {
+    //         1 => { migrate_v1_to_v2(conn)?; current = 2; }
+    //         _ => return Err(...)
+    //     }
+    // }
+    Err(anyhow::anyhow!(
+        "Unsupported schema version: {}. Expected version {}. Please recreate the database.",
+        from_version,
+        SCHEMA_VERSION
+    ))
 }
 
 /// Drop all tables (for testing purposes only)

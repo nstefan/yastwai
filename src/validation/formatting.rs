@@ -17,21 +17,6 @@ static POSITION_TAG_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\{\\an\d\}").expect("Invalid position tag regex")
 });
 
-/// Regex for italic tags
-static ITALIC_TAG_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"</?i>").expect("Invalid italic tag regex")
-});
-
-/// Regex for bold tags
-static BOLD_TAG_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"</?b>").expect("Invalid bold tag regex")
-});
-
-/// Regex for underline tags
-static UNDERLINE_TAG_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"</?u>").expect("Invalid underline tag regex")
-});
-
 /// Regex for language indicators like [IN SPANISH]
 static LANGUAGE_INDICATOR_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\[[^\]]*(?:IN|EN|À|AU|DE)\s+[^\]]*\]").expect("Invalid language indicator regex")

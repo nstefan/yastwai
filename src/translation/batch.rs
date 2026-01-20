@@ -25,7 +25,7 @@ use futures::stream::{self, StreamExt};
 use futures::future::join_all;
 
 use crate::subtitle_processor::SubtitleEntry;
-use crate::validation::{MarkerValidator, ValidationService, ValidationConfig};
+use crate::validation::MarkerValidator;
 
 use super::core::{LogEntry, TokenUsageStats, TranslationService};
 use super::formatting::FormatPreserver;
@@ -65,9 +65,6 @@ pub struct BatchTranslator {
     /// Whether to retry individual entries on batch failure
     retry_individual_entries: bool,
 
-    /// Validation service for quality checks
-    validation_service: Option<ValidationService>,
-    
     /// Parallel translation configuration
     parallel_config: ParallelTranslationConfig,
 }
@@ -77,7 +74,7 @@ impl BatchTranslator {
     pub fn new(service: TranslationService) -> Self {
         // Determine optimal parallel config based on service settings
         let max_concurrent = service.options.max_concurrent_requests.max(5);
-        
+
         Self {
             max_concurrent_requests: max_concurrent,
             retry_individual_entries: service.options.retry_individual_entries,
@@ -88,10 +85,9 @@ impl BatchTranslator {
                 context_entries_count: 3, // Default: include 3 previous entries as context
             },
             service,
-            validation_service: None,
         }
     }
-    
+
     /// Create a new batch translator with custom parallel configuration
     pub fn with_parallel_config(service: TranslationService, parallel_config: ParallelTranslationConfig) -> Self {
         Self {
@@ -99,26 +95,6 @@ impl BatchTranslator {
             retry_individual_entries: service.options.retry_individual_entries,
             parallel_config,
             service,
-            validation_service: None,
-        }
-    }
-
-    /// Create a new batch translator with validation
-    pub fn with_validation(service: TranslationService, validation_config: ValidationConfig) -> Self {
-        let validation_service = ValidationService::with_config(validation_config.into());
-        let max_concurrent = service.options.max_concurrent_requests.max(5);
-        
-        Self {
-            max_concurrent_requests: max_concurrent,
-            retry_individual_entries: service.options.retry_individual_entries,
-            parallel_config: ParallelTranslationConfig {
-                max_concurrent_requests: max_concurrent,
-                entries_per_request: 3,
-                use_legacy_batch_mode: false,
-                context_entries_count: 3,
-            },
-            service,
-            validation_service: Some(validation_service),
         }
     }
     

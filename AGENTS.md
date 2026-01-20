@@ -1,174 +1,112 @@
-# AGENTS.md
+# YASTwAI - AI Agent Specification
 
-## Project Overview
+YASTwAI (Yet Another Subtitle Translator with AI) is an async Rust application that extracts subtitles from video files and translates them using multiple AI providers (Ollama, OpenAI, Anthropic).
 
-YASTwAI (Yet Another Subtitle Translator with AI) is an async Rust application that extracts subtitles from video files and translates them using multiple AI providers. The project emphasizes performance, modularity, and concurrent processing with support for Ollama, OpenAI, and Anthropic providers.
+## Quick Reference
 
-## Quick Start Commands
+| Command | Description |
+|---------|-------------|
+| `cargo build --release` | Production build |
+| `cargo build` | Development build |
+| `cargo test` | Run all tests |
+| `./scripts/ai-clippy.sh --check-only` | Check linting |
+| `./scripts/ai-clippy.sh --fix` | Auto-fix lint issues |
+| `./scripts/ai-branch.sh feature_name` | Create feature branch |
+| `./scripts/ai-pr.sh` | Create pull request |
+| `./scripts/ai-update-main.sh` | Update main branch |
 
-```bash
-# Build the application
-cargo build --release
+## Architecture
 
-# Run the application
-./target/release/yastwai video.mkv
+The app follows a modular architecture with clear separation of concerns:
 
-# Run with configuration
-./target/release/yastwai -c conf.json video.mkv
+- **Providers**: AI backend implementations (Ollama, OpenAI, Anthropic) via trait interface
+- **Translation**: Multi-pass pipeline with document context, batching, and quality validation
+- **Subtitle Processing**: FFmpeg integration for extraction, SRT parsing and generation
+- **Session/Database**: SQLite persistence for sessions and caching
+- **Configuration**: JSON-based config with provider-specific settings
 
-# Process entire directory 
-./target/release/yastwai videos/
+## Tech Stack
 
-# Run tests
-cargo test
+- **Language**: Rust (Edition 2024, 1.85.0+)
+- **Async Runtime**: Tokio (full features)
+- **HTTP Client**: reqwest
+- **CLI**: clap v4
+- **Database**: rusqlite (bundled SQLite)
+- **Serialization**: serde + serde_json
+- **Error Handling**: thiserror + anyhow
 
-# Run clippy linting
-./scripts/ai-clippy.sh --check-only
+## Code Style
+
+### Rust Conventions
+
+```rust
+// Use async/await with Tokio for all async operations
+async fn translate_batch(&self, batch: &[Subtitle]) -> Result<Vec<Translation>> {
+    let results = self.provider.process(batch).await?;
+    Ok(results)
+}
+
+// Use thiserror for custom error types
+#[derive(Debug, thiserror::Error)]
+pub enum TranslationError {
+    #[error("Provider error: {0}")]
+    Provider(#[from] ProviderError),
+    #[error("Invalid subtitle format at line {line}: {message}")]
+    Format { line: usize, message: String },
+}
+
+// Prefer trait-based design for extensibility
+#[async_trait]
+pub trait Provider: Send + Sync {
+    async fn translate(&self, request: TranslationRequest) -> Result<TranslationResponse>;
+}
 ```
 
-## Development Environment Setup
+### Naming Conventions
 
-### Prerequisites
-- Rust 1.85.0 or newer (Edition 2024)
-- FFmpeg (for subtitle extraction)
-- GitHub CLI (`gh`) for pull request operations
+- **Variables/Functions**: `snake_case` (e.g., `process_subtitle`, `batch_size`)
+- **Types/Traits**: `PascalCase` (e.g., `TranslationService`, `Provider`)
+- **Constants**: `SCREAMING_SNAKE_CASE` (e.g., `MAX_RETRIES`)
+- **Tests**: `test_functionName_withCondition_shouldBehavior`
 
-### Initial Setup
-```bash
-# Clone and build
-git clone https://github.com/nstefan/yastwai.git
-cd yastwai
-cargo build --release
+### Import Organization
 
-# Copy example configuration
-cp conf.example.json conf.json
+Group imports in this order with blank lines between:
+1. `std` library
+2. External crates
+3. Internal modules
+
+```rust
+use std::collections::HashMap;
+use std::path::Path;
+
+use anyhow::Result;
+use tokio::sync::mpsc;
+
+use crate::providers::Provider;
+use crate::translation::TranslationService;
 ```
 
-## Critical Development Rules
+### File Organization
 
-### 🚨 BRANCH PROTECTION - HIGHEST PRIORITY
-- **NEVER** work directly on the main branch under ANY circumstances
-- **ALWAYS** run branch verification as the FIRST action in every interaction:
-  ```bash
-  ./scripts/ai-protect-main.sh --no-auto-branch
-  ```
-  Windows:
-  ```powershell
-  pwsh -File scripts/ai-protect-main.ps1 --no-auto-branch
-  # or
-  scripts\ai-protect-main.cmd --no-auto-branch
-  ```
-- If on main branch, **IMMEDIATELY** create a feature branch:
-  ```bash
-  ./scripts/ai-protect-main.sh --auto-branch "descriptive-feature-name"
-  ```
-  Windows:
-  ```powershell
-  pwsh -File scripts/ai-protect-main.ps1 --auto-branch "descriptive-feature-name"
-  # or
-  scripts\ai-protect-main.cmd --auto-branch "descriptive-feature-name"
-  ```
+- One primary type per file
+- Group by feature, not type
+- Keep related types in same file if tightly coupled
+- Use doc comments: `///` for items, `//!` for modules
 
-### Branch Management
-```bash
-# Check current branch status
-./scripts/ai-branch.sh --check-only
+## Engineering Preferences
 
-# Create new feature branch from main
-./scripts/ai-branch.sh --new-branch "feature-name" --is-related false
+- **Simplicity over compatibility**: Make the simplest change possible. Don't add migration paths, backwards-compatibility shims, or deprecation layers. Delete old code, rename freely, refactor aggressively.
+- **Readability over cleverness**: Code should be obvious. Prefer larger, clearer changes over minimal but obscure ones.
+- **SOLID principles**: Follow in all designs.
+- **Explicit function names over comments**: Do not add comments unless absolutely necessary.
+- **Functional patterns**: Embrace immutability, avoid side effects where possible.
+- **No dead code**: Never use `#[allow(dead_code)]` except in tests.
 
-# Update main branch
-./scripts/ai-update-main.sh
-```
-Windows equivalents:
-```powershell
-# PowerShell
-pwsh -File scripts/ai-branch.ps1 --check-only
-pwsh -File scripts/ai-branch.ps1 --new-branch "feature-name" --is-related false
-pwsh -File scripts/ai-update-main.ps1
-
-# Or use .cmd shims
-scripts\ai-branch.cmd --check-only
-scripts\ai-branch.cmd --new-branch "feature-name" --is-related false
-scripts\ai-update-main.cmd
-```
-
-### Commit Process
-```bash
-# Stage changes
-git add -A
-
-# Create commit with well-structured message
-git commit -m "Title: Short description of changes"
-```
-
-## Code Style & Standards
-
-### Language Requirements
-- All code, comments, and documentation **MUST** be in English
-- Use functional programming patterns where possible
-- Maintain immutability and avoid side effects
-- Follow SOLID principles strictly
-
-### Rust-Specific Guidelines
-- Use async/await patterns with Tokio runtime
-- Implement proper error handling with `Result<T, E>` and `?` operator
-- Use `thiserror` for custom errors, `anyhow` for general error handling
-- Prefer trait-based design for extensibility
-- Write tests concurrently with implementation
-- Test function naming: `test_operation_withCertainInputs_shouldDoSomething()`
-
-### Linting
-```bash
-# Run Clippy checks
-./scripts/ai-clippy.sh --check-only
-
-# Auto-fix issues
-./scripts/ai-clippy.sh --fix
-```
-Windows equivalents:
-```powershell
-pwsh -File scripts/ai-clippy.ps1 --check-only
-pwsh -File scripts/ai-clippy.ps1 --fix
-# Or use .cmd shims: scripts\ai-clippy.cmd --check-only / --fix
-```
-
-## Project Structure
-
-```
-src/
-├── main.rs              # CLI entry point and argument handling
-├── app_config.rs        # Configuration management
-├── app_controller.rs    # Main workflow orchestration
-├── subtitle_processor.rs # SRT parsing and subtitle extraction
-├── file_utils.rs        # File system operations
-├── language_utils.rs    # Language code validation
-├── providers/           # AI provider implementations
-│   ├── mod.rs          # Provider trait and common types
-│   ├── ollama.rs       # Ollama provider
-│   ├── openai.rs       # OpenAI provider
-│   └── anthropic.rs    # Anthropic provider
-└── translation/        # Translation service and batching
-    ├── mod.rs          # Translation service orchestration
-    ├── core.rs         # Core translation logic
-    ├── batch.rs        # Batch processing
-    ├── cache.rs        # Translation caching
-    └── formatting.rs   # Output formatting
-```
-
-## Testing Guidelines
-
-### Test Organization
-```
-tests/
-├── unit/              # Unit tests per module
-├── integration/       # End-to-end scenarios
-├── common/           # Shared test utilities and mocks
-├── resources/        # Test data files
-└── scripts/          # Script testing
-```
+## Testing
 
 ### Running Tests
+
 ```bash
 # Run all tests
 cargo test
@@ -179,39 +117,212 @@ cargo test subtitle_processor
 # Run with output
 cargo test -- --nocapture
 
-# Run integration tests
+# Run with logging enabled
+YASTWAI_TEST_LOG=1 cargo test
+
+# Run integration tests only
 cargo test --test integration
 ```
 
+### Test Structure
+
+```
+tests/
+├── unit/              # Unit tests per module
+├── integration/       # End-to-end scenarios
+├── common/            # Shared test utilities and mocks
+├── resources/         # Test data files
+└── scripts/           # Script testing
+```
+
+### Test Conventions
+
+```rust
+#[tokio::test]
+async fn test_translateBatch_withValidSubtitles_shouldReturnTranslations() {
+    // Given
+    let provider = MockProvider::new();
+    let service = TranslationService::new(provider);
+    let subtitles = vec![Subtitle::new("Hello")];
+
+    // When
+    let result = service.translate_batch(&subtitles).await;
+
+    // Then
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().len(), 1);
+}
+```
+
 ### Test Requirements
-- **NEVER** produce code without corresponding tests
-- Write tests concurrently with primary implementation
+
+- Write tests concurrently with implementation
 - Use mock providers for isolated testing
 - Include edge case and error scenario coverage
-- All new scripts require both shell script tests and Rust test integration
+- All new scripts require corresponding tests in `tests/scripts/`
 
-## Key Dependencies & Features
+## Git Workflow
 
-### Core Dependencies
-- `tokio` - Async runtime with full features
-- `reqwest` - HTTP client for AI provider APIs
-- `clap` - CLI argument parsing
-- `serde` + `serde_json` - Configuration and data serialization
-- `anyhow` + `thiserror` - Error handling
-- `regex` - Text processing for subtitles
+**CRITICAL: Never commit directly to main branch.**
 
-### Provider Support
-- **Ollama**: Local AI models (default, free)
-- **OpenAI**: GPT models (requires API key)
-- **Anthropic**: Claude models (requires API key)
+```bash
+# 1. Create feature branch FIRST
+./scripts/ai-branch.sh feature_name
+
+# 2. Make changes and commit
+git add -A && git commit -m "feat: Description"
+
+# 3. Create PR when ready
+./scripts/ai-pr.sh
+
+# 4. Only update main with
+./scripts/ai-update-main.sh
+```
+
+### Commit Format
+
+```
+<type>: <description>
+
+[optional body]
+
+[optional footer]
+```
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+
+### Commit Guidelines
+
+- Keep commits small and focused on a single change
+- Ensure tests pass before committing
+- Write clear, descriptive commit messages
+- Push frequently to avoid large divergences
+
+### Git Safety
+
+- Never force-push without explicit direction
+- Pipe git output through `cat` to prevent pager: `git log | cat`
+- All git commands must use non-interactive flags
+
+## Planning
+
+When asked to plan a refactor or feature, write the plan locally in `plans/` using filename `plans/YYYYMMDD-topic.md`.
+
+### Plan Creation
+
+- Plans should be as detailed as possible and include interfaces/protocols when needed
+- Use the filename convention `plans/YYYYMMDD-topic.md` with lowercase kebab-case topic
+- See `plans/TEMPLATE.md` for the standard plan format
+- Use checklist steps (`[ ]` / `[x]`) for tracking progress
+
+### Progressive Updates During Implementation
+
+**Agents must update plans progressively as implementation proceeds.** This is critical for maintaining context across sessions and enabling handoffs.
+
+Update the plan's `Implementation State` section:
+- **After completing each step**: Mark the step as `[x]` complete
+- **When starting a new step**: Update "Current step" to reflect active work
+- **After each commit**: Add the commit hash and description to the Commits list
+- **When encountering issues**: Document blockers, workarounds, or scope changes
+- **At session end**: Ensure state reflects exactly where work stopped
+
+**IMPORTANT: Avoiding the commit-hash loop.** When recording commits in plan files:
+1. First commit the implementation changes (without the commit hash in the plan)
+2. Then update the plan file with the commit hash as a SEPARATE commit
+3. NEVER use `git commit --amend` after updating a plan with a commit hash
+
+Required fields to maintain:
+```markdown
+## Implementation State
+
+**State**: In Progress | Complete | Blocked
+**Current step**: Step N - Description
+**Last updated**: YYYY-MM-DD
+
+### Completed Steps
+- [x] Step 1: Description (commit abc123)
+- [ ] Step 2: Description
+
+### Additional Notes
+- Document any deviations from the original plan
+- Record bug fixes or improvements discovered during implementation
+
+### Commits
+- `abc1234` feat: First change
+- `def5678` fix: Bug discovered during implementation
+```
+
+## Boundaries
+
+### Always Safe
+
+- Read any file in the project
+- Run `cargo build`, `cargo test`, `cargo clippy`
+- Modify files in `src/` and `tests/`
+- Add new Rust files following existing patterns
+- Run `git status`, `git diff`, `git log`, `git add`, `git commit`
+- Use helper scripts in `scripts/`
+
+### Ask First
+
+- Modify `Cargo.toml` (dependency changes)
+- Change database schema
+- Modify security-related code
+- Add new external dependencies
+
+### Never Do
+
+- Expose API keys or secrets in code
+- Commit configuration files with credentials
+- Work directly on main branch
+- Use `#[allow(dead_code)]` outside of tests
+- Edit README.md directly (use `./scripts/ai-readme.sh`)
+- Force-push without explicit direction
+
+## Helper Scripts
+
+| Script | Description |
+|--------|-------------|
+| `ai-branch.sh` | Branch management with named parameters |
+| `ai-clippy.sh` | Enhanced Clippy with fix options |
+| `ai-pr.sh` | PR creation with structured descriptions |
+| `ai-protect-main.sh` | Branch protection verification |
+| `ai-update-main.sh` | Safe main branch updates |
+| `ai-readme.sh` | Generate README.md |
+
+### Windows Support
+
+All scripts have Windows equivalents:
+- `.ps1` PowerShell scripts: `pwsh -File scripts/ai-branch.ps1 ...`
+- `.cmd` shims: `scripts\ai-branch.cmd ...`
+
+## Pull Request Guidelines
+
+### Creating PRs
+
+```bash
+./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
+
+# For draft PRs
+./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1" --draft
+```
+
+### PR Structure
+
+- **Overview**: Brief summary (2-3 sentences)
+- **Key Changes**: Bullet points of significant changes
+- **Implementation Details**: Technical approach
+- **Migration Notes**: Breaking changes (if any)
+- **Areas of Attention**: Review focus areas
 
 ## Configuration
 
 ### Main Config File (`conf.json`)
+
 ```json
 {
   "source_language": "en",
-  "target_language": "fr", 
+  "target_language": "fr",
   "translation": {
     "provider": "ollama",
     "available_providers": [...]
@@ -221,123 +332,41 @@ cargo test --test integration
 }
 ```
 
-### Environment Variables
-- Override config via CLI: `-c custom_config.json`
-- Provider-specific settings in config file
-- API keys should be set in configuration (not environment vars)
+### Provider Support
 
-## Automated Workflow
-
-### Build & Test Automation
-After modifying source files, always:
-1. Build the application: `cargo build --release`
-2. Run unit tests: `cargo test`
-3. Run clippy: `./scripts/ai-clippy.sh --check-only`
-
-### Git Command Safety
-- All git commands **MUST** use non-interactive flags
-- Pipe output through `cat` to prevent pager activation:
-  ```bash
-  git log | cat
-  git diff | cat
-  git status | cat
-  ```
-
-## Helper Scripts
-
-### AI-Optimized Scripts (Use These)
-- `ai-branch.sh` - Branch management with named parameters
-- `ai-clippy.sh` - Enhanced Clippy with fix options
-- `ai-pr.sh` - PR creation with structured descriptions
-- `ai-protect-main.sh` - Branch protection verification
-- `ai-update-main.sh` - Safe main branch updates
-- `ai-readme.sh` - Generate README.md (don't edit README directly)
-
-Windows usage notes:
-- All helper scripts have Windows equivalents: `.ps1` PowerShell scripts and `.cmd` shims in `scripts/`.
-- Prefer PowerShell form when possible (more explicit), e.g. `pwsh -File scripts/ai-pr.ps1 ...`.
-- `.cmd` shims provide convenient invocation from Windows shells: e.g. `scripts\ai-pr.cmd ...`.
-- Model detection on Windows: `pwsh -File scripts/ai-cursor-model.ps1` (or `scripts\ai-cursor-model.cmd`).
-
-### Script Testing
-- All scripts have corresponding tests in `tests/scripts/`
-- Tests include mock functions for Git operations
-- Integration tests in `tests/script_tests.rs`
-
-## Pull Request Guidelines
-
-### Creating PRs
-```bash
-# Use the helper script
-./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --implementation "Detail 1,Detail 2"
-
-# For draft PRs
-./scripts/ai-pr.sh --title "PR Title" --overview "Brief overview" --key-changes "Change 1,Change 2" --draft
-```
-
-### PR Structure
-- 🧠 **Instructions** (for AI-generated PRs)
-- 📌 **Overview**: Brief summary (2-3 sentences)
-- 🔍 **Key Changes**: Bullet points of significant changes
-- 🧩 **Implementation Details**: Technical approach
-- 🔄 **Migration Notes**: Breaking changes
-- ⚠️ **Areas of Attention**: Review focus areas
-
-## File Management Rules
-
-### Special Files
-- **README.md**: Auto-generated, use `./scripts/ai-readme.sh` to update
-- **.mdc files**: Symlinks to source files, never edit directly
-- **Cargo.toml**: Changes trigger README regeneration
-
-### Prohibited Actions
-- Direct editing of README.md
-- Direct editing of .mdc symlink files
-- Using `#[allow(dead_code)]` except in tests
-- Working directly on main branch
-- Using raw git commands without safety flags
-
-## Performance Considerations
-
-### Async Patterns
-- Use `tokio::spawn` for independent tasks
-- Implement proper timeout handling
-- Use bounded channels for backpressure
-- Prefer structured concurrency
-
-### Memory Management
-- Stream large files where possible
-- Clean up temporary files
-- Use bounded buffer sizes
-- Monitor resource usage in tests
+- **Ollama**: Local AI models (default, free)
+- **OpenAI**: GPT models (requires API key)
+- **Anthropic**: Claude models (requires API key)
 
 ## Troubleshooting
 
 ### Common Issues
+
 - **Branch protection errors**: Always verify branch before work
-- **Test failures**: Check if code changed before modifying tests  
+- **Test failures**: Check if code changed before modifying tests
 - **Clippy warnings**: Address in source code, not with allow directives
 - **Build failures**: Ensure all dependencies are up to date
 
 ### Debugging
-- Use `RUST_LOG=debug` for verbose logging
-- Check configuration file syntax with JSON validator
-- Verify FFmpeg installation for subtitle extraction
-- Test AI provider connectivity separately
+
+```bash
+# Verbose logging
+RUST_LOG=debug cargo run
+
+# Test with logging
+YASTWAI_TEST_LOG=1 cargo test
+
+# Verify FFmpeg installation
+ffmpeg -version
+```
 
 ## Security Guidelines
 
-### API Key Management
-- Store API keys in configuration file
-- Never commit API keys to repository
+- Store API keys in configuration file (never commit)
 - Use separate config files for different environments
 - Validate all external inputs
-
-### Input Validation
 - Verify file types before processing
 - Sanitize file paths to prevent traversal
-- Validate subtitle content format
-- Handle malformed input gracefully
 
 ---
 
