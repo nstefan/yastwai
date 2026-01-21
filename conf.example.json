@@ -76,5 +76,19 @@
     "retry_on_validation_failure": true,
     "max_retries": 3
   },
+  "experimental": {
+    "enable_auto_tune_concurrency": false,
+    "enable_adaptive_batch_sizing": false,
+    "enable_cache_warming": false,
+    "enable_speculative_batching": false,
+    "enable_language_pair_thresholds": false,
+    "enable_glossary_preflight": false,
+    "enable_fuzzy_glossary_matching": false,
+    "enable_feedback_retry": false,
+    "enable_semantic_validation": false,
+    "enable_dynamic_context_window": false,
+    "enable_scene_aware_batching": false,
+    "enable_speaker_tracking": false
+  },
   "log_level": "info"
 }
