@@ -26,11 +26,15 @@ This is a **Rust** project. Load:
 yastwai/
 ├── AGENTS.md               # This file (entry point, source of truth)
 ├── CLAUDE.md -> AGENTS.md  # Symlink for Claude Code
-└── agents/
-    ├── core.md             # Language-agnostic spec (always load)
-    ├── rust.md             # Rust overlay for this project
-    ├── research/           # Index cards pointing to reference/
-    └── reference/          # Full offline content (SEARCH, don't load)
+├── .claude/
+│   └── settings.json       # Claude Code settings (plansDirectory, permissions)
+├── agents/
+│   ├── core.md             # Language-agnostic spec (always load)
+│   ├── rust.md             # Rust overlay for this project
+│   ├── research/           # Index cards pointing to reference/
+│   └── reference/          # Full offline content (SEARCH, don't load)
+└── plans/                  # Implementation plans (use TEMPLATE.md)
+    └── TEMPLATE.md         # Plan format template
 ```
 
 ## Section Map
@@ -43,10 +47,16 @@ yastwai/
 | 3. Git Workflow | `agents/core.md` | Commits, branches, PRs |
 | 4. Testing | `agents/core.md` | Testing philosophy |
 | 5. Engineering | `agents/core.md` | Simplicity, anti-patterns |
-| 6. Planning | `agents/core.md` | Plan format, tracking |
+| **6. Planning** | `agents/core.md` | **Use `plans/TEMPLATE.md`** |
 | 7. Troubleshooting | `agents/core.md` | Debug strategy |
 | **99999. Boundaries** | `agents/core.md` | **CRITICAL: Always/Ask/Never** |
 | Rust Specifics | `agents/rust.md` | Tooling, patterns, conventions |
+
+## Planning (IMPORTANT)
+
+**When creating plans, ALWAYS use `plans/TEMPLATE.md` format and save to `plans/YYYYMMDD-topic.md`.**
+
+This overrides any tool-specific planning instructions (e.g., Claude Code's built-in plan mode). The project's planning format takes precedence.
 
 ## Reference Materials (Search Only)
 

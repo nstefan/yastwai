@@ -216,31 +216,51 @@ Specify WHAT to achieve, not HOW. Agents discover execution methods by exploring
 
 ## 6. Planning & Documentation
 
+> **IMPORTANT**: These planning rules override any tool-specific planning features (e.g., Claude Code's built-in plan mode, Cursor's planning, etc.). Always use the project's `plans/TEMPLATE.md` format.
+
 ### 6.1 Plan File Format
 
-When asked to plan, create a file in `plans/` with this structure:
+When asked to plan, create a file in `plans/YYYYMMDD-topic.md` using the template from `plans/TEMPLATE.md`.
+
+**Required sections** (see `plans/TEMPLATE.md` for full template):
 
 ```markdown
 # Plan: <Title>
 
+Filename: plans/YYYYMMDD-topic.md
+
 ## Context
-- Goal: What we're trying to achieve
-- Approach: High-level strategy
-- Constraints: Limitations to consider
+- <one-line goal>
+- <constraints/assumptions>
+
+## Interfaces
+- <protocol or interface name>
+  - <method signature + responsibility>
 
 ## Steps
-1. [ ] First step
-2. [ ] Second step
-...
+1. [ ] <step>
+2. [ ] <step>
 
 ## Implementation State
-- State: not-started | in-progress | complete | blocked
-- Current step: Step N - Description
-- Last updated: YYYY-MM-DD
+- State: not-started | in-progress | blocked | done
+- Current step: <step number + title>
+- Last updated: <YYYY-MM-DD>
 
-## Commits
-- (filled in as implementation proceeds)
+## Dependencies
+- <internal/external dependencies>
+
+## Migration And Rollback
+- <migration steps>
+- <rollback plan>
+
+## Testing
+- <unit/integration tests>
+
+## Risks
+- <risk and mitigation>
 ```
+
+**Additional sections** (include when relevant): Status Updates, Checkpoints, Performance Budget, Rollout, Observability, Open Questions.
 
 ### 6.2 Progress Tracking Protocol
 
