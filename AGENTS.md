@@ -49,6 +49,7 @@ yastwai/
 | 5. Engineering | `agents/core.md` | Simplicity, anti-patterns |
 | **6. Planning** | `agents/core.md` | **Use `plans/TEMPLATE.md`** |
 | 7. Troubleshooting | `agents/core.md` | Debug strategy |
+| **8. Skills Discovery** | `agents/core.md` | **Auto-suggest skills.sh packages** |
 | **99999. Boundaries** | `agents/core.md` | **CRITICAL: Always/Ask/Never** |
 | Rust Specifics | `agents/rust.md` | Tooling, patterns, conventions |
 

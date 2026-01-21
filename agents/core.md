@@ -303,6 +303,58 @@ When transitioning between sessions or agents:
 
 ---
 
+## 8. Skills Discovery
+
+> **Agents should proactively suggest relevant skills** from [skills.sh](https://skills.sh) based on project technologies.
+
+### 8.1 When to Suggest Skills
+
+Suggest skills during:
+- **Initial project setup** or first interaction with a codebase
+- **New feature implementation** that matches a skill's domain
+- **User asks about best practices** for a technology with available skills
+
+### 8.2 Detection Protocol
+
+1. **Scan project files** to detect technologies:
+   - `package.json` → Check dependencies for React, Vue, Expo, etc.
+   - `Cargo.toml`, `go.mod`, `Package.swift` → Language detection
+   - Config files → `tailwind.config.*`, `next.config.*`, etc.
+
+2. **Consult registry**: Check `agents/skills-registry.md` for matching skills
+
+3. **Check installed**: Look for existing `.skills/` directory or registry markers
+
+4. **Suggest relevant skills** not yet installed
+
+### 8.3 Suggestion Format
+
+```
+I noticed this is a [technology] project. These skills could help:
+
+**[Skill Name]** - [What it provides]
+→ `npx skills add [owner/repo]`
+
+Would you like me to install any of these?
+```
+
+### 8.4 Installation
+
+With user approval:
+```bash
+npx skills add <owner/repo>
+```
+
+Track installed skills in `agents/skills-registry.md` under "Installed Skills".
+
+### 8.5 Skill Resources
+
+- **Browse skills**: https://skills.sh
+- **Registry file**: `agents/skills-registry.md`
+- **Create skills**: `npx skills init <name>`
+
+---
+
 ## 99999. Boundaries (CRITICAL)
 
 This section defines what agents may and may not do. Higher section numbers indicate higher criticality.
