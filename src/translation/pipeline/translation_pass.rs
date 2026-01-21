@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::translation::context::{ContextWindow, ContextWindowConfig};
 use crate::translation::core::TranslationService;
 use crate::translation::document::{DocumentEntry, Glossary, SubtitleDocument};
+use crate::translation::pipeline::validation_pass::FailureReason;
 use crate::translation::prompts::{
     TranslatedEntry, TranslationPromptBuilder, TranslationResponse,
 };
@@ -195,6 +196,80 @@ impl TranslationPass {
         }
 
         Err(last_error.unwrap_or_else(|| anyhow!("Translation failed after {} retries", retries)))
+    }
+
+    /// Translate a batch with feedback from previous validation failures.
+    ///
+    /// This method includes the failure reasons in the prompt to guide the LLM
+    /// to produce better translations on retry.
+    pub async fn translate_with_feedback_retry(
+        &self,
+        service: &TranslationService,
+        window: &ContextWindow,
+        failure_reasons: &[FailureReason],
+    ) -> Result<BatchResult> {
+        let entry_ids: Vec<usize> = window.current_batch.iter().map(|e| e.id).collect();
+
+        // Build the base prompt
+        let builder = self.build_prompt_from_window(window);
+        let (system_prompt, user_prompt) = builder.build();
+
+        // Append feedback instructions to the prompt
+        let feedback_section = self.build_feedback_section(failure_reasons);
+        let enhanced_user_prompt = if feedback_section.is_empty() {
+            user_prompt
+        } else {
+            format!("{}\n\n{}", user_prompt, feedback_section)
+        };
+
+        // Attempt translation with enhanced prompt
+        match self.attempt_translation(service, &system_prompt, &enhanced_user_prompt).await {
+            Ok(response) => {
+                let mut result = BatchResult::new(response.translations, entry_ids.clone());
+
+                // Process glossary updates
+                if self.config.accept_glossary_updates {
+                    if let Some(notes) = response.notes {
+                        for (source, target) in notes.glossary_updates.iter() {
+                            result.glossary_updates.add_term(source, target, None);
+                        }
+                    }
+                }
+
+                Ok(result)
+            }
+            Err(e) => {
+                // On failure, try fallback if enabled
+                if self.config.use_extractive_fallback {
+                    if let Some(fallback) = self.try_fallback_extraction(&entry_ids) {
+                        let mut result = fallback;
+                        result.used_fallback = true;
+                        return Ok(result);
+                    }
+                }
+                Err(e)
+            }
+        }
+    }
+
+    /// Build a feedback section from failure reasons
+    fn build_feedback_section(&self, failure_reasons: &[FailureReason]) -> String {
+        if failure_reasons.is_empty() {
+            return String::new();
+        }
+
+        let instructions: Vec<String> = failure_reasons
+            .iter()
+            .map(|r| format!("- Entry {}: {}", r.entry_id(), r.to_feedback_instruction()))
+            .collect();
+
+        format!(
+            "## Previous Translation Feedback\n\
+             The previous translation had these issues that must be fixed:\n\
+             {}\n\n\
+             Please address all feedback points in your revised translation.",
+            instructions.join("\n")
+        )
     }
 
     /// Build a prompt from a context window.
@@ -574,5 +649,40 @@ Hope this helps!"#;
         let stats = TranslationStats::new();
 
         assert_eq!(stats.success_rate(), 100.0);
+    }
+
+    #[test]
+    fn test_translationPass_buildFeedbackSection_withReasons_shouldIncludeInstructions() {
+        let pass = TranslationPass::with_defaults();
+        let reasons = vec![
+            FailureReason::TooLong {
+                entry_id: 1,
+                current_ratio: 2.0,
+                max_ratio: 1.5,
+                suggestion: "Translation is 200% longer than original. Shorten to under 150%".to_string(),
+            },
+            FailureReason::AlteredCharacterName {
+                entry_id: 2,
+                name: "John".to_string(),
+            },
+        ];
+
+        let feedback = pass.build_feedback_section(&reasons);
+
+        assert!(feedback.contains("Previous Translation Feedback"));
+        assert!(feedback.contains("Entry 1"));
+        assert!(feedback.contains("Entry 2"));
+        assert!(feedback.contains("Shorten"));
+        assert!(feedback.contains("John"));
+    }
+
+    #[test]
+    fn test_translationPass_buildFeedbackSection_empty_shouldReturnEmpty() {
+        let pass = TranslationPass::with_defaults();
+        let reasons: Vec<FailureReason> = vec![];
+
+        let feedback = pass.build_feedback_section(&reasons);
+
+        assert!(feedback.is_empty());
     }
 }

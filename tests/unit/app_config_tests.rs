@@ -2,7 +2,7 @@
  * Tests for application configuration functionality
  */
 
-use yastwai::app_config::{Config, TranslationProvider, LogLevel, ProviderConfig, TranslationCommonConfig};
+use yastwai::app_config::{Config, TranslationProvider, LogLevel, ProviderConfig, TranslationCommonConfig, ExperimentalFeatures};
 
 /// Helper function to find provider config by type
 fn find_provider_config<'a>(config: &'a Config, provider: &TranslationProvider) -> Option<&'a ProviderConfig> {
@@ -143,4 +143,104 @@ fn test_providerSpecificDefaults_shouldHaveCorrectRateLimits() {
     // LM Studio (local) should have no rate limit by default
     let lmstudio_config = ProviderConfig::new(TranslationProvider::LMStudio);
     assert_eq!(lmstudio_config.rate_limit, None);
+}
+
+/// Test that ExperimentalFeatures defaults all flags to false
+#[test]
+fn test_experimentalFeaturesDefaults_shouldAllBeFalse() {
+    let features = ExperimentalFeatures::default();
+
+    assert!(!features.enable_auto_tune_concurrency);
+    assert!(!features.enable_adaptive_batch_sizing);
+    assert!(!features.enable_cache_warming);
+    assert!(!features.enable_speculative_batching);
+    assert!(!features.enable_language_pair_thresholds);
+    assert!(!features.enable_glossary_preflight);
+    assert!(!features.enable_fuzzy_glossary_matching);
+    assert!(!features.enable_feedback_retry);
+    assert!(!features.enable_semantic_validation);
+    assert!(!features.enable_dynamic_context_window);
+    assert!(!features.enable_scene_aware_batching);
+    assert!(!features.enable_speaker_tracking);
+}
+
+/// Test that Config includes ExperimentalFeatures with all defaults false
+#[test]
+fn test_configDefault_shouldIncludeExperimentalFeaturesAllFalse() {
+    let config = Config::default();
+
+    assert!(!config.experimental.enable_auto_tune_concurrency);
+    assert!(!config.experimental.enable_adaptive_batch_sizing);
+    assert!(!config.experimental.enable_cache_warming);
+    assert!(!config.experimental.enable_speculative_batching);
+    assert!(!config.experimental.enable_language_pair_thresholds);
+    assert!(!config.experimental.enable_glossary_preflight);
+    assert!(!config.experimental.enable_fuzzy_glossary_matching);
+    assert!(!config.experimental.enable_feedback_retry);
+    assert!(!config.experimental.enable_semantic_validation);
+    assert!(!config.experimental.enable_dynamic_context_window);
+    assert!(!config.experimental.enable_scene_aware_batching);
+    assert!(!config.experimental.enable_speaker_tracking);
+}
+
+/// Test backward compatibility: old config without experimental field deserializes correctly
+#[test]
+fn test_configDeserialization_withoutExperimentalField_shouldUseDefaults() {
+    let json = r#"{
+        "source_language": "en",
+        "target_language": "de",
+        "translation": {
+            "provider": "ollama",
+            "available_providers": [],
+            "common": {}
+        }
+    }"#;
+
+    let config: Config = serde_json::from_str(json).expect("Should deserialize config without experimental field");
+
+    // Verify basic fields
+    assert_eq!(config.source_language, "en");
+    assert_eq!(config.target_language, "de");
+
+    // Verify experimental features default to false
+    assert!(!config.experimental.enable_auto_tune_concurrency);
+    assert!(!config.experimental.enable_adaptive_batch_sizing);
+    assert!(!config.experimental.enable_cache_warming);
+    assert!(!config.experimental.enable_speculative_batching);
+}
+
+/// Test that individual experimental flags can be enabled
+#[test]
+fn test_configDeserialization_withPartialExperimentalFlags_shouldMergeWithDefaults() {
+    let json = r#"{
+        "source_language": "en",
+        "target_language": "de",
+        "translation": {
+            "provider": "ollama",
+            "available_providers": [],
+            "common": {}
+        },
+        "experimental": {
+            "enable_cache_warming": true,
+            "enable_feedback_retry": true
+        }
+    }"#;
+
+    let config: Config = serde_json::from_str(json).expect("Should deserialize config with partial experimental flags");
+
+    // Explicitly enabled flags should be true
+    assert!(config.experimental.enable_cache_warming);
+    assert!(config.experimental.enable_feedback_retry);
+
+    // Unspecified flags should default to false
+    assert!(!config.experimental.enable_auto_tune_concurrency);
+    assert!(!config.experimental.enable_adaptive_batch_sizing);
+    assert!(!config.experimental.enable_speculative_batching);
+    assert!(!config.experimental.enable_language_pair_thresholds);
+    assert!(!config.experimental.enable_glossary_preflight);
+    assert!(!config.experimental.enable_fuzzy_glossary_matching);
+    assert!(!config.experimental.enable_semantic_validation);
+    assert!(!config.experimental.enable_dynamic_context_window);
+    assert!(!config.experimental.enable_scene_aware_batching);
+    assert!(!config.experimental.enable_speaker_tracking);
 }

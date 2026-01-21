@@ -15,8 +15,11 @@
  * - `quality`: Quality assurance (metrics, consistency, repair, error handling)
  */
 
+// These re-exports are part of the public API for external consumers
+#![allow(unused_imports)]
+
 // Re-export main types for easier usage
-pub use self::batch::BatchTranslator;
+pub use self::batch::{AdaptiveBatchSizer, BatchTranslator};
 pub use self::core::TranslationService;
 
 // Re-export document model types
@@ -30,33 +33,43 @@ pub use self::prompts::{PromptTemplate, TranslationPromptBuilder};
 
 // Re-export context types
 pub use self::context::{
-    ConsistencyIssue, ContextWindow, ContextWindowConfig, ContextWindowExt, ExtractionConfig,
-    GlossaryEnforcer, GlossaryExtractor, GlossaryExtractionExt, HistorySummarizer, HistorySummary,
-    SceneDetectionConfig, SceneDetectionExt, SceneDetector, SummarizationConfig, SummarizationExt,
-    WindowEntry,
+    ConsistencyIssue, ContextWindow, ContextWindowConfig, ContextWindowExt, DetectedSpeaker,
+    DynamicWindowConfig, DynamicWindowSizer, ExtractionConfig, FuzzyMatcher, GlossaryEnforcer,
+    GlossaryExtractor, GlossaryExtractionExt, GlossaryPreflightChecker, HistorySummarizer,
+    HistorySummary, PreflightReport, SceneDetectionConfig, SceneDetectionExt, SceneDetector,
+    SpeakerConfig, SpeakerStats, SpeakerTracker, SummarizationConfig, SummarizationExt, WindowEntry,
 };
 
 // Re-export pipeline types
 pub use self::pipeline::{
-    AnalysisPass, AnalysisResult, PipelineAdapter, PipelineConfig, PipelineMode, PipelinePhase,
-    PipelineProgress, RepairAction, RepairResult, TranslationPass, TranslationPassConfig,
-    TranslationPipeline, ValidationIssue, ValidationPass, ValidationReport,
+    AnalysisPass, AnalysisResult, FailureReason, PipelineAdapter, PipelineConfig, PipelineMode,
+    PipelinePhase, PipelineProgress, RepairAction, RepairResult, TranslationPass,
+    TranslationPassConfig, TranslationPipeline, ValidationIssue, ValidationPass, ValidationReport,
 };
 
 // Re-export quality types
 pub use self::quality::{
-    ConsistencyChecker, ConsistencyConfig, ConsistencyReport, ErrorRecovery, QualityMetrics,
-    QualityScore, QualityThresholds, RecoveryAction, RecoveryStrategy, RepairEngine, RepairStrategy,
-    SmartRepair, StyleIssue, TranslationError, TranslationErrorKind,
+    ConsistencyChecker, ConsistencyConfig, ConsistencyReport, ErrorRecovery, LanguagePairThresholds,
+    QualityMetrics, QualityScore, QualityThresholds, RecoveryAction, RecoveryStrategy, RepairEngine,
+    RepairStrategy, SemanticIssue, SemanticValidationConfig, SemanticValidationResult,
+    SemanticValidator, SmartRepair, StyleIssue, TranslationError, TranslationErrorKind,
 };
+
+// Re-export concurrency types
+pub use self::concurrency::ProviderProfile;
+
+// Re-export speculative batching types
+pub use self::speculative::SpeculativeBatcher;
 
 // Submodules
 pub mod batch;
 pub mod cache;
+pub mod concurrency;
 pub mod context;
 pub mod core;
 pub mod document;
 pub mod formatting;
 pub mod pipeline;
 pub mod prompts;
-pub mod quality; 
+pub mod quality;
+pub mod speculative;

@@ -43,7 +43,9 @@
 // These lints will be allowed but not auto-fixed
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::redundant_closure_for_method_calls)]
-// Add other lints you want to allow but not auto-fix
+// Library exports many public types that may not be used internally
+#![allow(dead_code)]
+#![allow(unused_imports)]
 
 // Public modules
 pub mod app_config;

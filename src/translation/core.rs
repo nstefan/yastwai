@@ -11,12 +11,13 @@ use url::Url;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::app_config::{TranslationConfig, TranslationProvider as ConfigTranslationProvider};
+use crate::app_config::{TranslationConfig, TranslationProvider as ConfigTranslationProvider, ExperimentalFeatures};
 use crate::providers::ollama::{Ollama, GenerationRequest};
 use crate::providers::openai::{OpenAI, OpenAIRequest};
 use crate::providers::anthropic::{Anthropic, AnthropicRequest};
 use crate::providers::Provider;
 use super::cache::TranslationCache;
+use super::concurrency::ProviderProfile;
 
 
 /// Token usage statistics for tracking API consumption
@@ -307,8 +308,19 @@ impl TranslationService {
             cache: TranslationCache::new(true), // Enable cache by default
         })
     }
-    
-    
+
+    /// Apply experimental features settings to the service
+    ///
+    /// When `enable_auto_tune_concurrency` is true, uses provider-specific
+    /// concurrency profiles for optimal throughput.
+    pub fn with_experimental_features(mut self, features: &ExperimentalFeatures) -> Self {
+        if features.enable_auto_tune_concurrency {
+            let profile = ProviderProfile::for_provider(self.config.provider.clone());
+            self.options.max_concurrent_requests = profile.max_concurrent_requests;
+        }
+        self
+    }
+
     /// Test the connection to the translation provider
     pub async fn test_connection(
         &self, 

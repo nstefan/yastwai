@@ -13,11 +13,15 @@
 
 pub mod consistency;
 pub mod errors;
+pub mod language_pairs;
 pub mod metrics;
 pub mod repair;
+pub mod semantic;
 
 // Re-export main types
 pub use consistency::{ConsistencyChecker, ConsistencyConfig, ConsistencyReport, StyleIssue};
 pub use errors::{ErrorRecovery, RecoveryAction, RecoveryStrategy, TranslationError, TranslationErrorKind};
+pub use language_pairs::LanguagePairThresholds;
 pub use metrics::{QualityMetrics, QualityScore, QualityThresholds};
 pub use repair::{RepairEngine, RepairStrategy, SmartRepair};
+pub use semantic::{SemanticIssue, SemanticValidationConfig, SemanticValidationResult, SemanticValidator};

@@ -11,6 +11,7 @@
 
 use crate::translation::context::{ConsistencyIssue, GlossaryEnforcer};
 use crate::translation::document::{DocumentEntry, FormattingTag, SubtitleDocument};
+use crate::translation::quality::semantic::{SemanticIssue, SemanticValidationResult};
 
 /// Configuration for the validation pass.
 #[derive(Debug, Clone)]
@@ -32,6 +33,9 @@ pub struct ValidationConfig {
 
     /// Minimum confidence threshold (entries below are flagged)
     pub min_confidence_threshold: f32,
+
+    /// Whether to run semantic validation (requires SemanticValidator)
+    pub enable_semantic_validation: bool,
 }
 
 impl Default for ValidationConfig {
@@ -43,6 +47,7 @@ impl Default for ValidationConfig {
             check_glossary_consistency: true,
             enable_auto_repair: true,
             min_confidence_threshold: 0.5,
+            enable_semantic_validation: false,
         }
     }
 }
@@ -57,6 +62,7 @@ impl ValidationConfig {
             check_glossary_consistency: true,
             enable_auto_repair: true,
             min_confidence_threshold: 0.7,
+            enable_semantic_validation: true,
         }
     }
 
@@ -69,6 +75,7 @@ impl ValidationConfig {
             check_glossary_consistency: false,
             enable_auto_repair: true,
             min_confidence_threshold: 0.3,
+            enable_semantic_validation: false,
         }
     }
 }
@@ -119,6 +126,96 @@ pub enum ValidationIssue {
     EmptyTranslation {
         entry_id: usize,
     },
+
+    /// Semantic divergence detected (meaning not preserved)
+    SemanticDivergence {
+        entry_id: usize,
+        confidence: f32,
+        issues: Vec<SemanticIssue>,
+    },
+}
+
+/// Structured failure reason for feedback-informed retry
+#[derive(Debug, Clone)]
+pub enum FailureReason {
+    /// Translation was too long for the subtitle timing
+    TooLong {
+        entry_id: usize,
+        current_ratio: f32,
+        max_ratio: f32,
+        suggestion: String,
+    },
+    /// Translation was too short (potential truncation)
+    TooShort {
+        entry_id: usize,
+        current_ratio: f32,
+        min_ratio: f32,
+        suggestion: String,
+    },
+    /// Required glossary term was not used
+    MissingGlossaryTerm {
+        entry_id: usize,
+        term: String,
+        expected_translation: String,
+    },
+    /// Character name was altered/translated
+    AlteredCharacterName {
+        entry_id: usize,
+        name: String,
+    },
+    /// Formatting tag was dropped
+    DroppedFormatting {
+        entry_id: usize,
+        tag: String,
+    },
+    /// Translation confidence is low
+    LowConfidence {
+        entry_id: usize,
+        confidence: f32,
+    },
+    /// Semantic meaning was not preserved
+    SemanticDivergence {
+        entry_id: usize,
+        issue_description: String,
+    },
+}
+
+impl FailureReason {
+    /// Get the entry ID for this failure
+    pub fn entry_id(&self) -> usize {
+        match self {
+            FailureReason::TooLong { entry_id, .. } => *entry_id,
+            FailureReason::TooShort { entry_id, .. } => *entry_id,
+            FailureReason::MissingGlossaryTerm { entry_id, .. } => *entry_id,
+            FailureReason::AlteredCharacterName { entry_id, .. } => *entry_id,
+            FailureReason::DroppedFormatting { entry_id, .. } => *entry_id,
+            FailureReason::LowConfidence { entry_id, .. } => *entry_id,
+            FailureReason::SemanticDivergence { entry_id, .. } => *entry_id,
+        }
+    }
+
+    /// Convert to feedback instruction for retry prompt
+    pub fn to_feedback_instruction(&self) -> String {
+        match self {
+            FailureReason::TooLong { suggestion, .. } => suggestion.clone(),
+            FailureReason::TooShort { suggestion, .. } => suggestion.clone(),
+            FailureReason::MissingGlossaryTerm { term, expected_translation, .. } => {
+                format!("Use '{}' for '{}'", expected_translation, term)
+            }
+            FailureReason::AlteredCharacterName { name, .. } => {
+                format!("Keep character name '{}' unchanged", name)
+            }
+            FailureReason::DroppedFormatting { tag, .. } => {
+                format!("Preserve {} formatting tags", tag)
+            }
+            FailureReason::LowConfidence { .. } => {
+                "Provide a more confident translation".to_string()
+            }
+            FailureReason::SemanticDivergence { issue_description, .. } => {
+                format!("Fix semantic issue: {}", issue_description)
+            }
+        }
+    }
 }
 
 impl ValidationIssue {
@@ -132,6 +229,7 @@ impl ValidationIssue {
             ValidationIssue::GlossaryInconsistency { entry_id, .. } => *entry_id,
             ValidationIssue::LowConfidence { entry_id, .. } => *entry_id,
             ValidationIssue::EmptyTranslation { entry_id } => *entry_id,
+            ValidationIssue::SemanticDivergence { entry_id, .. } => *entry_id,
         }
     }
 
@@ -159,6 +257,13 @@ impl ValidationIssue {
             ValidationIssue::EmptyTranslation { entry_id } => {
                 format!("Entry {} has empty translation", entry_id)
             }
+            ValidationIssue::SemanticDivergence { entry_id, confidence, issues } => {
+                let issue_count = issues.len();
+                format!(
+                    "Entry {} semantic divergence (confidence: {:.2}, {} issues)",
+                    entry_id, confidence, issue_count
+                )
+            }
         }
     }
 
@@ -168,14 +273,19 @@ impl ValidationIssue {
             ValidationIssue::MissingTranslation { .. } => 1.0,
             ValidationIssue::EmptyTranslation { .. } => 1.0,
             ValidationIssue::LengthTooLong { ratio, .. } => {
-                (*ratio - 1.5).min(1.0).max(0.3) // Scale based on how extreme
+                (*ratio - 1.5).clamp(0.3, 1.0) // Scale based on how extreme
             }
             ValidationIssue::LengthTooShort { ratio, .. } => {
-                (0.5 - *ratio).min(1.0).max(0.3)
+                (0.5 - *ratio).clamp(0.3, 1.0)
             }
             ValidationIssue::MissingFormatting { .. } => 0.5,
             ValidationIssue::GlossaryInconsistency { .. } => 0.4,
             ValidationIssue::LowConfidence { confidence, .. } => 1.0 - confidence,
+            ValidationIssue::SemanticDivergence { confidence, .. } => {
+                // Semantic divergence is serious - base severity of 0.8 scaled by confidence
+                // Lower confidence = higher severity (closer to 1.0)
+                0.8 + (1.0 - confidence) * 0.2
+            }
         }
     }
 
@@ -185,6 +295,78 @@ impl ValidationIssue {
             self,
             ValidationIssue::MissingFormatting { .. } | ValidationIssue::GlossaryInconsistency { .. }
         )
+    }
+
+    /// Convert to a structured failure reason for feedback retry
+    pub fn to_failure_reason(&self, max_ratio: f32, min_ratio: f32) -> Option<FailureReason> {
+        match self {
+            ValidationIssue::LengthTooLong { entry_id, ratio, .. } => {
+                Some(FailureReason::TooLong {
+                    entry_id: *entry_id,
+                    current_ratio: *ratio,
+                    max_ratio,
+                    suggestion: format!(
+                        "Translation is {:.0}% longer than original. Shorten to under {:.0}%",
+                        ratio * 100.0,
+                        max_ratio * 100.0
+                    ),
+                })
+            }
+            ValidationIssue::LengthTooShort { entry_id, ratio, .. } => {
+                Some(FailureReason::TooShort {
+                    entry_id: *entry_id,
+                    current_ratio: *ratio,
+                    min_ratio,
+                    suggestion: format!(
+                        "Translation is only {:.0}% of original length. Expand to at least {:.0}%",
+                        ratio * 100.0,
+                        min_ratio * 100.0
+                    ),
+                })
+            }
+            ValidationIssue::GlossaryInconsistency { entry_id, issue } => {
+                match issue {
+                    ConsistencyIssue::MissingName { name, .. } => {
+                        Some(FailureReason::AlteredCharacterName {
+                            entry_id: *entry_id,
+                            name: name.clone(),
+                        })
+                    }
+                    ConsistencyIssue::InconsistentTerm { source, expected, .. } => {
+                        Some(FailureReason::MissingGlossaryTerm {
+                            entry_id: *entry_id,
+                            term: source.clone(),
+                            expected_translation: expected.clone(),
+                        })
+                    }
+                }
+            }
+            ValidationIssue::MissingFormatting { entry_id, tag } => {
+                Some(FailureReason::DroppedFormatting {
+                    entry_id: *entry_id,
+                    tag: format!("{:?}", tag),
+                })
+            }
+            ValidationIssue::LowConfidence { entry_id, confidence } => {
+                Some(FailureReason::LowConfidence {
+                    entry_id: *entry_id,
+                    confidence: *confidence,
+                })
+            }
+            ValidationIssue::SemanticDivergence { entry_id, issues, .. } => {
+                let description = if issues.is_empty() {
+                    "Translation may not preserve the original meaning".to_string()
+                } else {
+                    issues.first().map(|i| i.description()).unwrap_or_default()
+                };
+                Some(FailureReason::SemanticDivergence {
+                    entry_id: *entry_id,
+                    issue_description: description,
+                })
+            }
+            // Non-retryable issues
+            ValidationIssue::MissingTranslation { .. } | ValidationIssue::EmptyTranslation { .. } => None,
+        }
     }
 }
 
@@ -353,6 +535,56 @@ impl ValidationReport {
             self.quality_score * 100.0
         )
     }
+
+    /// Export structured failure reasons for feedback-informed retry
+    ///
+    /// Returns a list of failure reasons that can be used to construct
+    /// better retry prompts with specific feedback.
+    pub fn export_failure_reasons(&self, max_ratio: f32, min_ratio: f32) -> Vec<FailureReason> {
+        self.issues
+            .iter()
+            .filter_map(|issue| issue.to_failure_reason(max_ratio, min_ratio))
+            .collect()
+    }
+
+    /// Get failure reasons grouped by entry ID
+    pub fn failure_reasons_by_entry(&self, max_ratio: f32, min_ratio: f32) -> std::collections::HashMap<usize, Vec<FailureReason>> {
+        let mut by_entry = std::collections::HashMap::new();
+        for reason in self.export_failure_reasons(max_ratio, min_ratio) {
+            by_entry
+                .entry(reason.entry_id())
+                .or_insert_with(Vec::new)
+                .push(reason);
+        }
+        by_entry
+    }
+
+    /// Add semantic validation result to this report.
+    ///
+    /// This method allows incorporating pre-computed semantic validation results
+    /// (from SemanticValidator) into the validation report.
+    pub fn add_semantic_result(&mut self, entry_id: usize, result: SemanticValidationResult) {
+        if !result.passed() {
+            self.add_issue(ValidationIssue::SemanticDivergence {
+                entry_id,
+                confidence: result.confidence,
+                issues: result.issues,
+            });
+        }
+    }
+
+    /// Check if semantic validation is recommended for this report.
+    ///
+    /// Returns true if there are entries with low confidence that would
+    /// benefit from semantic validation.
+    pub fn needs_semantic_validation(&self, threshold: f32) -> bool {
+        self.issues.iter().any(|issue| {
+            matches!(
+                issue,
+                ValidationIssue::LowConfidence { confidence, .. } if *confidence < threshold
+            )
+        })
+    }
 }
 
 /// Validation pass for checking translation quality.
@@ -369,6 +601,16 @@ impl ValidationPass {
     /// Create a validation pass with default configuration.
     pub fn with_defaults() -> Self {
         Self::new(ValidationConfig::default())
+    }
+
+    /// Get the validation configuration.
+    pub fn config(&self) -> &ValidationConfig {
+        &self.config
+    }
+
+    /// Check if semantic validation is enabled.
+    pub fn semantic_validation_enabled(&self) -> bool {
+        self.config.enable_semantic_validation
     }
 
     /// Validate a document and return a report.
@@ -782,5 +1024,208 @@ mod tests {
         report.calculate_score();
 
         assert!(!report.passed()); // Should fail with critical issues
+    }
+
+    #[test]
+    fn test_validationIssue_toFailureReason_shouldConvertLengthTooLong() {
+        let issue = ValidationIssue::LengthTooLong {
+            entry_id: 1,
+            original_length: 10,
+            translated_length: 20,
+            ratio: 2.0,
+        };
+
+        let reason = issue.to_failure_reason(1.5, 0.5).unwrap();
+        match reason {
+            FailureReason::TooLong { entry_id, current_ratio, max_ratio, .. } => {
+                assert_eq!(entry_id, 1);
+                assert!((current_ratio - 2.0).abs() < 0.01);
+                assert!((max_ratio - 1.5).abs() < 0.01);
+            }
+            _ => panic!("Expected TooLong failure reason"),
+        }
+    }
+
+    #[test]
+    fn test_validationIssue_toFailureReason_missingTranslation_shouldReturnNone() {
+        let issue = ValidationIssue::MissingTranslation { entry_id: 1 };
+        assert!(issue.to_failure_reason(1.5, 0.5).is_none());
+    }
+
+    #[test]
+    fn test_failureReason_toFeedbackInstruction_shouldGenerateUsefulText() {
+        let reason = FailureReason::TooLong {
+            entry_id: 1,
+            current_ratio: 2.0,
+            max_ratio: 1.5,
+            suggestion: "Translation too long".to_string(),
+        };
+
+        let instruction = reason.to_feedback_instruction();
+        assert_eq!(instruction, "Translation too long");
+    }
+
+    #[test]
+    fn test_validationReport_exportFailureReasons_shouldFilterRetryable() {
+        let mut report = ValidationReport::new(5);
+
+        // Add retryable issues
+        report.add_issue(ValidationIssue::LengthTooLong {
+            entry_id: 1,
+            original_length: 10,
+            translated_length: 20,
+            ratio: 2.0,
+        });
+        report.add_issue(ValidationIssue::LowConfidence {
+            entry_id: 2,
+            confidence: 0.3,
+        });
+
+        // Add non-retryable issues
+        report.add_issue(ValidationIssue::MissingTranslation { entry_id: 3 });
+
+        let reasons = report.export_failure_reasons(1.5, 0.5);
+
+        // Should have 2 retryable reasons (LengthTooLong and LowConfidence)
+        // MissingTranslation should be filtered out
+        assert_eq!(reasons.len(), 2);
+    }
+
+    #[test]
+    fn test_validationReport_failureReasonsByEntry_shouldGroupCorrectly() {
+        let mut report = ValidationReport::new(5);
+
+        report.add_issue(ValidationIssue::LengthTooLong {
+            entry_id: 1,
+            original_length: 10,
+            translated_length: 20,
+            ratio: 2.0,
+        });
+        report.add_issue(ValidationIssue::LowConfidence {
+            entry_id: 1,
+            confidence: 0.3,
+        });
+        report.add_issue(ValidationIssue::LengthTooShort {
+            entry_id: 2,
+            original_length: 20,
+            translated_length: 5,
+            ratio: 0.25,
+        });
+
+        let by_entry = report.failure_reasons_by_entry(1.5, 0.5);
+
+        assert_eq!(by_entry.get(&1).map(|v| v.len()), Some(2));
+        assert_eq!(by_entry.get(&2).map(|v| v.len()), Some(1));
+    }
+
+    #[test]
+    fn test_semanticDivergence_shouldBeReportedAsIssue() {
+        let mut report = ValidationReport::new(3);
+
+        let issues = vec![SemanticIssue::MeaningChanged {
+            original_meaning: "Hello".to_string(),
+            translated_meaning: "Goodbye".to_string(),
+        }];
+
+        report.add_issue(ValidationIssue::SemanticDivergence {
+            entry_id: 1,
+            confidence: 0.4,
+            issues,
+        });
+        report.calculate_score();
+
+        assert!(!report.passed()); // Semantic divergence is critical
+        assert_eq!(report.issues.len(), 1);
+        assert!(report.issues[0].description().contains("semantic divergence"));
+    }
+
+    #[test]
+    fn test_validationReport_addSemanticResult_shouldAddDivergentResults() {
+        let mut report = ValidationReport::new(3);
+
+        let result = SemanticValidationResult::divergent(
+            0.4,
+            vec![SemanticIssue::InformationOmitted {
+                omitted_content: "important detail".to_string(),
+            }],
+        );
+
+        report.add_semantic_result(1, result);
+
+        assert_eq!(report.issues.len(), 1);
+        match &report.issues[0] {
+            ValidationIssue::SemanticDivergence { entry_id, confidence, issues } => {
+                assert_eq!(*entry_id, 1);
+                assert!(*confidence < 0.5);
+                assert_eq!(issues.len(), 1);
+            }
+            _ => panic!("Expected SemanticDivergence"),
+        }
+    }
+
+    #[test]
+    fn test_validationReport_addSemanticResult_shouldNotAddPassedResults() {
+        let mut report = ValidationReport::new(3);
+
+        let result = SemanticValidationResult::equivalent(0.95);
+
+        report.add_semantic_result(1, result);
+
+        assert_eq!(report.issues.len(), 0); // Passed results not added
+    }
+
+    #[test]
+    fn test_validationReport_needsSemanticValidation_shouldDetectLowConfidence() {
+        let mut report = ValidationReport::new(3);
+
+        report.add_issue(ValidationIssue::LowConfidence {
+            entry_id: 1,
+            confidence: 0.4,
+        });
+
+        assert!(report.needs_semantic_validation(0.5));
+        assert!(!report.needs_semantic_validation(0.3));
+    }
+
+    #[test]
+    fn test_semanticDivergence_toFailureReason_shouldConvert() {
+        let issue = ValidationIssue::SemanticDivergence {
+            entry_id: 1,
+            confidence: 0.3,
+            issues: vec![SemanticIssue::MeaningChanged {
+                original_meaning: "hello".to_string(),
+                translated_meaning: "world".to_string(),
+            }],
+        };
+
+        let reason = issue.to_failure_reason(1.5, 0.5).unwrap();
+        match reason {
+            FailureReason::SemanticDivergence { entry_id, issue_description } => {
+                assert_eq!(entry_id, 1);
+                assert!(!issue_description.is_empty());
+            }
+            _ => panic!("Expected SemanticDivergence failure reason"),
+        }
+    }
+
+    #[test]
+    fn test_validationConfig_strict_shouldEnableSemanticValidation() {
+        let config = ValidationConfig::strict();
+        assert!(config.enable_semantic_validation);
+    }
+
+    #[test]
+    fn test_validationConfig_lenient_shouldDisableSemanticValidation() {
+        let config = ValidationConfig::lenient();
+        assert!(!config.enable_semantic_validation);
+    }
+
+    #[test]
+    fn test_validationPass_semanticValidationEnabled_shouldReflectConfig() {
+        let pass = ValidationPass::new(ValidationConfig::strict());
+        assert!(pass.semantic_validation_enabled());
+
+        let pass_lenient = ValidationPass::new(ValidationConfig::lenient());
+        assert!(!pass_lenient.semantic_validation_enabled());
     }
 }

@@ -365,11 +365,11 @@ impl RepairEngine {
             let trans_has_close = repaired.contains(close);
 
             // If original is fully wrapped, wrap translation
-            if has_open && has_close && original.starts_with(open) && original.ends_with(close) {
-                if !trans_has_open || !trans_has_close {
-                    repaired = format!("{}{}{}", open, repaired.trim(), close);
-                    fixed = true;
-                }
+            if has_open && has_close && original.starts_with(open) && original.ends_with(close)
+                && (!trans_has_open || !trans_has_close)
+            {
+                repaired = format!("{}{}{}", open, repaired.trim(), close);
+                fixed = true;
             }
         }
 

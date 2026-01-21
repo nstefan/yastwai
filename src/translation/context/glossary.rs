@@ -324,6 +324,107 @@ impl GlossaryExtractionExt for SubtitleDocument {
     }
 }
 
+/// Report from glossary preflight check
+#[derive(Debug, Clone, Default)]
+pub struct PreflightReport {
+    /// Total entries checked
+    pub entries_checked: usize,
+    /// Number of entries with glossary terms found
+    pub entries_with_terms: usize,
+    /// Map of term -> count of occurrences
+    pub term_occurrences: HashMap<String, usize>,
+    /// Potential issues found
+    pub warnings: Vec<String>,
+}
+
+impl PreflightReport {
+    /// Check if preflight passed with no critical warnings
+    pub fn passed(&self) -> bool {
+        self.warnings.iter().all(|w| !w.starts_with("CRITICAL:"))
+    }
+
+    /// Get summary string
+    pub fn summary(&self) -> String {
+        format!(
+            "Checked {} entries, {} with terms, {} unique terms, {} warnings",
+            self.entries_checked,
+            self.entries_with_terms,
+            self.term_occurrences.len(),
+            self.warnings.len()
+        )
+    }
+}
+
+/// Pre-flight checker that validates glossary before translation
+pub struct GlossaryPreflightChecker<'a> {
+    glossary: &'a Glossary,
+}
+
+impl<'a> GlossaryPreflightChecker<'a> {
+    /// Create a new preflight checker for a glossary
+    pub fn new(glossary: &'a Glossary) -> Self {
+        Self { glossary }
+    }
+
+    /// Check entries against the glossary before translation
+    ///
+    /// Returns a report with statistics and potential issues.
+    pub fn check_entries(&self, entries: &[DocumentEntry]) -> PreflightReport {
+        let mut report = PreflightReport {
+            entries_checked: entries.len(),
+            ..Default::default()
+        };
+
+        for entry in entries {
+            let text = &entry.original_text;
+            let text_lower = text.to_lowercase();
+            let mut has_term = false;
+
+            // Check character names
+            for name in &self.glossary.character_names {
+                if text.contains(name) || text_lower.contains(&name.to_lowercase()) {
+                    *report.term_occurrences.entry(name.clone()).or_insert(0) += 1;
+                    has_term = true;
+                }
+            }
+
+            // Check glossary terms
+            for source in self.glossary.terms.keys() {
+                if text_lower.contains(&source.to_lowercase()) {
+                    *report.term_occurrences.entry(source.clone()).or_insert(0) += 1;
+                    has_term = true;
+                }
+            }
+
+            if has_term {
+                report.entries_with_terms += 1;
+            }
+        }
+
+        // Generate warnings
+        for (term, count) in &report.term_occurrences {
+            if *count == 1 {
+                report.warnings.push(format!(
+                    "Term '{}' appears only once - verify it's correctly identified",
+                    term
+                ));
+            }
+        }
+
+        // Check for glossary terms without translations
+        for (source, term) in &self.glossary.terms {
+            if term.target.is_empty() {
+                report.warnings.push(format!(
+                    "CRITICAL: Term '{}' has no translation defined",
+                    source
+                ));
+            }
+        }
+
+        report
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

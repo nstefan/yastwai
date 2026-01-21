@@ -1314,6 +1314,151 @@ impl TranslationService {
     }
 }
 
+/// Adaptive batch sizer that calculates optimal batch size based on token limits
+///
+/// This struct estimates token counts from text length and adjusts batch sizes
+/// to stay within provider token limits while maximizing throughput.
+#[derive(Debug, Clone)]
+pub struct AdaptiveBatchSizer {
+    /// Average characters per token (varies by language, ~4 for English)
+    chars_per_token: f32,
+    /// Minimum batch size (never go below this)
+    min_batch_size: usize,
+    /// Maximum batch size (never exceed this)
+    max_batch_size: usize,
+    /// Safety margin for token estimation (0.8 = use 80% of limit)
+    safety_margin: f32,
+}
+
+impl Default for AdaptiveBatchSizer {
+    fn default() -> Self {
+        Self {
+            chars_per_token: 4.0,
+            min_batch_size: 1,
+            max_batch_size: 10,
+            safety_margin: 0.8,
+        }
+    }
+}
+
+impl AdaptiveBatchSizer {
+    /// Create a new adaptive batch sizer with custom settings
+    pub fn new(chars_per_token: f32, min_batch_size: usize, max_batch_size: usize) -> Self {
+        Self {
+            chars_per_token,
+            min_batch_size,
+            max_batch_size,
+            safety_margin: 0.8,
+        }
+    }
+
+    /// Estimate token count for given text
+    fn estimate_tokens(&self, text: &str) -> usize {
+        (text.len() as f32 / self.chars_per_token).ceil() as usize
+    }
+
+    /// Calculate optimal batch size for given entries and token limit
+    ///
+    /// Returns the number of entries that can fit within the token limit.
+    pub fn calculate_batch_size(&self, entries: &[SubtitleEntry], token_limit: usize) -> usize {
+        if entries.is_empty() {
+            return 0;
+        }
+
+        let effective_limit = (token_limit as f32 * self.safety_margin) as usize;
+        let mut total_tokens = 0;
+        let mut count = 0;
+
+        for entry in entries {
+            let entry_tokens = self.estimate_tokens(&entry.text);
+            // Account for prompt overhead (~50 tokens per entry for translation instructions)
+            let overhead = 50;
+
+            if total_tokens + entry_tokens + overhead > effective_limit && count > 0 {
+                break;
+            }
+
+            total_tokens += entry_tokens + overhead;
+            count += 1;
+
+            if count >= self.max_batch_size {
+                break;
+            }
+        }
+
+        count.max(self.min_batch_size).min(entries.len())
+    }
+}
+
+#[cfg(test)]
+mod batch_sizer_tests {
+    use super::*;
+
+    fn make_entry(text: &str, seq: usize) -> SubtitleEntry {
+        SubtitleEntry {
+            seq_num: seq,
+            start_time_ms: 0,
+            end_time_ms: 1000,
+            text: text.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_adaptiveBatchSizer_withEmptyEntries_shouldReturnZero() {
+        let sizer = AdaptiveBatchSizer::default();
+        assert_eq!(sizer.calculate_batch_size(&[], 4000), 0);
+    }
+
+    #[test]
+    fn test_adaptiveBatchSizer_withSmallEntries_shouldFitMultiple() {
+        let sizer = AdaptiveBatchSizer::default();
+        let entries: Vec<_> = (0..5)
+            .map(|i| make_entry("Hello world", i))
+            .collect();
+
+        // 4000 token limit should easily fit 5 small entries
+        let batch_size = sizer.calculate_batch_size(&entries, 4000);
+        assert_eq!(batch_size, 5);
+    }
+
+    #[test]
+    fn test_adaptiveBatchSizer_withLargeEntries_shouldLimitBatchSize() {
+        let sizer = AdaptiveBatchSizer::default();
+        // Create entries with ~1000 chars each (~250 tokens)
+        let long_text = "x".repeat(1000);
+        let entries: Vec<_> = (0..10)
+            .map(|i| make_entry(&long_text, i))
+            .collect();
+
+        // 500 token limit should only fit ~1-2 entries
+        let batch_size = sizer.calculate_batch_size(&entries, 500);
+        assert!(batch_size <= 2);
+        assert!(batch_size >= 1);
+    }
+
+    #[test]
+    fn test_adaptiveBatchSizer_shouldRespectMaxBatchSize() {
+        let sizer = AdaptiveBatchSizer::new(4.0, 1, 3); // max 3
+        let entries: Vec<_> = (0..10)
+            .map(|i| make_entry("Short", i))
+            .collect();
+
+        let batch_size = sizer.calculate_batch_size(&entries, 100000);
+        assert_eq!(batch_size, 3);
+    }
+
+    #[test]
+    fn test_adaptiveBatchSizer_shouldRespectMinBatchSize() {
+        let sizer = AdaptiveBatchSizer::new(4.0, 2, 10); // min 2
+        let long_text = "x".repeat(10000);
+        let entries = vec![make_entry(&long_text, 0), make_entry(&long_text, 1)];
+
+        // Even with tiny limit, should return at least min_batch_size
+        let batch_size = sizer.calculate_batch_size(&entries, 100);
+        assert_eq!(batch_size, 2);
+    }
+}
+
 // Note: BatchTranslator requires a real TranslationService with provider connection.
 // Meaningful unit tests for batch translation logic are in:
 // - validation/markers.rs (marker extraction and validation)

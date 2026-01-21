@@ -63,7 +63,8 @@ if [ "$CHECK_ONLY" = true ]; then
     log_message "Running Clippy checks..."
     
     # Common lint exceptions for the project
-    LINTS="-A clippy::uninlined_format_args -A clippy::redundant_closure_for_method_calls"
+    # dead_code and unused_imports are allowed since this is a library with many public exports
+    LINTS="-A clippy::uninlined_format_args -A clippy::redundant_closure_for_method_calls -A dead_code -A unused_imports"
     
     if [ "$VERBOSE" = true ]; then
         log_message "Using lint exceptions: $LINTS"

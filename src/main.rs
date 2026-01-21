@@ -422,7 +422,7 @@ async fn run_session_command(cmd: SessionCommands) -> Result<()> {
                         session.target_language,
                         session.completion_percentage(),
                         session.status_display(),
-                        session.source_file_path.split('/').last().unwrap_or(&session.source_file_path)
+                        session.source_file_path.split('/').next_back().unwrap_or(&session.source_file_path)
                     );
                 }
                 println!("{:-<80}", "");

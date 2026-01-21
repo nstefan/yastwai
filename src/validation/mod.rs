@@ -22,6 +22,8 @@ pub mod formatting;
 pub mod length;
 pub mod service;
 
-// Re-export main types
-pub use service::{ValidationService, ValidationConfig};
+// Re-export main types (public API, may not be used internally)
+#[allow(unused_imports)]
 pub use markers::MarkerValidator;
+#[allow(unused_imports)]
+pub use service::{ValidationConfig, ValidationService};

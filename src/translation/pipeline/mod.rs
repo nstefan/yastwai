@@ -19,6 +19,6 @@ pub mod validation_pass;
 // Re-export main types
 pub use adapter::{PipelineAdapter, PipelineMode};
 pub use analysis_pass::{AnalysisPass, AnalysisResult};
-pub use orchestrator::{PipelineConfig, PipelinePhase, PipelineProgress, PipelineResult, TranslationPipeline};
+pub use orchestrator::{PipelineConfig, PipelinePhase, PipelineProgress, TranslationPipeline};
 pub use translation_pass::{TranslationPass, TranslationPassConfig};
-pub use validation_pass::{RepairAction, RepairResult, ValidationIssue, ValidationPass, ValidationReport};
+pub use validation_pass::{FailureReason, RepairAction, RepairResult, ValidationIssue, ValidationPass, ValidationReport};

@@ -28,7 +28,11 @@ pub struct Config {
     /// Validation configuration
     #[serde(default)]
     pub validation: ValidationConfig,
-    
+
+    /// Experimental features (all disabled by default)
+    #[serde(default)]
+    pub experimental: ExperimentalFeatures,
+
     /// Log level
     #[serde(default)]
     pub log_level: LogLevel,
@@ -574,6 +578,59 @@ impl Default for ValidationConfig {
     }
 }
 
+/// Experimental features configuration
+/// All flags default to false for safe rollout
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ExperimentalFeatures {
+    /// Auto-tune concurrency based on provider characteristics
+    #[serde(default)]
+    pub enable_auto_tune_concurrency: bool,
+
+    /// Adaptive batch sizing based on token limits
+    #[serde(default)]
+    pub enable_adaptive_batch_sizing: bool,
+
+    /// Warm L1 cache from L2 on startup
+    #[serde(default)]
+    pub enable_cache_warming: bool,
+
+    /// Keep N batches in-flight for better throughput
+    #[serde(default)]
+    pub enable_speculative_batching: bool,
+
+    /// Use language-pair specific length ratio thresholds
+    #[serde(default)]
+    pub enable_language_pair_thresholds: bool,
+
+    /// Run glossary preflight checks before translation
+    #[serde(default)]
+    pub enable_glossary_preflight: bool,
+
+    /// Use fuzzy matching for glossary terms
+    #[serde(default)]
+    pub enable_fuzzy_glossary_matching: bool,
+
+    /// Retry with structured feedback on validation failure
+    #[serde(default)]
+    pub enable_feedback_retry: bool,
+
+    /// Use AI to validate semantic accuracy
+    #[serde(default)]
+    pub enable_semantic_validation: bool,
+
+    /// Dynamic context window sizing based on content
+    #[serde(default)]
+    pub enable_dynamic_context_window: bool,
+
+    /// Scene-aware batching for better context
+    #[serde(default)]
+    pub enable_scene_aware_batching: bool,
+
+    /// Track and maintain speaker consistency
+    #[serde(default)]
+    pub enable_speaker_tracking: bool,
+}
+
 /// Log verbosity level
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -731,6 +788,7 @@ impl Default for Config {
             session: SessionConfig::default(),
             cache: CacheConfig::default(),
             validation: ValidationConfig::default(),
+            experimental: ExperimentalFeatures::default(),
             log_level: LogLevel::default(),
         }
     }

@@ -702,6 +702,65 @@ impl Repository {
             .await
     }
 
+    /// Get recent cache entries for a language pair (for cache warming)
+    ///
+    /// Returns the most frequently used entries for the given language pair,
+    /// limited to the specified count.
+    pub async fn get_recent_cache_entries(
+        &self,
+        source_language: &str,
+        target_language: &str,
+        provider: &str,
+        model: &str,
+        limit: usize,
+    ) -> Result<Vec<CacheRecord>> {
+        let source_language = source_language.to_string();
+        let target_language = target_language.to_string();
+        let provider = provider.to_string();
+        let model = model.to_string();
+
+        self.db
+            .execute_async(move |conn| {
+                let mut stmt = conn.prepare(
+                    r#"
+                    SELECT id, source_text_hash, source_text, source_language, target_language,
+                           translated_text, provider, model, created_at, hit_count
+                    FROM translation_cache
+                    WHERE source_language = ?1
+                      AND target_language = ?2
+                      AND provider = ?3
+                      AND model = ?4
+                    ORDER BY hit_count DESC, created_at DESC
+                    LIMIT ?5
+                    "#,
+                )?;
+
+                let records = stmt
+                    .query_map(
+                        params![source_language, target_language, provider, model, limit as i64],
+                        |row| {
+                            Ok(CacheRecord {
+                                id: row.get(0)?,
+                                source_text_hash: row.get(1)?,
+                                source_text: row.get(2)?,
+                                source_language: row.get(3)?,
+                                target_language: row.get(4)?,
+                                translated_text: row.get(5)?,
+                                provider: row.get(6)?,
+                                model: row.get(7)?,
+                                created_at: row.get(8)?,
+                                hit_count: row.get(9)?,
+                            })
+                        },
+                    )?
+                    .filter_map(|r| r.ok())
+                    .collect();
+
+                Ok(records)
+            })
+            .await
+    }
+
     // =========================================================================
     // Validation Result Operations
     // =========================================================================

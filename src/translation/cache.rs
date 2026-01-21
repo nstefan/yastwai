@@ -365,6 +365,67 @@ impl TranslationCache {
     pub fn has_l2(&self) -> bool {
         self.config.l2_enabled && self.l2_repo.is_some()
     }
+
+    /// Warm L1 cache from L2 for a given language pair
+    ///
+    /// Loads the most frequently used translations from the database into
+    /// the in-memory cache for faster access during translation.
+    ///
+    /// Returns the number of entries loaded into L1.
+    pub async fn warm_from_l2(
+        &self,
+        source_language: &str,
+        target_language: &str,
+        limit: usize,
+    ) -> usize {
+        if !self.config.l1_enabled || !self.config.l2_enabled {
+            return 0;
+        }
+
+        let repo = match &self.l2_repo {
+            Some(r) => r,
+            None => return 0,
+        };
+
+        let entries = match repo
+            .get_recent_cache_entries(
+                source_language,
+                target_language,
+                &self.config.provider,
+                &self.config.model,
+                limit,
+            )
+            .await
+        {
+            Ok(e) => e,
+            Err(e) => {
+                debug!("Failed to fetch L2 entries for warming: {}", e);
+                return 0;
+            }
+        };
+
+        let count = entries.len();
+        if count == 0 {
+            return 0;
+        }
+
+        let mut cache = self.l1_cache.write().await;
+        for entry in entries {
+            let key = CacheKey::new(
+                &entry.source_text,
+                &entry.source_language,
+                &entry.target_language,
+            );
+            cache.insert(key, entry.translated_text);
+        }
+
+        debug!(
+            "Warmed L1 cache with {} entries for {} -> {}",
+            count, source_language, target_language
+        );
+
+        count
+    }
 }
 
 impl Default for TranslationCache {

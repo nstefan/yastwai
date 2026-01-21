@@ -521,7 +521,7 @@ impl ConsistencyChecker {
 
                     // Very different lengths might indicate inconsistent translation
                     let len_ratio = t1.len() as f32 / t2.len().max(1) as f32;
-                    if len_ratio < 0.3 || len_ratio > 3.0 {
+                    if !(0.3..=3.0).contains(&len_ratio) {
                         issues.push(StyleIssue::InconsistentTerm {
                             term: term.clone(),
                             translations: vec![t1.clone(), t2.clone()],

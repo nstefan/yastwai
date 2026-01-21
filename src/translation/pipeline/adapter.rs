@@ -6,6 +6,9 @@
  * migration while maintaining full backwards compatibility.
  */
 
+use std::convert::Infallible;
+use std::str::FromStr;
+
 use anyhow::Result;
 
 use crate::subtitle_processor::SubtitleEntry;
@@ -173,16 +176,19 @@ impl PipelineMode {
     pub fn is_pipeline_enabled(&self) -> bool {
         !matches!(self, PipelineMode::Legacy)
     }
+}
 
-    /// Parse from string configuration.
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for PipelineMode {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "fast" => PipelineMode::Fast,
             "standard" | "default" => PipelineMode::Standard,
             "quality" => PipelineMode::Quality,
             "legacy" | "off" | "disabled" => PipelineMode::Legacy,
             _ => PipelineMode::Legacy,
-        }
+        })
     }
 }
 
@@ -192,12 +198,12 @@ mod tests {
 
     #[test]
     fn test_pipelineMode_fromStr_shouldParseModes() {
-        assert_eq!(PipelineMode::from_str("fast"), PipelineMode::Fast);
-        assert_eq!(PipelineMode::from_str("standard"), PipelineMode::Standard);
-        assert_eq!(PipelineMode::from_str("quality"), PipelineMode::Quality);
-        assert_eq!(PipelineMode::from_str("legacy"), PipelineMode::Legacy);
-        assert_eq!(PipelineMode::from_str("off"), PipelineMode::Legacy);
-        assert_eq!(PipelineMode::from_str("unknown"), PipelineMode::Legacy);
+        assert_eq!("fast".parse::<PipelineMode>().unwrap(), PipelineMode::Fast);
+        assert_eq!("standard".parse::<PipelineMode>().unwrap(), PipelineMode::Standard);
+        assert_eq!("quality".parse::<PipelineMode>().unwrap(), PipelineMode::Quality);
+        assert_eq!("legacy".parse::<PipelineMode>().unwrap(), PipelineMode::Legacy);
+        assert_eq!("off".parse::<PipelineMode>().unwrap(), PipelineMode::Legacy);
+        assert_eq!("unknown".parse::<PipelineMode>().unwrap(), PipelineMode::Legacy);
     }
 
     #[test]

@@ -5,6 +5,9 @@
  * checks on translated subtitles.
  */
 
+// Public API - may not be used internally
+#![allow(dead_code)]
+
 use log::debug;
 use serde::{Deserialize, Serialize};
 

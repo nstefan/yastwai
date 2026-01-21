@@ -340,7 +340,7 @@ impl Controller {
         let pending_count = chunks.iter().map(|c| c.len()).sum::<usize>();
         let entries_per_request = self.config.translation.common.entries_per_request.max(1);
         let max_concurrent = self.config.translation.optimal_concurrent_requests().max(5);
-        let total_work_items = (pending_count + entries_per_request - 1) / entries_per_request;
+        let total_work_items = pending_count.div_ceil(entries_per_request);
         let use_parallel = self.config.translation.common.parallel_mode;
 
         // Create a progress bar for translation tracking - use work items for accurate ETA
@@ -388,7 +388,8 @@ impl Controller {
         let log_capture_clone = Arc::clone(&log_capture);
 
         // Use the translation service to translate all chunks
-        let translation_service = TranslationService::new(self.config.translation.clone())?;
+        let translation_service = TranslationService::new(self.config.translation.clone())?
+            .with_experimental_features(&self.config.experimental);
 
         // Clone the progress_bar for use in the callback
         let pb = progress_bar.clone();
@@ -424,7 +425,7 @@ impl Controller {
         };
 
         // Check pipeline mode configuration
-        let pipeline_mode = PipelineMode::from_str(&self.config.translation.common.pipeline_mode);
+        let pipeline_mode: PipelineMode = self.config.translation.common.pipeline_mode.parse().unwrap_or_default();
 
         // Translate using either new pipeline or legacy batch translator
         let (mut new_translated_entries, token_usage) = if pipeline_mode.is_pipeline_enabled() {

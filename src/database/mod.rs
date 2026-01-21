@@ -19,6 +19,8 @@ pub mod connection;
 pub mod repository;
 pub mod models;
 
-// Re-export main types
+// Re-export main types (public API, may not be used internally)
+#[allow(unused_imports)]
 pub use connection::DatabaseConnection;
+#[allow(unused_imports)]
 pub use repository::Repository;

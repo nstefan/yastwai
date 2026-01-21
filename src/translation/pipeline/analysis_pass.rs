@@ -9,8 +9,8 @@
  */
 
 use crate::translation::context::{
-    ExtractionConfig, GlossaryExtractor, HistorySummarizer, SceneDetectionConfig, SceneDetector,
-    SummarizationConfig,
+    ExtractionConfig, GlossaryExtractor, GlossaryPreflightChecker, HistorySummarizer,
+    PreflightReport, SceneDetectionConfig, SceneDetector, SummarizationConfig,
 };
 use crate::translation::document::{Glossary, Scene, SubtitleDocument};
 
@@ -34,6 +34,9 @@ pub struct AnalysisConfig {
 
     /// Whether to generate a document summary
     pub generate_summary: bool,
+
+    /// Whether to run glossary preflight check
+    pub run_preflight: bool,
 }
 
 impl Default for AnalysisConfig {
@@ -45,6 +48,7 @@ impl Default for AnalysisConfig {
             extract_glossary: true,
             detect_scenes: true,
             generate_summary: true,
+            run_preflight: false, // Controlled by experimental flag
         }
     }
 }
@@ -59,6 +63,7 @@ impl AnalysisConfig {
             extract_glossary: true,
             detect_scenes: false,
             generate_summary: false,
+            run_preflight: false,
         }
     }
 
@@ -71,6 +76,7 @@ impl AnalysisConfig {
             extract_glossary: true,
             detect_scenes: true,
             generate_summary: true,
+            run_preflight: true,
         }
     }
 
@@ -89,6 +95,12 @@ impl AnalysisConfig {
     /// Enable or disable summary generation.
     pub fn with_summary_generation(mut self, enabled: bool) -> Self {
         self.generate_summary = enabled;
+        self
+    }
+
+    /// Enable or disable glossary preflight checking.
+    pub fn with_preflight(mut self, enabled: bool) -> Self {
+        self.run_preflight = enabled;
         self
     }
 }
@@ -113,6 +125,9 @@ pub struct AnalysisResult {
 
     /// Number of scenes detected
     pub scene_count: usize,
+
+    /// Glossary preflight report (if run)
+    pub preflight_report: Option<PreflightReport>,
 }
 
 impl AnalysisResult {
@@ -125,12 +140,16 @@ impl AnalysisResult {
             character_count: 0,
             term_count: 0,
             scene_count: 0,
+            preflight_report: None,
         }
     }
 
     /// Check if any analysis was performed.
     pub fn has_data(&self) -> bool {
-        !self.glossary.is_empty() || !self.scenes.is_empty() || self.summary.is_some()
+        !self.glossary.is_empty()
+            || !self.scenes.is_empty()
+            || self.summary.is_some()
+            || self.preflight_report.is_some()
     }
 
     /// Get a summary description of the analysis.
@@ -151,6 +170,10 @@ impl AnalysisResult {
 
         if self.summary.is_some() {
             parts.push("summary generated".to_string());
+        }
+
+        if let Some(ref report) = self.preflight_report {
+            parts.push(format!("preflight: {}", report.summary()));
         }
 
         if parts.is_empty() {
@@ -215,6 +238,12 @@ impl AnalysisPass {
             if !summary.text.is_empty() {
                 result.summary = Some(summary.text);
             }
+        }
+
+        // Run glossary preflight check
+        if self.config.run_preflight && !result.glossary.is_empty() {
+            let checker = GlossaryPreflightChecker::new(&result.glossary);
+            result.preflight_report = Some(checker.check_entries(&doc.entries));
         }
 
         result
