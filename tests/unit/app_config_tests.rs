@@ -11,6 +11,7 @@ fn find_provider_config<'a>(config: &'a Config, provider: &TranslationProvider) 
         TranslationProvider::OpenAI => "openai",
         TranslationProvider::Anthropic => "anthropic",
         TranslationProvider::LMStudio => "lmstudio",
+        TranslationProvider::VLLM => "vllm",
     };
     config.translation.available_providers.iter()
         .find(|p| p.provider_type == provider_str)
@@ -143,6 +144,12 @@ fn test_providerSpecificDefaults_shouldHaveCorrectRateLimits() {
     // LM Studio (local) should have no rate limit by default
     let lmstudio_config = ProviderConfig::new(TranslationProvider::LMStudio);
     assert_eq!(lmstudio_config.rate_limit, None);
+
+    // vLLM (local high-throughput) should have no rate limit and high concurrency
+    let vllm_config = ProviderConfig::new(TranslationProvider::VLLM);
+    assert_eq!(vllm_config.rate_limit, None);
+    assert_eq!(vllm_config.concurrent_requests, 16); // vLLM supports high concurrency
+    assert_eq!(vllm_config.endpoint, "http://localhost:8000/v1");
 }
 
 /// Test that ExperimentalFeatures defaults all flags to false

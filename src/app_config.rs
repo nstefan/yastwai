@@ -54,6 +54,8 @@ pub enum TranslationProvider {
     Anthropic,
     // @provider: LM Studio (OpenAI-compatible local server)
     LMStudio,
+    // @provider: vLLM (high-throughput local inference server)
+    VLLM,
 }
 
 impl TranslationProvider {
@@ -64,9 +66,10 @@ impl TranslationProvider {
             Self::OpenAI => "OpenAI",
             Self::Anthropic => "Anthropic",
             Self::LMStudio => "LM Studio",
+            Self::VLLM => "vLLM",
         }
     }
-    
+
     // @returns: Lowercase provider identifier
     pub fn to_lowercase_string(&self) -> String {
         match self {
@@ -74,6 +77,7 @@ impl TranslationProvider {
             Self::OpenAI => "openai".to_string(),
             Self::Anthropic => "anthropic".to_string(),
             Self::LMStudio => "lmstudio".to_string(),
+            Self::VLLM => "vllm".to_string(),
         }
     }
 }
@@ -88,13 +92,14 @@ impl std::fmt::Display for TranslationProvider {
 // Implement FromStr trait for TranslationProvider
 impl std::str::FromStr for TranslationProvider {
     type Err = anyhow::Error;
-    
+
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
             "ollama" => Ok(Self::Ollama),
             "openai" => Ok(Self::OpenAI),
             "anthropic" => Ok(Self::Anthropic),
             "lmstudio" => Ok(Self::LMStudio),
+            "vllm" => Ok(Self::VLLM),
             _ => Err(anyhow!("Invalid provider type: {}", s)),
         }
     }
@@ -181,9 +186,19 @@ impl ProviderConfig {
                 timeout_secs: default_timeout_secs(),
                 rate_limit: default_lmstudio_rate_limit(),
             },
+            TranslationProvider::VLLM => Self {
+                provider_type: "vllm".to_string(),
+                model: default_vllm_model(),
+                api_key: String::new(),
+                endpoint: default_vllm_endpoint(),
+                concurrent_requests: default_vllm_concurrent_requests(),
+                max_chars_per_request: default_vllm_max_chars_per_request(),
+                timeout_secs: default_vllm_timeout_secs(),
+                rate_limit: default_vllm_rate_limit(),
+            },
         }
     }
-    
+
 }
 
 /// Ollama service configuration
@@ -750,6 +765,32 @@ fn default_lmstudio_rate_limit() -> Option<u32> {
     None
 }
 
+// vLLM defaults - optimized for high-throughput local inference
+fn default_vllm_endpoint() -> String {
+    "http://localhost:8000/v1".to_string()
+}
+
+fn default_vllm_model() -> String {
+    // Common default; users should set to their loaded model
+    "meta-llama/Llama-3.1-8B-Instruct".to_string()
+}
+
+fn default_vllm_concurrent_requests() -> usize {
+    16 // vLLM handles high concurrency well with continuous batching
+}
+
+fn default_vllm_max_chars_per_request() -> usize {
+    4000 // vLLM can handle larger context efficiently
+}
+
+fn default_vllm_timeout_secs() -> u64 {
+    180 // Longer timeout for batch processing
+}
+
+fn default_vllm_rate_limit() -> Option<u32> {
+    None // No rate limit for local vLLM server
+}
+
 impl Config {
     
     /// Validate the configuration for consistency and required values
@@ -830,6 +871,7 @@ impl TranslationConfig {
             TranslationProvider::OpenAI => default_openai_model(),
             TranslationProvider::Anthropic => default_anthropic_model(),
             TranslationProvider::LMStudio => default_lmstudio_model(),
+            TranslationProvider::VLLM => default_vllm_model(),
         }
     }
     
@@ -859,6 +901,7 @@ impl TranslationConfig {
             TranslationProvider::OpenAI => default_openai_endpoint(),
             TranslationProvider::Anthropic => default_anthropic_endpoint(),
             TranslationProvider::LMStudio => default_lmstudio_endpoint(),
+            TranslationProvider::VLLM => default_vllm_endpoint(),
         }
     }
     
@@ -889,6 +932,7 @@ impl TranslationConfig {
             TranslationProvider::OpenAI => default_openai_rate_limit(),
             TranslationProvider::Anthropic => default_anthropic_rate_limit(),
             TranslationProvider::LMStudio => default_lmstudio_rate_limit(),
+            TranslationProvider::VLLM => default_vllm_rate_limit(),
         }
     }
 }
@@ -906,7 +950,8 @@ impl Default for TranslationConfig {
         config.available_providers.push(ProviderConfig::new(TranslationProvider::OpenAI));
         config.available_providers.push(ProviderConfig::new(TranslationProvider::Anthropic));
         config.available_providers.push(ProviderConfig::new(TranslationProvider::LMStudio));
-        
+        config.available_providers.push(ProviderConfig::new(TranslationProvider::VLLM));
+
         config
     }
 } 

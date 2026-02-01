@@ -40,6 +40,14 @@
         "max_chars_per_request": 8000,
         "timeout_secs": 60,
         "rate_limit": 45
+      },
+      {
+        "type": "vllm",
+        "model": "meta-llama/Llama-3.1-8B-Instruct",
+        "endpoint": "http://localhost:8000/v1",
+        "concurrent_requests": 16,
+        "max_chars_per_request": 4000,
+        "timeout_secs": 180
       }
     ],
     "common": {

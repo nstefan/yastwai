@@ -15,6 +15,7 @@ use crate::app_config::{TranslationConfig, TranslationProvider as ConfigTranslat
 use crate::providers::ollama::{Ollama, GenerationRequest};
 use crate::providers::openai::{OpenAI, OpenAIRequest};
 use crate::providers::anthropic::{Anthropic, AnthropicRequest};
+use crate::providers::vllm::{VLLM, VLLMRequest};
 use crate::providers::Provider;
 use super::cache::TranslationCache;
 use super::concurrency::ProviderProfile;
@@ -163,23 +164,29 @@ enum TranslationProviderImpl {
         /// Client instance
         client: Ollama,
     },
-    
+
     /// OpenAI API service
     OpenAI {
         /// Client instance
         client: OpenAI,
     },
-    
+
     /// LM Studio local server (OpenAI-compatible)
     LMStudio {
         /// Client instance (OpenAI-compatible)
         client: OpenAI,
     },
-    
+
     /// Anthropic API service
     Anthropic {
         /// Client instance
         client: Anthropic,
+    },
+
+    /// vLLM high-throughput inference server
+    VLLM {
+        /// Client instance
+        client: VLLM,
     },
 }
 
@@ -281,7 +288,7 @@ impl TranslationService {
                 let rate_limit = config.get_rate_limit();
                 let retry_count = config.common.retry_count;
                 let retry_backoff_ms = config.common.retry_backoff_ms;
-                
+
                 TranslationProviderImpl::Anthropic {
                     client: Anthropic::new_with_config(
                         config.get_api_key(),
@@ -289,6 +296,19 @@ impl TranslationService {
                         retry_count,
                         retry_backoff_ms,
                         rate_limit,
+                    ),
+                }
+            },
+            ConfigTranslationProvider::VLLM => {
+                let retry_count = config.common.retry_count;
+                let retry_backoff_ms = config.common.retry_backoff_ms;
+
+                TranslationProviderImpl::VLLM {
+                    client: VLLM::new_with_config(
+                        config.get_endpoint(),
+                        config.get_api_key(),
+                        retry_count,
+                        retry_backoff_ms,
                     ),
                 }
             },
@@ -430,6 +450,45 @@ impl TranslationService {
                             });
                         }
                         Err(anyhow!("Failed to connect to Anthropic API: {}", e))
+                    }
+                }
+            },
+            TranslationProviderImpl::VLLM { client } => {
+                // For vLLM, use the health check endpoint first, then test translation
+                let health_result = client.health_check().await;
+                match health_result {
+                    Ok(_) => {
+                        if let Some(log) = &log_capture {
+                            log.lock().await.push(LogEntry {
+                                level: "INFO".to_string(),
+                                message: "Successfully connected to vLLM server".to_string(),
+                            });
+                        }
+                        Ok(())
+                    },
+                    Err(_) => {
+                        // Health check may not be available, try test translation instead
+                        let test_result = self.test_translation(source_language, target_language).await;
+                        match test_result {
+                            Ok(_) => {
+                                if let Some(log) = &log_capture {
+                                    log.lock().await.push(LogEntry {
+                                        level: "INFO".to_string(),
+                                        message: "Successfully connected to vLLM server".to_string(),
+                                    });
+                                }
+                                Ok(())
+                            },
+                            Err(e) => {
+                                if let Some(log) = &log_capture {
+                                    log.lock().await.push(LogEntry {
+                                        level: "ERROR".to_string(),
+                                        message: format!("Failed to connect to vLLM server: {}", e),
+                                    });
+                                }
+                                Err(anyhow!("Failed to connect to vLLM server: {}", e))
+                            }
+                        }
                     }
                 }
             }
@@ -588,14 +647,14 @@ impl TranslationService {
                     .system(&system_prompt)
                     .add_message("user", text)
                     .temperature(self.config.common.temperature);
-                
+
                 // Send request
                 let result = client.complete(request).await;
-                
+
                 match result {
                     Ok(response) => {
                         let duration = start_time.elapsed();
-                        
+
                         // Log the response if requested
                         if let Some(log) = &log_capture {
                             log.lock().await.push(LogEntry {
@@ -603,18 +662,18 @@ impl TranslationService {
                                 message: format!("Anthropic response received in {:?}", duration),
                             });
                         }
-                        
+
                         // Extract the translated text from the response
                         // Extract the translated text
                         let translated_text = Anthropic::extract_text(&response);
-                        
+
                         // Get token usage
                         let prompt_tokens = Some(response.usage.input_tokens as u64);
                         let completion_tokens = Some(response.usage.output_tokens as u64);
-                        
+
                         // Store in cache
                         self.cache.store(text, source_language, target_language, &translated_text).await;
-                        
+
                         // Return the translated text and token usage
                         Ok((translated_text, Some((prompt_tokens, completion_tokens, Some(duration)))))
                     },
@@ -626,8 +685,64 @@ impl TranslationService {
                                 message: format!("Anthropic translation error: {}", e),
                             });
                         }
-                        
+
                         Err(anyhow!("Anthropic translation error: {}", e))
+                    }
+                }
+            },
+            TranslationProviderImpl::VLLM { client } => {
+                // Create vLLM request
+                let request = VLLMRequest::new(self.config.get_model())
+                    .add_message("system", &system_prompt)
+                    .add_message("user", text)
+                    .temperature(self.config.common.temperature)
+                    .max_tokens(self.max_tokens_for_model(&self.config.get_model()));
+
+                // Send request
+                let result = client.complete(request).await;
+
+                match result {
+                    Ok(response) => {
+                        let duration = start_time.elapsed();
+
+                        // Log the response if requested
+                        if let Some(log) = &log_capture {
+                            log.lock().await.push(LogEntry {
+                                level: "INFO".to_string(),
+                                message: format!("vLLM response received in {:?}", duration),
+                            });
+                        }
+
+                        // Extract the translated text
+                        let translated_text = if !response.choices.is_empty() {
+                            response.choices[0].message.content.clone()
+                        } else {
+                            return Err(anyhow!("vLLM returned empty response"));
+                        };
+
+                        // Extract token usage
+                        let (prompt_tokens, completion_tokens) = if let Some(usage) = response.usage.as_ref() {
+                            (Some(usage.prompt_tokens as u64), Some(usage.completion_tokens as u64))
+                        } else {
+                            (None, None)
+                        };
+
+                        // Store in cache
+                        self.cache.store(text, source_language, target_language, &translated_text).await;
+
+                        // Return the translated text and token usage
+                        Ok((translated_text, Some((prompt_tokens, completion_tokens, Some(duration)))))
+                    },
+                    Err(e) => {
+                        // Log the error if requested
+                        if let Some(log) = &log_capture {
+                            log.lock().await.push(LogEntry {
+                                level: "ERROR".to_string(),
+                                message: format!("vLLM translation error: {}", e),
+                            });
+                        }
+
+                        Err(anyhow!("vLLM translation error: {}", e))
                     }
                 }
             }

@@ -46,6 +46,7 @@ pub trait Provider: Send + Sync + Debug {
 pub mod ollama;
 pub mod openai;
 pub mod anthropic;
+pub mod vllm;
 
 #[cfg(test)]
 pub mod mock; 

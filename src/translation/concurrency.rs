@@ -55,6 +55,13 @@ impl ProviderProfile {
                 recommended_batch_size: 4,
                 supports_streaming: true,
             },
+            TranslationProvider::VLLM => Self {
+                // vLLM excels at high-throughput with continuous batching
+                max_concurrent_requests: 16,
+                target_rpm: None, // No rate limit for local vLLM
+                recommended_batch_size: 10,
+                supports_streaming: true,
+            },
         }
     }
 
