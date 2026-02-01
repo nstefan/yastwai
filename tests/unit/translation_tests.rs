@@ -107,8 +107,7 @@ fn test_add_token_usage_withTokenCounts_shouldTrackCorrectly() {
 #[tokio::test]
 async fn test_translate_batches_processes_all_chunks_withMultipleBatches_shouldProcessAll() -> Result<()> {
     // Create mock data - 5 batches with 2 entries each
-    let batches = vec![
-        vec![
+    let batches = [vec![
             SubtitleEntry::new(1, 0, 1000, "First subtitle batch 1".to_string()),
             SubtitleEntry::new(2, 1001, 2000, "Second subtitle batch 1".to_string()),
         ],
@@ -127,8 +126,7 @@ async fn test_translate_batches_processes_all_chunks_withMultipleBatches_shouldP
         vec![
             SubtitleEntry::new(9, 8001, 9000, "First subtitle batch 5".to_string()),
             SubtitleEntry::new(10, 9001, 10000, "Second subtitle batch 5".to_string()),
-        ],
-    ];
+        ]];
     
     // Create a progress counter to track callback execution
     let progress_count = Arc::new(AtomicUsize::new(0));
@@ -138,7 +136,7 @@ async fn test_translate_batches_processes_all_chunks_withMultipleBatches_shouldP
     let all_processed_entries = Arc::new(StdMutex::new(Vec::new()));
     
     // Process each batch sequentially, simulating the behavior we want to test
-    for (_i, batch) in batches.iter().enumerate() {
+    for batch in batches.iter() {
         let processed_entries: Vec<SubtitleEntry> = batch.iter()
             .map(|entry| {
                 let mut new_entry = entry.clone();
@@ -288,10 +286,10 @@ async fn test_anthropic_provider_log_capture_during_translation_shouldCaptureErr
     ];
     
     // Create batches
-    let batches = vec![entries];
+    let _batches = [entries];
     
     // Create a mock translation service with the custom config
-    let translation_service = TranslationService::new(config.clone())?;
+    let _translation_service = TranslationService::new(config.clone())?;
     
     // Simulate the translation process by adding logs directly to the log_capture
     {

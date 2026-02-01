@@ -1,3 +1,6 @@
+// Allow dead code - some config structs are for external consumers
+#![allow(dead_code)]
+
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::default::Default;

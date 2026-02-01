@@ -4,15 +4,18 @@
  * This module contains functionality for processing translations in batches,
  * with support for concurrency, progress tracking, error handling, and
  * quality validation.
- * 
+ *
  * ## Performance Optimization
- * 
+ *
  * This module uses a parallel entry-level translation strategy:
  * - Instead of sending many entries in ONE API request, we send multiple smaller
  *   concurrent requests (each with 1-5 entries)
  * - This maximizes LLM throughput by keeping multiple inference requests in flight
  * - Configurable via `parallel_entries_per_request` and `max_concurrent_requests`
  */
+
+// Allow dead code - some batch strategies are experimental
+#![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
 use log::{debug, error};
@@ -1404,13 +1407,13 @@ mod batch_sizer_tests {
     }
 
     #[test]
-    fn test_adaptiveBatchSizer_withEmptyEntries_shouldReturnZero() {
+    fn test_adaptive_batch_sizer_with_empty_entries_should_return_zero() {
         let sizer = AdaptiveBatchSizer::default();
         assert_eq!(sizer.calculate_batch_size(&[], 4000), 0);
     }
 
     #[test]
-    fn test_adaptiveBatchSizer_withSmallEntries_shouldFitMultiple() {
+    fn test_adaptive_batch_sizer_with_small_entries_should_fit_multiple() {
         let sizer = AdaptiveBatchSizer::default();
         let entries: Vec<_> = (0..5)
             .map(|i| make_entry("Hello world", i))
@@ -1422,7 +1425,7 @@ mod batch_sizer_tests {
     }
 
     #[test]
-    fn test_adaptiveBatchSizer_withLargeEntries_shouldLimitBatchSize() {
+    fn test_adaptive_batch_sizer_with_large_entries_should_limit_batch_size() {
         let sizer = AdaptiveBatchSizer::default();
         // Create entries with ~1000 chars each (~250 tokens)
         let long_text = "x".repeat(1000);
@@ -1437,7 +1440,7 @@ mod batch_sizer_tests {
     }
 
     #[test]
-    fn test_adaptiveBatchSizer_shouldRespectMaxBatchSize() {
+    fn test_adaptive_batch_sizer_should_respect_max_batch_size() {
         let sizer = AdaptiveBatchSizer::new(4.0, 1, 3); // max 3
         let entries: Vec<_> = (0..10)
             .map(|i| make_entry("Short", i))
@@ -1448,7 +1451,7 @@ mod batch_sizer_tests {
     }
 
     #[test]
-    fn test_adaptiveBatchSizer_shouldRespectMinBatchSize() {
+    fn test_adaptive_batch_sizer_should_respect_min_batch_size() {
         let sizer = AdaptiveBatchSizer::new(4.0, 2, 10); // min 2
         let long_text = "x".repeat(10000);
         let entries = vec![make_entry(&long_text, 0), make_entry(&long_text, 1)];

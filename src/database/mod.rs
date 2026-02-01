@@ -5,22 +5,17 @@
  * - Translation sessions with resume capability
  * - Translation cache for cross-session deduplication
  * - Quality validation results
- *
- * # Architecture
- *
- * - `schema`: Database schema definitions and migrations
- * - `connection`: Connection pool management
- * - `repository`: Data access layer for all database operations
- * - `models`: Database entity models and DTOs
  */
+
+// Allow dead code and unused imports - database types are for library consumers
+#![allow(dead_code)]
+#![allow(unused_imports)]
 
 pub mod schema;
 pub mod connection;
 pub mod repository;
 pub mod models;
 
-// Re-export main types (public API, may not be used internally)
-#[allow(unused_imports)]
+// Re-export main types
 pub use connection::DatabaseConnection;
-#[allow(unused_imports)]
 pub use repository::Repository;

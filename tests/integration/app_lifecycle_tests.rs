@@ -12,7 +12,7 @@ use crate::common;
 #[test]
 fn test_controller_initialization_withDefaultConfig_shouldSucceed() -> Result<()> {
     // Create a controller with test configuration - should succeed without errors
-    let controller = Controller::new_for_test()?;
+    let _controller = Controller::new_for_test()?;
     
     // If we got here, the controller was successfully initialized
     assert!(true);
@@ -29,7 +29,7 @@ fn test_controller_with_custom_config_shouldInitializeWithoutErrors() -> Result<
     config.target_language = "de".to_string();
     
     // Create a controller with the custom configuration - should succeed
-    let controller = Controller::with_config(config.clone())?;
+    let _controller = Controller::with_config(config.clone())?;
     
     // If we got here, the controller was successfully initialized with custom config
     assert!(true);

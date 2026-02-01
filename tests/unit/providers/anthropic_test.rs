@@ -109,7 +109,7 @@ async fn test_anthropic_retry_logic() {
     
     let start = Instant::now();
     let result = anthropic.complete(request).await;
-    let elapsed = start.elapsed();
+    let _elapsed = start.elapsed();
     
     // Should fail
     assert!(result.is_err());
@@ -188,14 +188,14 @@ async fn test_anthropic_rate_limiter() {
     use std::time::Instant;
 
     // Create a client with a very low rate limit (2 requests per minute)
-    let client = Anthropic::new_with_rate_limit(
+    let _client = Anthropic::new_with_rate_limit(
         "test-api-key",
         "",  // Use default endpoint
         2,   // Only 2 requests per minute (1 every 30 seconds)
     );
     
     // Create a test request - this would normally be sent to the API
-    let request = AnthropicRequest::new("claude-3-haiku-20240307", 100)
+    let _request = AnthropicRequest::new("claude-3-haiku-20240307", 100)
         .add_message("user", "Hello, world!");
     
     // In a real test, we would make API calls, but since we can't do that

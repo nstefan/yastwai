@@ -1,9 +1,12 @@
-/*! 
+/*!
  * Error types for the yastwai application.
- * 
+ *
  * This module contains custom error types for different parts of the application,
  * using the thiserror crate for ergonomic error definitions.
  */
+
+// Allow dead code - error types are for library consumers
+#![allow(dead_code)]
 
 use thiserror::Error;
 

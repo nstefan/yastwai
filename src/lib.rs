@@ -40,11 +40,9 @@
  */
 
 // Global lints configuration
-// These lints will be allowed but not auto-fixed
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::redundant_closure_for_method_calls)]
-// Library exports many public types that may not be used internally
-#![allow(dead_code)]
+// Public API re-exports may not be used internally
 #![allow(unused_imports)]
 
 // Public modules

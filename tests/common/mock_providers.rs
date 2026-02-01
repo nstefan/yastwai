@@ -32,8 +32,10 @@ pub struct ApiCallTracker {
 
 /// Type of error to simulate
 #[derive(Debug, Clone, Copy)]
+#[derive(Default)]
 pub enum MockErrorType {
     /// Authentication error (invalid API key)
+    #[default]
     Auth,
     /// Connection error
     Connection,
@@ -43,11 +45,6 @@ pub enum MockErrorType {
     Api,
 }
 
-impl Default for MockErrorType {
-    fn default() -> Self {
-        MockErrorType::Auth
-    }
-}
 
 /// Mock implementation of OpenAI provider
 #[derive(Debug)]

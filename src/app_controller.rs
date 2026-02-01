@@ -60,6 +60,7 @@ impl Controller {
     }
 
     /// Check if session persistence is available
+    #[allow(dead_code)]
     pub fn has_session_support(&self) -> bool {
         self.session_manager.is_some()
     }

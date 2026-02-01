@@ -5,12 +5,10 @@
  * - Session creation and tracking
  * - Resume capability for interrupted translations
  * - Progress tracking and state management
- *
- * # Architecture
- *
- * - `manager`: SessionManager for orchestrating session lifecycle
- * - `models`: Session-specific DTOs and helper types
  */
+
+// Allow dead code - session types have extra methods for future use
+#![allow(dead_code)]
 
 pub mod manager;
 pub mod models;

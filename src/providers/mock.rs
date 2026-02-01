@@ -185,9 +185,7 @@ impl Provider for MockProvider {
 
             MockBehavior::PartialMarkers => {
                 // Return response with some markers missing
-                let text = format!(
-                    "<<ENTRY_0>>\n[TRANSLATED] First part\nMissing markers in middle\n<<END>>"
-                );
+                let text = "<<ENTRY_0>>\n[TRANSLATED] First part\nMissing markers in middle\n<<END>>".to_string();
                 Ok(MockResponse {
                     text,
                     prompt_tokens: Some(10),

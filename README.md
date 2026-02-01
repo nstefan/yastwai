@@ -37,7 +37,6 @@ YASTwAI is a command-line tool that extracts subtitles from videos and translate
 
 * Rust and Cargo (1.85.0 or newer)
 * FFmpeg installed on your system
-* GitHub CLI (gh) for pull request operations
 
 ### Build from Source
 
@@ -59,101 +58,27 @@ cp conf.example.json conf.json
 
 ## Configuration
 
-```json
-{
-  "source_language": "en",
-  "target_language": "fr",
-  "translation": {
-    "provider": "ollama",
-    "available_providers": [
-      {
-        "type": "ollama",
-        "model": "llama2",
-        "endpoint": "http://localhost:11434",
-        "concurrent_requests": 4,
-        "max_chars_per_request": 1000,
-        "timeout_secs": 30
-      },
-      {
-        "type": "openai",
-        "model": "gpt-4o-mini",
-        "api_key": "your_api_key",
-        "endpoint": "https://api.openai.com/v1",
-        "concurrent_requests": 4,
-        "max_chars_per_request": 1000,
-        "timeout_secs": 30,
-        "rate_limit": 60
-      },
-      {
-        "type": "lmstudio",
-        "model": "local-model",
-        "api_key": "lm-studio",
-        "endpoint": "http://localhost:1234/v1",
-        "concurrent_requests": 4,
-        "max_chars_per_request": 1000,
-        "timeout_secs": 30
-      },
-      {
-        "type": "anthropic",
-        "model": "claude-3-haiku",
-        "api_key": "your_api_key",
-        "endpoint": "https://api.anthropic.com",
-        "concurrent_requests": 4,
-        "max_chars_per_request": 8000,
-        "timeout_secs": 60,
-        "rate_limit": 45
-      }
-    ],
-    "common": {
-      "system_prompt": "You are a professional translator. Translate the following text from {source_language} to {target_language}. Preserve formatting and maintain the original meaning and tone.",
-      "rate_limit_delay_ms": 500,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000,
-      "temperature": 0.3,
-      "parallel_mode": true,
-      "entries_per_request": 3,
-      "context_entries_count": 3,
-      "pipeline_mode": "legacy"
-    }
-  },
-  "session": {
-    "enabled": true,
-    "auto_resume": true,
-    "keep_sessions_days": 30,
-    "database_path": ""
-  },
-  "cache": {
-    "enabled": true,
-    "in_memory_size_mb": 50,
-    "cross_session": true
-  },
-  "validation": {
-    "enabled": true,
-    "marker_validation": true,
-    "timecode_validation": true,
-    "format_validation": true,
-    "length_ratio_min": 0.3,
-    "length_ratio_max": 3.0,
-    "max_chars_per_second": 25.0,
-    "retry_on_validation_failure": true,
-    "max_retries": 3
-  },
-  "log_level": "info"
-}
+Copy `conf.example.json` to `conf.json` and edit it to configure:
 
-```
+- **Languages** - Set `source_language` and `target_language` (ISO codes)
+- **Provider** - Choose between `ollama`, `openai`, `anthropic`, or `lmstudio`
+- **Model** - Set the model for your provider
+- **API key** - Required for OpenAI and Anthropic
 
-### Translation Providers
+See `conf.example.json` for all available options.
 
-- **Ollama** - Local LLM server (default, free)
-- **OpenAI** - GPT models via API
-- **Anthropic** - Claude models via API
-- **LM Studio** - Local OpenAI-compatible server
-- **vLLM** - High-performance inference server (use lmstudio provider type)
+### Supported Providers
+
+| Provider | Description |
+|----------|-------------|
+| **Ollama** | Local LLM server (default, free) |
+| **OpenAI** | GPT models via API |
+| **Anthropic** | Claude models via API |
+| **LM Studio** | Local OpenAI-compatible server (also works with vLLM) |
 
 ## Contributing
 
-Helper scripts in `scripts/`: `ai-branch`, `ai-update-main`, `ai-pr`, `ai-clippy`
+Contributions welcome! Please open an issue or pull request.
 
 ## License
 

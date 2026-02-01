@@ -6,7 +6,7 @@ use yastwai::translation::cache::TranslationCache;
 
 #[tokio::test]
 async fn test_cache_new_withEnabled_shouldCreateEnabledCache() {
-    let cache = TranslationCache::new(true);
+    let _cache = TranslationCache::new(true);
     // Cache should be created successfully
     assert!(true); // If we get here, construction succeeded
 }

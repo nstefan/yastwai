@@ -8,11 +8,12 @@
  * - Translation state management
  */
 
+#![allow(dead_code)]
+
 pub mod model;
 
-// Re-export main types
+// Re-export types used by other modules
 pub use model::{
-    DocumentEntry, DocumentMetadata, FormattingTag, Glossary, GlossaryTerm, Scene,
-    SubtitleDocument, Timecode,
+    DocumentEntry, FormattingTag, Glossary, Scene, SubtitleDocument, Timecode,
 };
 

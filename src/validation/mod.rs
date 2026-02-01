@@ -6,15 +6,11 @@
  * - Timecode validation (timing integrity)
  * - Format preservation validation (tags, styles)
  * - Length validation (reasonable translation length ratios)
- *
- * # Architecture
- *
- * - `markers`: Validates entry markers in batch responses
- * - `timecodes`: Validates timing data integrity
- * - `formatting`: Validates format tag preservation
- * - `length`: Validates translation length ratios
- * - `service`: Orchestrates all validators
  */
+
+// Allow dead code and unused imports - validation types are for library consumers
+#![allow(dead_code)]
+#![allow(unused_imports)]
 
 pub mod markers;
 pub mod timecodes;
@@ -22,8 +18,6 @@ pub mod formatting;
 pub mod length;
 pub mod service;
 
-// Re-export main types (public API, may not be used internally)
-#[allow(unused_imports)]
+// Re-export main types
 pub use markers::MarkerValidator;
-#[allow(unused_imports)]
 pub use service::{ValidationConfig, ValidationService};

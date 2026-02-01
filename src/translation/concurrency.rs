@@ -5,6 +5,9 @@
  * such as rate limits, response times, and API constraints.
  */
 
+// Allow dead code - some fields are for future use
+#![allow(dead_code)]
+
 use crate::app_config::TranslationProvider;
 
 /// Provider-specific concurrency profile with tuned defaults
@@ -56,6 +59,7 @@ impl ProviderProfile {
     }
 
     /// Get effective concurrent requests, respecting any user override
+    #[allow(dead_code)]
     pub fn effective_concurrent_requests(&self, user_override: Option<usize>) -> usize {
         user_override.unwrap_or(self.max_concurrent_requests)
     }
@@ -66,21 +70,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_providerProfile_forOllama_shouldHaveHighConcurrency() {
+    fn test_provider_profile_for_ollama_should_have_high_concurrency() {
         let profile = ProviderProfile::for_provider(TranslationProvider::Ollama);
         assert_eq!(profile.max_concurrent_requests, 8);
         assert!(profile.target_rpm.is_none());
     }
 
     #[test]
-    fn test_providerProfile_forOpenAI_shouldHaveRateLimit() {
+    fn test_provider_profile_for_openai_should_have_rate_limit() {
         let profile = ProviderProfile::for_provider(TranslationProvider::OpenAI);
         assert_eq!(profile.max_concurrent_requests, 10);
         assert_eq!(profile.target_rpm, Some(60));
     }
 
     #[test]
-    fn test_providerProfile_forAnthropic_shouldHaveConservativeSettings() {
+    fn test_provider_profile_for_anthropic_should_have_conservative_settings() {
         let profile = ProviderProfile::for_provider(TranslationProvider::Anthropic);
         assert_eq!(profile.max_concurrent_requests, 5);
         assert_eq!(profile.target_rpm, Some(45));
@@ -88,13 +92,13 @@ mod tests {
     }
 
     #[test]
-    fn test_providerProfile_forLMStudio_shouldBeLocalLike() {
+    fn test_provider_profile_for_lmstudio_should_be_local_like() {
         let profile = ProviderProfile::for_provider(TranslationProvider::LMStudio);
         assert!(profile.target_rpm.is_none());
     }
 
     #[test]
-    fn test_effectiveConcurrentRequests_withOverride_shouldUseOverride() {
+    fn test_effective_concurrent_requests_with_override_should_use_override() {
         let profile = ProviderProfile::for_provider(TranslationProvider::Ollama);
         assert_eq!(profile.effective_concurrent_requests(Some(3)), 3);
         assert_eq!(profile.effective_concurrent_requests(None), 8);

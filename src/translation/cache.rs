@@ -9,6 +9,9 @@
  * especially for repeated translations of common phrases.
  */
 
+// Allow dead code - some cache methods are for future use
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -459,7 +462,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_l1Cache_storeAndGet_shouldWork() {
+    async fn test_l1_cache_store_and_get_should_work() {
         let cache = TranslationCache::new(true);
 
         cache.store("Hello", "en", "fr", "Bonjour").await;
@@ -471,7 +474,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_l1Cache_getMissing_shouldReturnNone() {
+    async fn test_l1_cache_get_missing_should_return_none() {
         let cache = TranslationCache::new(true);
 
         let result = cache.get("NotCached", "en", "fr").await;
@@ -480,7 +483,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_disabledCache_shouldNotStore() {
+    async fn test_disabled_cache_should_not_store() {
         let cache = TranslationCache::new(false);
 
         cache.store("Hello", "en", "fr", "Bonjour").await;
@@ -491,7 +494,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_cacheStats_shouldTrackHitsAndMisses() {
+    async fn test_cache_stats_should_track_hits_and_misses() {
         let cache = TranslationCache::new(true);
 
         // Store a translation
@@ -510,7 +513,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_clearL1_shouldEmptyCache() {
+    async fn test_clear_l1_should_empty_cache() {
         let cache = TranslationCache::new(true);
 
         cache.store("Hello", "en", "fr", "Bonjour").await;
@@ -522,7 +525,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_cacheWithL2_shouldWork() {
+    async fn test_cache_with_l2_should_work() {
         let repo = Repository::new_in_memory().expect("Failed to create test repo");
 
         let config = CacheConfig {
@@ -549,7 +552,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_l2Hit_shouldPromoteToL1() {
+    async fn test_l2_hit_should_promote_to_l1() {
         let repo = Repository::new_in_memory().expect("Failed to create test repo");
 
         let config = CacheConfig {
@@ -581,7 +584,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_l1MaxEntries_shouldEvict() {
+    async fn test_l1_max_entries_should_evict() {
         let config = CacheConfig {
             l1_enabled: true,
             l2_enabled: false,
@@ -604,12 +607,14 @@ mod tests {
     }
 
     #[test]
-    fn test_cacheStats_hitRate_shouldCalculateCorrectly() {
-        let mut stats = CacheStats::default();
-        stats.l1_hits = 3;
-        stats.l1_misses = 7;
-        stats.l2_hits = 2;
-        stats.l2_misses = 0;
+    fn test_cache_stats_hit_rate_should_calculate_correctly() {
+        let stats = CacheStats {
+            l1_hits: 3,
+            l1_misses: 7,
+            l2_hits: 2,
+            l2_misses: 0,
+            ..Default::default()
+        };
 
         // Total requests = 3 + 7 = 10
         // Total hits = 3 + 2 = 5

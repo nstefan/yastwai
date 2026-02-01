@@ -7,11 +7,13 @@
  * - Provider-specific prompt adaptations
  */
 
+#![allow(dead_code)]
+
 pub mod templates;
 
-// Re-export main types
+// Re-export types used by pipeline
 pub use templates::{
-    PromptTemplate, TranslatedEntry, TranslatedEntryContext,
+    TranslatedEntry, TranslatedEntryContext,
     TranslationPromptBuilder, TranslationResponse,
 };
 

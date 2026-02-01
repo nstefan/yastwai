@@ -4,7 +4,11 @@
  * This module implements speculative batching that keeps multiple batches
  * in-flight simultaneously to maximize API throughput, especially for
  * cloud providers with network latency.
+ *
+ * NOTE: This is an experimental feature that is not yet enabled.
  */
+
+#![allow(dead_code)]
 
 use std::collections::VecDeque;
 use std::sync::Arc;
