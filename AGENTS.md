@@ -1,16 +1,5 @@
 # Agent Specification
 
-## Core Principles
-
-1. Never guess - search for precise information
-2. Write the simplest code possible
-3. Keep things short and simple
-4. Ask questions if unclear
-5. Stay under 40% context window - more context = worse outcomes
-6. Use subagents for isolated research tasks - return only succinct summaries
-7. Research → Plan → Implement: compress each phase before proceeding
-8. Generate context from code, not stale docs
-
 ## Project
 
 **Name**: YASTwAI (Yet Another Subtitle Translator with AI)
