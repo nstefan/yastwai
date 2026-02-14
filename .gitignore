@@ -32,3 +32,11 @@ Temporary Items
 .apdisk
 *.icloud
 pr_description.md
+
+# Context-OS session state (not template content)
+docs/summaries/*.md
+!docs/summaries/.gitkeep
+docs/archive/**/*.md
+!docs/archive/handoffs/.gitkeep
+output/**/*
+!output/**/.gitkeep
