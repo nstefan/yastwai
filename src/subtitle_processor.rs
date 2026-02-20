@@ -156,11 +156,11 @@ impl SubtitleCollection {
     pub async fn extract_from_video<P: AsRef<Path>>(video_path: P, track_id: usize, source_language: &str, output_path: P) -> Result<Self> {
         let video_path = video_path.as_ref();
         let output_path = output_path.as_ref();
-        
+
         if !video_path.exists() {
             return Err(anyhow!("Video file does not exist: {:?}", video_path));
         }
-        
+
         // Normalize language code if possible, but continue if not
         let normalized_language = match language_utils::normalize_to_part1_or_part2t(source_language) {
             Ok(lang) => lang,
@@ -169,7 +169,7 @@ impl SubtitleCollection {
                 source_language.to_string()
             }
         };
-        
+
         // Use ffmpeg to extract the subtitle directly to SRT file
         // Add timeout to prevent hanging on problematic files
         let ffmpeg_future = Command::new("ffmpeg")
@@ -181,7 +181,7 @@ impl SubtitleCollection {
                 output_path.to_str().unwrap_or_default()
             ])
             .output();
-        
+
         let timeout_duration = std::time::Duration::from_secs(120); // 2 minute timeout for ffmpeg
         let result = tokio::select! {
             result = ffmpeg_future => {
@@ -194,21 +194,20 @@ impl SubtitleCollection {
 
         if !result.status.success() {
             let stderr = String::from_utf8_lossy(&result.stderr);
-            error!(" Subtitle extraction failed: {}", stderr);
-            return Err(anyhow!("ffmpeg command failed: {}", stderr));
+            let filtered = Self::filter_ffmpeg_stderr(&stderr);
+            error!("Subtitle extraction failed: {}", filtered);
+            return Err(anyhow!("ffmpeg extraction failed: {}", filtered));
         }
         
         // If no errors occurred, parse the output file
         let file_size = std::fs::metadata(output_path)?.len();
         if file_size == 0 {
-            error!(" No subtitles found");
-            return Err(anyhow!("Extracted file is empty - no subtitles found"));
+            return Err(anyhow!("Extracted file is empty — no subtitles found in track {}", track_id));
         }
-        
+
         let entries = Self::parse_srt_file(output_path)?;
         if entries.is_empty() {
-            error!(" No valid subtitle entries");
-            return Err(anyhow!("Failed to parse any subtitle entries from the extracted file"));
+            return Err(anyhow!("Failed to parse any subtitle entries from extracted track {}", track_id));
         }
                 
         Ok(SubtitleCollection {
@@ -350,7 +349,6 @@ impl SubtitleCollection {
         
         // Check if the file exists
         if !video_path.exists() {
-            error!(" Video file not found: {:?}", video_path);
             return Err(anyhow!("Video file not found: {:?}", video_path));
         }
         
@@ -434,6 +432,57 @@ impl SubtitleCollection {
         Ok(tracks)
     }
     
+    /// Check if a subtitle codec is bitmap-based (cannot be converted to text SRT)
+    fn is_bitmap_codec(codec_name: &str) -> bool {
+        matches!(
+            codec_name,
+            "hdmv_pgs_subtitle" | "dvd_subtitle" | "dvb_subtitle" | "xsub"
+        )
+    }
+
+    /// Filter ffmpeg stderr to only show meaningful error lines, stripping the
+    /// version banner, build configuration, and stream metadata noise.
+    fn filter_ffmpeg_stderr(stderr: &str) -> String {
+        let dominated_prefixes = [
+            "ffmpeg version",
+            "  built with",
+            "  configuration:",
+            "  lib",
+            "Input #",
+            "  Metadata:",
+            "  Duration:",
+            "  Chapter",
+            "    Chapter",
+            "  Stream #",
+            "      Metadata:",
+            "        title",
+            "        BPS",
+            "        DURATION",
+            "        NUMBER_OF",
+            "        _STATISTICS",
+            "Output #",
+            "Stream mapping:",
+            "Press [q]",
+        ];
+
+        let meaningful: Vec<&str> = stderr
+            .lines()
+            .filter(|line| {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    return false;
+                }
+                !dominated_prefixes.iter().any(|p| trimmed.starts_with(p))
+            })
+            .collect();
+
+        if meaningful.is_empty() {
+            "unknown ffmpeg error (stderr was empty after filtering)".to_string()
+        } else {
+            meaningful.join("\n")
+        }
+    }
+
     /// Select a subtitle track based on preferred language
     pub fn select_subtitle_track(tracks: &[SubtitleInfo], preferred_language: &str) -> Option<usize> {
         if tracks.is_empty() {
@@ -511,13 +560,40 @@ impl SubtitleCollection {
         
         // Exit early if no subtitle streams found
         if tracks.is_empty() {
-            error!("No subtitle streams found in video");
             return Err(anyhow::anyhow!("No subtitle tracks found in the video"));
         }
-        
-        // Select the subtitle track
-        let track_id = Self::select_subtitle_track(&tracks, preferred_language)
-            .ok_or_else(|| anyhow::anyhow!("No matching subtitle track found for language: {}", preferred_language))?;
+
+        // Check if all tracks are bitmap-based (cannot be converted to text)
+        let text_tracks: Vec<&SubtitleInfo> = tracks.iter()
+            .filter(|t| !Self::is_bitmap_codec(&t.codec_name))
+            .collect();
+
+        if text_tracks.is_empty() {
+            let codec_list: Vec<String> = tracks.iter()
+                .map(|t| {
+                    let lang = t.language.as_deref().unwrap_or("?");
+                    format!("track {} ({}, {})", t.index, lang, t.codec_name)
+                })
+                .collect();
+            return Err(anyhow::anyhow!(
+                "All subtitle tracks are bitmap-based (image) and cannot be converted to text SRT. \
+                 Found: {}. Bitmap subtitles (PGS/VobSub) require OCR to convert to text.",
+                codec_list.join(", ")
+            ));
+        }
+
+        // Warn about skipped bitmap tracks
+        let bitmap_count = tracks.len() - text_tracks.len();
+        if bitmap_count > 0 {
+            warn!(
+                "Skipping {} bitmap subtitle track(s) (PGS/VobSub) — only text-based tracks can be extracted",
+                bitmap_count
+            );
+        }
+
+        // Select from text tracks only
+        let track_id = Self::select_subtitle_track(&text_tracks.iter().map(|t| (*t).clone()).collect::<Vec<_>>(), preferred_language)
+            .ok_or_else(|| anyhow::anyhow!("No text-based subtitle track found for language: {}", preferred_language))?;
         
         // Extract the selected track
         if let Some(output_path) = output_path {
@@ -547,8 +623,8 @@ impl SubtitleCollection {
     /// Extract source language subtitle to memory
     pub async fn extract_source_language_subtitle_to_memory<P: AsRef<Path>>(video_path: P, source_language: &str) -> Result<Self> {
         let video_path = video_path.as_ref();
-        
-        error!("Extracting {source_language} subtitles from video (in-memory)");
+
+        debug!("Extracting {source_language} subtitles from video (in-memory)");
         
         // Avoiding additional logs by passing directly to extract_with_auto_track_selection
         Self::extract_with_auto_track_selection(video_path, source_language, None, source_language).await
@@ -557,7 +633,7 @@ impl SubtitleCollection {
     /// Fast extraction using ffmpeg subtitle copy
     #[allow(dead_code)]
     pub async fn fast_extract_source_subtitles<P: AsRef<Path>>(video_path: P, source_language: &str) -> Result<Self> {
-        error!("Fast extracting subtitles directly for language: {}", source_language);
+        debug!("Fast extracting subtitles directly for language: {}", source_language);
         
         // Call extract_with_auto_track_selection directly
         Self::extract_with_auto_track_selection(video_path, source_language, None, source_language).await
@@ -591,12 +667,12 @@ impl SubtitleCollection {
                         true
                     },
                     Err(e) => {
-                        error!("Skipping invalid subtitle entry {}: {}", seq_num, e);
+                        warn!("Skipping invalid subtitle entry {}: {}", seq_num, e);
                         false
                     }
                 }
             } else {
-                error!("Skipping empty subtitle entry {}", seq_num);
+                warn!("Skipping empty subtitle entry {}", seq_num);
                 false
             }
         };
@@ -668,7 +744,7 @@ impl SubtitleCollection {
         
         // Validate and sort entries
         if entries.is_empty() {
-            error!("No valid subtitle entries found in content");
+            warn!("No valid subtitle entries found in content");
             return Err(anyhow::anyhow!("No valid subtitle entries were found in the SRT content"));
         }
         
