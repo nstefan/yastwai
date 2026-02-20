@@ -33,7 +33,7 @@
       },
       {
         "type": "anthropic",
-        "model": "claude-3-haiku",
+        "model": "claude-haiku-4-5",
         "api_key": "your_api_key",
         "endpoint": "https://api.anthropic.com",
         "concurrent_requests": 4,

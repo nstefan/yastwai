@@ -157,13 +157,28 @@ pub struct TokenUsage {
     pub input_tokens: u32,
     /// Number of output tokens
     pub output_tokens: u32,
+    /// Tokens used to create a new cache entry (prompt caching)
+    #[serde(default)]
+    pub cache_creation_input_tokens: Option<u32>,
+    /// Tokens read from cache (prompt caching)
+    #[serde(default)]
+    pub cache_read_input_tokens: Option<u32>,
 }
 
 /// Anthropic response
 #[derive(Debug, Deserialize)]
 pub struct AnthropicResponse {
+    /// Unique response identifier
+    pub id: Option<String>,
+    /// Response object type (e.g. "message")
+    #[serde(rename = "type")]
+    pub response_type: Option<String>,
     /// The content of the response
     pub content: Vec<AnthropicContent>,
+    /// Model that generated the response
+    pub model: Option<String>,
+    /// Reason the model stopped generating (e.g. "end_turn", "max_tokens")
+    pub stop_reason: Option<String>,
     /// Token usage information
     pub usage: TokenUsage,
 }
@@ -185,7 +200,7 @@ impl Default for AnthropicRequest {
             model: String::new(),
             messages: Vec::new(),
             system: None,
-            temperature: Some(0.7),
+            temperature: None,
             max_tokens: 4096,
             top_p: None,
             top_k: None,
@@ -302,36 +317,40 @@ impl Anthropic {
         let api_url = self.api_url();
         let mut attempts = 0;
         let mut last_error = None;
-        
+
         while attempts <= self.max_retries {
             if attempts > 0 {
                 let backoff_ms = self.initial_backoff_ms * 2u64.pow(attempts - 1);
                 sleep(Duration::from_millis(backoff_ms)).await;
             }
-            
+
             // Apply rate limiting if configured
             if let Some(rate_limiter) = &self.rate_limiter {
                 rate_limiter.lock().await.wait_for_token().await;
             }
-            
+
             attempts += 1;
-            
+
             match self.send_request(&api_url, request).await {
                 Ok(response) => return Ok(response),
                 Err(err) => {
-                    // Only retry on connection errors and rate limit errors
+                    // Only retry on connection errors, rate limit errors, and server errors
                     match &err {
                         ProviderError::ConnectionError(_) => {
                             last_error = Some(err);
                         },
-                        ProviderError::RateLimitExceeded(_) => {
-                            // For rate limit errors, apply a longer backoff
-                            let rate_limit_backoff_ms = self.initial_backoff_ms * 5 * 2u64.pow(attempts - 1);
-                            sleep(Duration::from_millis(rate_limit_backoff_ms)).await;
+                        ProviderError::RateLimitExceeded { retry_after_secs, .. } => {
+                            // Use retry-after header when available, otherwise exponential backoff
+                            let wait_ms = if let Some(secs) = retry_after_secs {
+                                secs * 1000
+                            } else {
+                                self.initial_backoff_ms * 5 * 2u64.pow(attempts - 1)
+                            };
+                            sleep(Duration::from_millis(wait_ms)).await;
                             last_error = Some(err);
                         },
                         ProviderError::ApiError { status_code, .. } => {
-                            // Retry on rate limiting (429) and server errors (5xx)
+                            // Retry on rate limiting (429), overloaded (529), and server errors (5xx)
                             if *status_code == 429 || *status_code >= 500 {
                                 last_error = Some(err);
                             } else {
@@ -344,9 +363,9 @@ impl Anthropic {
                 }
             }
         }
-        
+
         // If we get here, all retries failed
-        Err(last_error.unwrap_or_else(|| 
+        Err(last_error.unwrap_or_else(||
             ProviderError::ConnectionError("All retry attempts failed".to_string())))
     }
     
@@ -380,21 +399,60 @@ impl Anthropic {
         
         let status = response.status();
         if !status.is_success() {
+            // Parse retry-after header before consuming the response body
+            let retry_after_secs = response.headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<u64>().ok());
+
             let error_text = response.text().await
                 .unwrap_or_else(|_| "Failed to get error response text".to_string());
-            
+
+            // Try to extract a structured error message from the JSON response body
+            let message = Self::extract_api_error_message(&error_text)
+                .unwrap_or(error_text);
+
             return match status.as_u16() {
-                429 => Err(ProviderError::RateLimitExceeded(error_text)),
-                401 | 403 => Err(ProviderError::AuthenticationError(error_text)),
-                _ => Err(ProviderError::ApiError { 
-                    status_code: status.as_u16(), 
-                    message: error_text
+                429 => Err(ProviderError::RateLimitExceeded { message, retry_after_secs }),
+                401 | 403 => Err(ProviderError::AuthenticationError(message)),
+                529 => Err(ProviderError::ApiError {
+                    status_code: 529,
+                    message: format!("Anthropic API overloaded: {}", message),
+                }),
+                _ => Err(ProviderError::ApiError {
+                    status_code: status.as_u16(),
+                    message,
                 })
             };
         }
         
         response.json::<AnthropicResponse>().await
             .map_err(|e| ProviderError::ParseError(e.to_string()))
+    }
+}
+
+/// Structured error response from the Anthropic API
+#[derive(Debug, Deserialize)]
+struct AnthropicErrorResponse {
+    #[serde(rename = "type")]
+    _response_type: Option<String>,
+    error: AnthropicErrorDetail,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicErrorDetail {
+    #[serde(rename = "type")]
+    _error_type: Option<String>,
+    message: String,
+}
+
+impl Anthropic {
+    /// Try to extract a human-readable error message from the API's JSON error body.
+    /// Returns `None` if the body isn't valid structured JSON error.
+    fn extract_api_error_message(body: &str) -> Option<String> {
+        serde_json::from_str::<AnthropicErrorResponse>(body)
+            .ok()
+            .map(|e| e.error.message)
     }
 }
 

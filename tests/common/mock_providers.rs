@@ -88,7 +88,7 @@ impl Provider for MockOpenAI {
             return match tracker.error_type {
                 MockErrorType::Auth => Err(ProviderError::AuthenticationError("Invalid API key".into())),
                 MockErrorType::Connection => Err(ProviderError::ConnectionError("Connection failed".into())),
-                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded("Rate limit exceeded".into())),
+                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded { message: "Rate limit exceeded".into(), retry_after_secs: None }),
                 MockErrorType::Api => Err(ProviderError::ApiError { 
                     status_code: 400, 
                     message: "Bad request".into() 
@@ -165,7 +165,7 @@ impl Provider for MockAnthropic {
             return match tracker.error_type {
                 MockErrorType::Auth => Err(ProviderError::AuthenticationError("Invalid API key".into())),
                 MockErrorType::Connection => Err(ProviderError::ConnectionError("Connection failed".into())),
-                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded("Rate limit exceeded".into())),
+                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded { message: "Rate limit exceeded".into(), retry_after_secs: None }),
                 MockErrorType::Api => Err(ProviderError::ApiError { 
                     status_code: 400, 
                     message: "Bad request".into() 
@@ -175,15 +175,21 @@ impl Provider for MockAnthropic {
         
         // Return a mock response
         Ok(AnthropicResponse {
+            id: Some("msg_mock123".into()),
+            response_type: Some("message".into()),
             content: vec![
                 AnthropicContent {
                     content_type: "text".into(),
                     text: "This is a mock response from Anthropic.".into(),
                 },
             ],
+            model: Some("claude-haiku-4-5".into()),
+            stop_reason: Some("end_turn".into()),
             usage: TokenUsage {
                 input_tokens: 10,
                 output_tokens: 20,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         })
     }
@@ -252,7 +258,7 @@ impl MockOllama {
             return match tracker.error_type {
                 MockErrorType::Auth => Err(ProviderError::AuthenticationError("Invalid API key".into())),
                 MockErrorType::Connection => Err(ProviderError::ConnectionError("Connection failed".into())),
-                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded("Rate limit exceeded".into())),
+                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded { message: "Rate limit exceeded".into(), retry_after_secs: None }),
                 MockErrorType::Api => Err(ProviderError::ApiError { 
                     status_code: 400, 
                     message: "Bad request".into() 
@@ -286,7 +292,7 @@ impl MockOllama {
             return match tracker.error_type {
                 MockErrorType::Auth => Err(ProviderError::AuthenticationError("Invalid API key".into())),
                 MockErrorType::Connection => Err(ProviderError::ConnectionError("Connection failed".into())),
-                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded("Rate limit exceeded".into())),
+                MockErrorType::RateLimit => Err(ProviderError::RateLimitExceeded { message: "Rate limit exceeded".into(), retry_after_secs: None }),
                 MockErrorType::Api => Err(ProviderError::ApiError { 
                     status_code: 400, 
                     message: "Bad request".into() 

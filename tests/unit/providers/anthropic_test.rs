@@ -30,6 +30,8 @@ async fn test_anthropic_request_builder() {
 async fn test_anthropic_extract_text() {
     // Create a mock response
     let response = AnthropicResponse {
+        id: Some("msg_test123".to_string()),
+        response_type: Some("message".to_string()),
         content: vec![
             AnthropicContent {
                 content_type: "text".to_string(),
@@ -45,9 +47,13 @@ async fn test_anthropic_extract_text() {
                 text: "image_data".to_string(),
             },
         ],
+        model: Some("claude-haiku-4-5".to_string()),
+        stop_reason: Some("end_turn".to_string()),
         usage: TokenUsage {
             input_tokens: 10,
             output_tokens: 20,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
         },
     };
     

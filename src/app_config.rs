@@ -731,7 +731,7 @@ fn default_openai_model() -> String {
 }
 
 fn default_anthropic_model() -> String {
-    "claude-3-haiku".to_string()
+    "claude-haiku-4-5".to_string()
 }
 
 fn default_lmstudio_model() -> String {

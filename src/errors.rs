@@ -35,8 +35,13 @@ pub enum ProviderError {
     ConnectionError(String),
     
     /// Error related to rate limiting
-    #[error("Rate limit exceeded: {0}")]
-    RateLimitExceeded(String),
+    #[error("Rate limit exceeded: {message}")]
+    RateLimitExceeded {
+        /// Error message from the API
+        message: String,
+        /// Optional retry-after duration in seconds (from `retry-after` header)
+        retry_after_secs: Option<u64>,
+    },
     
     /// Error with authentication
     #[error("Authentication error: {0}")]

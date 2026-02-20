@@ -759,16 +759,20 @@ impl TranslationService {
             "gpt-3.5-turbo" | "gpt-3.5-turbo-0613" => 4096,
             "gpt-3.5-turbo-16k" | "gpt-3.5-turbo-16k-0613" => 16384,
             
-            // Anthropic models
+            // Anthropic models — current generation
+            "claude-opus-4-6" | "claude-sonnet-4-6" | "claude-sonnet-4-5-20250514" => 8192,
+            "claude-haiku-4-5" | "claude-haiku-4-5-20251001" => 8192,
+            "claude-3-7-sonnet-latest" | "claude-3-5-haiku-latest" => 8192,
+            // Anthropic models — previous generation
             "claude-3-opus-20240229" => 4096,
             "claude-3-sonnet-20240229" => 4096,
             "claude-3-haiku-20240307" => 4096,
             "claude-2.1" => 4096,
             "claude-2.0" => 4096,
             "claude-instant-1.2" => 4096,
-            
+
             // Default for unknown models
-            _ => 2048,
+            _ => 4096,
         }
     }
 }

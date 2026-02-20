@@ -41,7 +41,7 @@ fn test_providerError_connectionError_shouldDisplayCorrectly() {
 
 #[test]
 fn test_providerError_rateLimitExceeded_shouldDisplayCorrectly() {
-    let error = ProviderError::RateLimitExceeded("Retry after 60s".to_string());
+    let error = ProviderError::RateLimitExceeded { message: "Retry after 60s".to_string(), retry_after_secs: None };
     let display = format!("{}", error);
     assert!(display.contains("Rate limit exceeded"));
     assert!(display.contains("Retry after 60s"));
